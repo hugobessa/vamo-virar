@@ -38,6 +38,11 @@ pub struct Config {
     pub intake_per_community_per_hour: u32,
     /// How often expiry and compaction run.
     pub housekeeping_interval_secs: u64,
+    /// Behind a reverse proxy (Caddy, nginx): take the client address for
+    /// rate limiting from the last `X-Forwarded-For` hop, which the proxy
+    /// appends. Leave false when clients connect directly, or anyone could
+    /// pick their own address.
+    pub trust_forwarded_for: bool,
 }
 
 impl Default for Config {
@@ -56,6 +61,7 @@ impl Default for Config {
             intake_per_ip_per_hour: 20,
             intake_per_community_per_hour: 200,
             housekeeping_interval_secs: 60,
+            trust_forwarded_for: false,
         }
     }
 }

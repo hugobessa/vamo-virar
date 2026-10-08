@@ -40,6 +40,11 @@ and coordinating the people who attend them.
   against the real node with a moving clock and a fault-injecting proxy
   (see [`docs/offline-testing.md`](docs/offline-testing.md)); admin
   recovery with the founder's recovery code.
+- Phase 9 — node deployment: Docker image (distroless, non-root, health
+  check), Compose + Caddy with automatic TLS, hardened systemd unit,
+  `health`/`backup` subcommands, and a tag-triggered release of binaries
+  (Linux x86-64/ARM64, macOS, Windows) and multi-arch images. See
+  [`docs/deploy.md`](docs/deploy.md).
 
 ```sh
 npm install && npm test     # TypeScript packages

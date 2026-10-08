@@ -1,0 +1,42 @@
+# A community node behind Caddy, which gets and renews a TLS certificate
+# automatically. Put DOMAIN and VV_PROVISIONING_TOKEN in deploy/.env:
+#
+#   DOMAIN=node.example.org
+#   VV_PROVISIONING_TOKEN=<a long random string>
+#
+# Then: docker compose -f deploy/docker-compose.yml up -d
+services:
+  node:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: vamo-virar/community-node:local
+    restart: unless-stopped
+    environment:
+      VV_PROVISIONING_TOKEN: ${VV_PROVISIONING_TOKEN:?set VV_PROVISIONING_TOKEN in deploy/.env}
+      VV_TRUST_FORWARDED_FOR: "1"
+      RUST_LOG: info
+    volumes:
+      - node-data:/data
+    expose:
+      - "8787"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - node
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  node-data:
+  caddy-data:
+  caddy-config:

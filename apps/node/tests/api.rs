@@ -667,3 +667,66 @@ async fn restore_on_a_new_node() {
     .await;
     assert_eq!(entries(&v)[0].prev, log.last().unwrap().hash());
 }
+
+#[tokio::test]
+async fn intake_rate_limit_uses_forwarded_address_only_when_trusted() {
+    use community_node::store::Store;
+    use community_node::{App, Config};
+    use std::sync::Arc;
+    let req = || vv_crypto::cbor::encode(&Value::map([("enc", b(&[3; 32])), ("ct", b(&[4; 40]))]));
+    for trusted in [true, false] {
+        let app = Arc::new(
+            App::new(
+                Config {
+                    provisioning_token: Some(TOKEN.into()),
+                    trust_forwarded_for: trusted,
+                    ..Config::default()
+                },
+                Store::open_in_memory().unwrap(),
+            )
+            .unwrap(),
+        );
+        let mut f = Fixture::new(30);
+        create(&app, &mut f).await;
+        let path = format!("/v1/c/{}/intake", hex(&f.cid));
+        for _ in 0..20 {
+            let (s, _) = call_raw(
+                &app,
+                "POST",
+                &path,
+                None,
+                Some(req()),
+                &[("x-forwarded-for", "198.51.100.1, 203.0.113.7")],
+            )
+            .await;
+            assert_eq!(s, StatusCode::OK);
+        }
+        let (s, _) = call_raw(
+            &app,
+            "POST",
+            &path,
+            None,
+            Some(req()),
+            &[("x-forwarded-for", "203.0.113.7")],
+        )
+        .await;
+        assert_eq!(
+            s,
+            StatusCode::TOO_MANY_REQUESTS,
+            "same client, 21st request"
+        );
+        // Another client behind the same proxy:
+        let (s, _) = call_raw(
+            &app,
+            "POST",
+            &path,
+            None,
+            Some(req()),
+            &[("x-forwarded-for", "203.0.113.8")],
+        )
+        .await;
+        // Trusted: a different address, so allowed. Untrusted: the header is
+        // ignored and everyone shares one bucket.
+        assert_eq!(s == StatusCode::OK, trusted);
+    }
+}

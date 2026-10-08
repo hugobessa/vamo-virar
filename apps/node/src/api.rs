@@ -815,10 +815,22 @@ async fn post_intake(
     req: Request,
 ) -> Result<Response, ApiError> {
     let cid = cid_param(&cid)?;
-    let ip = req
+    let peer = req
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
         .map(|c| c.0.ip());
+    // Behind a trusted reverse proxy, the client is the last hop it appended.
+    let forwarded = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.rsplit(',').next())
+        .and_then(|v| v.trim().parse::<std::net::IpAddr>().ok());
+    let ip = if app.config.trust_forwarded_for {
+        forwarded.or(peer)
+    } else {
+        peer
+    };
     let body = to_bytes(req.into_body(), MAX_INTAKE_CT + 1024)
         .await
         .map_err(|_| ApiError::bad("body too large"))?;

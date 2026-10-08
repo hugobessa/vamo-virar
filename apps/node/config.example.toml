@@ -20,3 +20,7 @@ max_mailbox_ttl_secs = 2592000
 intake_per_ip_per_hour = 20
 intake_per_community_per_hour = 200
 housekeeping_interval_secs = 60
+
+# Set to true only when the node is behind a reverse proxy that appends the
+# client address to X-Forwarded-For (the bundled Caddy setup does).
+trust_forwarded_for = false

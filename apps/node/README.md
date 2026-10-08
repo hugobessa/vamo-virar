@@ -14,7 +14,10 @@ cargo build -p community-node --release
 ```
 
 On start it prints `community-node listening on <addr> node_id=<hex>`.
-Logs go to stderr; set `RUST_LOG=info`.
+Logs go to stderr; set `RUST_LOG=info`. `community-node health` and
+`community-node backup --out <file>` support operations; see
+[`docs/deploy.md`](../../docs/deploy.md) for Docker, Compose + Caddy and
+systemd.
 
 ## What it checks
 
