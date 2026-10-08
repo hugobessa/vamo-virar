@@ -13,7 +13,14 @@ and coordinating the people who attend them.
 
 ## Status
 
-Phase 0: protocol specification. No code yet.
+- Phase 0 — protocol specification: draft v0 in `docs/`.
+- Phase 1 — local domain engine: [`packages/domain`](packages/domain) (state
+  machine, snapshots, retention; unit and property tests).
+
+```sh
+npm install
+npm test
+```
 
 | Document | Contents |
 |---|---|

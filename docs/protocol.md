@@ -294,6 +294,15 @@ lost or an admin turns hostile, the holder of `CRK` can reset the admin set.
 Devices MUST independently re-verify every control header — the node's
 enforcement is a convenience, not a trust anchor.
 
+The inner `SignedOp.type` of a control op is `community.init` (genesis),
+`epoch.rotate` or `admin.set`, and its `author` MUST equal `ctrl.signer`.
+A control entry's **effect comes from its header alone**, checked with exactly
+the rules in the table above: the node cannot read the body, so any extra
+device-side condition would let devices and the node disagree about the
+current epoch or admin set. A body that is unreadable, or whose type/author
+does not match the header, is ignored (outcome `opaque`). Data-plane ops
+carrying a control inner type are rejected as `malformed`.
+
 > **Design note — admin set in the clear.** The node must refuse key rotations
 > from non-admins, otherwise any member (or a removed member before the
 > rotation lands) could seize the epoch. That requires the node to know admin
@@ -452,7 +461,9 @@ For each log entry, a device:
 
 1. checks the `prev` chain;
 2. verifies `asig`;
-3. if `plane == "c"`, verifies `ControlHeader` against current state;
+3. if `plane == "c"`, verifies `ControlHeader` against current state (§5);
+   for data-plane entries, checks `epoch ∈ {current, current − 1}`
+   (`stale_epoch` otherwise);
 4. decrypts `ct`; if it lacks `K_epoch`, marks the entry **opaque** and stops
    (it will be covered by a later snapshot);
 5. verifies `SignedOp.sig` and the `op_id/cid/epoch` binding;
@@ -491,7 +502,7 @@ Roles are hierarchical: `admin ⊃ organizer ⊃ member`.
 
 | type | body | who | effect |
 |---|---|---|---|
-| `community.init` | `{name, description, region?, policy}` | genesis signer | Encrypted half of genesis; MUST be in `seq 1`. |
+| `community.init` | `{name, description, region?, policy, founders: [{msk, mek, profile}]}` | a founding admin | Encrypted half of genesis; MUST be in `seq 1`. `founders` MUST be exactly the genesis `admins`; they start as active admins. |
 | `community.update` | `{name?, description?, region?}` | admin | |
 | `policy.update` | `{policy}` | admin | Replaces policy wholesale. |
 
@@ -504,6 +515,7 @@ Policy {
   retention: {
     completed_event_detail_days: u32 = 30    # then reduced to EventSummary
     keep_attendee_list:          bool = false
+    removed_member_detail_days:  u32 = 30    # then profile is dropped
     rejected_join_request_days:  u32 = 7
   }
   min_client_version: text?
@@ -537,6 +549,16 @@ control-plane admin set; mismatch is surfaced as a warning to admins.
 
 `member.remove`/`member.leave` MUST be followed by a `rotate` (§7.2). Admin
 clients do this automatically and atomically from the user's point of view.
+
+When a member is removed or leaves, every open participation (`invited`,
+`volunteered`, `confirmed`, `reconfirm`) of theirs in a `scheduled` event
+becomes `withdrawn`, and they are dropped from those events' `organizers`.
+Closed events keep their history.
+
+Permissions summary: *community organizer* (role organizer or admin) may
+create events, invite, revoke, approve and reject. Editing, cancelling,
+completing and recording attendance require being in the event's
+`organizers` (and still an organizer) or an admin.
 
 ### 9.3 Events
 
@@ -588,6 +610,7 @@ stateDiagram-v2
     reconfirm --> withdrawn: participation.withdraw (self) / participation.decline (self)
     declined --> invited: participation.invite (org)
     withdrawn --> volunteered: participation.volunteer (self)
+    declined --> volunteered: participation.volunteer (self)
     withdrawn --> invited: participation.invite (org)
     not_selected --> invited: participation.invite (org)
     revoked --> invited: participation.invite (org)
@@ -823,22 +846,36 @@ Exactly the reducer's state, canonicalized:
 
 ```
 CommunityState {
-  community: {name, description, region, policy},
-  epoch, admin_set, ik_public,
+  community: {crk, name, description, region, policy},
+  epoch, eak, admin_set, ik,
+  clock: {seq, now},                       # last applied seq; retention clock
   members: [MemberRecord],                 # active + recently removed (for reason display)
   events: [Event + participations],        # scheduled, and completed within detail window
   event_summaries: [EventSummary],         # completed beyond detail window, per retention
-  rejected_ops_recent: [(op_id, reason)]   # last N for author feedback
+  rejected_recent: [(seq, op_id, author, type, reason)]   # last 100, for author feedback
 }
 EventSummary { event_id, title, starts_at, status, confirmed_count, attended_count, attendees? }
 ```
 
-Applying retention (detail → summary) is part of **snapshot generation**, not
-the reducer. Therefore `state(snapshot S) ≠ fold(log[1..S])` exactly; it is
-`compact(fold(log[1..S]), policy, S.seq)`, where `compact` is deterministic
-and keyed on `seq` distances / event `ends_at` vs. the `ts` of the op at
-`seq`. Two admins producing a snapshot at the same `seq` get the same
-`state_hash`.
+Retention (event detail → `EventSummary`, dropping removed members'
+profiles) runs **inside the reducer**, after every entry. It is driven by a
+retention clock `now = max(now, entry.at)`, the monotonic maximum of the
+node's receive times. Consequences:
+
+- A snapshot is exactly `fold(log[1..S])` (minus the device-local `op_id`
+  index), so restoring a snapshot and replaying the tail gives the same state
+  as replaying the whole log, and every producer gets the same `state_hash`.
+- Author timestamps (`SignedOp.ts`) are never used, so a member cannot force
+  early compaction by back- or forward-dating an op. The node could, by
+  lying about `at`; it can already withhold ops, so this adds no new power.
+- An event is summarized `completed_event_detail_days` after it was
+  cancelled or completed (by the retention clock); ops on it after that are
+  `unknown_target`, and its `event_id` cannot be reused.
+
+> **Design note.** An earlier draft applied retention only at snapshot
+> generation. That makes devices that replay the full log diverge from
+> devices that restored a snapshot (e.g. an `event.attendance` on an event
+> one of them has already summarized). Found while writing Phase 1.
 
 ### 12.3 Who produces snapshots, and when
 
