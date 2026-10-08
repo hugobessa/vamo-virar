@@ -29,6 +29,10 @@ and coordinating the people who attend them.
 - Phase 5 — mobile app: [`apps/mobile`](apps/mobile) (Expo SDK 57; create,
   join, invite, approve, events, volunteer/invite/confirm, people, encrypted
   storage; model unit tests and a web end-to-end run against a real node).
+- Phase 6 — calendar integrations: [`packages/matching`](packages/matching)
+  and the app's calendar settings (phone calendars, Google free/busy,
+  Outlook; availability computed on the phone; see
+  [`docs/calendars.md`](docs/calendars.md)).
 
 ```sh
 npm install && npm test     # TypeScript packages

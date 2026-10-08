@@ -41,6 +41,7 @@ export default function Home() {
       )}
       <Button testID="go-create" label={t("createCommunity")} onPress={() => router.push("/create")} />
       <Button testID="go-join" kind="secondary" label={t("joinCommunity")} onPress={() => router.push("/join")} />
+      <Button testID="go-settings" kind="secondary" label={t("calendarsTitle")} onPress={() => router.push("/settings")} />
     </Screen>
   );
 }

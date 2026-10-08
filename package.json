@@ -6,6 +6,7 @@
     "packages/domain",
     "packages/crypto",
     "packages/sync",
+    "packages/matching",
     "apps/mobile"
   ],
   "scripts": {

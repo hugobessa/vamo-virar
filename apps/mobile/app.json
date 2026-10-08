@@ -21,7 +21,10 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "org.vamovirar.app"
+      "package": "org.vamovirar.app",
+      "permissions": [
+        "READ_CALENDAR"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -31,11 +34,24 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-localization"
+      "expo-localization",
+      "expo-web-browser",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "O Vamo Virar l\u00ea s\u00f3 os hor\u00e1rios em que voc\u00ea est\u00e1 ocupada(o), para mostrar se voc\u00ea pode ir a um evento. Nada da sua agenda sai do celular."
+        }
+      ]
     ],
     "scheme": "vamovirar",
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "googleClientIdIos": "",
+      "googleClientIdAndroid": "",
+      "googleClientIdWeb": "",
+      "microsoftClientId": ""
     }
   }
 }

@@ -19,6 +19,7 @@ function Nav() {
       <Stack.Screen name="index" options={{ title: t("appName") }} />
       <Stack.Screen name="create" options={{ title: t("createCommunity") }} />
       <Stack.Screen name="join" options={{ title: t("joinCommunity") }} />
+      <Stack.Screen name="settings" options={{ title: t("calendarsTitle") }} />
       <Stack.Screen name="c/[id]/index" options={{ title: "" }} />
       <Stack.Screen name="c/[id]/new-event" options={{ title: t("newEvent"), presentation: "modal" }} />
       <Stack.Screen name="c/[id]/event/[eid]" options={{ title: "" }} />

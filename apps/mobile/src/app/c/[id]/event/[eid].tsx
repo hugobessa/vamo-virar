@@ -15,6 +15,7 @@ import {
   type OrgAction,
 } from "../../../../model/events";
 import { formatWhen } from "../../../../model/time";
+import { AvailabilityChip } from "../../../../ui/AvailabilityChip";
 import { Body, Button, Card, Chip, Heading, Screen, Title } from "../../../../ui/kit";
 import { space } from "../../../../ui/theme";
 
@@ -86,6 +87,7 @@ export default function EventScreen() {
       {ev.description ? <Body>{ev.description}</Body> : null}
       {ev.status !== "scheduled" ? <Chip label={t(ev.status === "cancelled" ? "cancelled" : "completed")} tone={ev.status === "cancelled" ? "danger" : "neutral"} /> : null}
       {mine !== "none" ? <Chip label={t(STATUS_TEXT[mine])} tone={mine === "confirmed" ? "ok" : "warn"} /> : null}
+      {ev.status === "scheduled" ? <AvailabilityChip start={ev.starts_at} end={ev.ends_at} /> : null}
 
       {selfActions(state, ev, me).map((a, i) => (
         <Button key={a} testID={`self-${a}`} kind={i === 0 ? "primary" : "secondary"} label={t(ACTION_TEXT[a])} onPress={() => submit(`participation.${a}`, {})} />

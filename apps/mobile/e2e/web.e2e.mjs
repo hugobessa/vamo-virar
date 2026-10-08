@@ -190,6 +190,13 @@ try {
     await shot(bia, "12-going");
   });
 
+  await step("Calendar settings explain what is read and work without any calendar", async () => {
+    await bia.goto(appUrl);
+    await byId(bia, "go-settings").click();
+    await bia.getByText("nothing from your calendar leaves your phone", { exact: false }).waitFor();
+    await shot(bia, "13-calendar-settings");
+  });
+
   if (errors.length) throw new Error(`page errors:\n${errors.join("\n")}`);
   console.log(`\nE2E PASSED. Screenshots in ${shots}`);
 } catch (e) {

@@ -3,6 +3,7 @@ import { useApp, useNow } from "../../lib/context";
 import type { CommunityEntry } from "../../lib/store";
 import { canOrganize, confirmedCount, past, STATUS_TEXT, statusOf, upcoming } from "../../model/events";
 import { formatWhen } from "../../model/time";
+import { AvailabilityChip } from "../AvailabilityChip";
 import { Body, Button, Card, Chip, Heading } from "../kit";
 
 export function EventsTab({ entry }: { entry: CommunityEntry }) {
@@ -30,6 +31,7 @@ export function EventsTab({ entry }: { entry: CommunityEntry }) {
           {n} {t("people")}
           {ev.capacity !== undefined ? ` · ${Math.max(0, ev.capacity - n)} ${t("spotsLeft")}` : ""}
         </Body>
+        {ev.status === "scheduled" && st !== "confirmed" ? <AvailabilityChip start={ev.starts_at} end={ev.ends_at} /> : null}
         {ev.status === "cancelled" ? <Chip label={t("cancelled")} tone="danger" /> : null}
         {ev.status === "completed" ? <Chip label={t("completed")} /> : null}
         {st !== "none" ? <Chip label={t(STATUS_TEXT[st])} tone={st === "confirmed" ? "ok" : st === "invited" || st === "reconfirm" ? "warn" : "neutral"} /> : null}

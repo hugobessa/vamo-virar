@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useState } from "react";
 import { confirm } from "../../lib/confirm";
 import { useApp } from "../../lib/context";
@@ -26,6 +27,7 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
             disabled={!name.trim() || name.trim() === me.profile?.display_name}
             onPress={() => store.submit(entry.id, "member.profile", { profile: { ...me.profile, display_name: name.trim() } })}
           />
+          <Button kind="secondary" label={t("calendarsTitle")} onPress={() => router.push("/settings")} />
           <Button
             kind="danger"
             label={t("leave")}
