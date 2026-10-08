@@ -1,78 +1,81 @@
 # community-node
 
-The vamo-virar community node: one Rust binary plus one SQLite file. It
-sequences each community's encrypted operation log, stores snapshots, and
-holds mailboxes for offline members. It never holds a key that can read
-community content (see [`docs/protocol.md`](../../docs/protocol.md) §3–§6,
-§10–§12, §15 and [`docs/threat-model.md`](../../docs/threat-model.md)).
+O nó da comunidade do vamo-virar: um binário Rust mais um arquivo SQLite. Ele
+sequencia o log de operações cifrado de cada comunidade, armazena snapshots e
+mantém caixas postais para membros offline. Ele nunca guarda uma chave capaz de
+ler o conteúdo da comunidade (veja [`docs/protocol.md`](../../docs/protocol.md) §3–§6,
+§10–§12, §15 e [`docs/threat-model.md`](../../docs/threat-model.md)).
 
 ```sh
 cargo run -p community-node -- --listen 127.0.0.1:8787 --data-dir ./data
-# or
+# ou
 cargo build -p community-node --release
 ./target/release/community-node --config apps/node/config.example.toml
 ```
 
-On start it prints `community-node listening on <addr> node_id=<hex>`.
-Logs go to stderr; set `RUST_LOG=info`. `community-node health` and
-`community-node backup --out <file>` support operations; see
-[`docs/deploy.md`](../../docs/deploy.md) for Docker, Compose + Caddy and
+Ao iniciar, ele imprime `community-node listening on <addr> node_id=<hex>`.
+Os logs vão para o stderr; defina `RUST_LOG=info`. `community-node health` e
+`community-node backup --out <file>` apoiam a operação; veja
+[`docs/deploy.md`](../../docs/deploy.md) para Docker, Compose + Caddy e
 systemd.
 
-## What it checks
+## O que ele verifica
 
-Only what it can verify without keys:
+Apenas o que consegue verificar sem chaves:
 
-- **access**: every envelope is signed by the current epoch access key (the
-  previous one during `epoch_grace_secs` after a rotation);
-- **control plane**: genesis signed by the CRK that hashes to the community
-  id; `rotate` only by an admin and only to `epoch + 1`; `admin.set` by an
-  admin or the CRK;
-- **idempotency**: a repeated `op_id` with identical bytes returns its seq;
-  different bytes are `op_conflict`;
-- **hash chain**: each entry carries the previous entry's hash and the node
-  receive time `at`;
-- **snapshots**: admin upload only, `head` must be the hash of the entry at
-  `seq`, signed with that epoch's access key;
-- **moves**: `migrate` only by an admin or the CRK; afterwards the
-  community is read-only here and writes answer `409 moved` with the new
-  address (protocol §11.3).
+- **acesso**: todo envelope é assinado pela chave de acesso da época atual (ou
+  pela anterior durante `epoch_grace_secs` após uma rotação);
+- **plano de controle**: gênese assinada pela CRK cujo hash é o id da
+  comunidade; `rotate` só por um admin e só para `epoch + 1`; `admin.set` por um
+  admin ou pela CRK;
+- **idempotência**: um `op_id` repetido com bytes idênticos devolve seu seq;
+  bytes diferentes resultam em `op_conflict`;
+- **cadeia de hashes**: cada entrada carrega o hash da entrada anterior e o
+  horário de recebimento no nó `at`;
+- **snapshots**: envio apenas por admin, `head` deve ser o hash da entrada em
+  `seq`, assinado com a chave de acesso daquela época;
+- **mudanças**: `migrate` só por um admin ou pela CRK; depois disso a
+  comunidade fica somente leitura aqui e as escritas respondem `409 moved` com o
+  novo endereço (protocolo §11.3).
 
-Domain rules (who may invite whom, capacity, …) are checked by devices.
+Regras de domínio (quem pode convidar quem, capacidade, …) são verificadas
+pelos dispositivos.
 
-## Authentication
+## Autenticação
 
-Challenge/response (`POST /v1/auth/challenge`, then `/v1/auth/session`)
-with three scopes: `community` (epoch access key, shared by members),
-`mailbox` (a member's own key; reads only its own mailbox) and `control`
-(admin keys). Tokens are re-checked on every request, so a rotation or
-admin change revokes old credentials at once.
+Desafio/resposta (`POST /v1/auth/challenge`, depois `/v1/auth/session`)
+com três escopos: `community` (chave de acesso da época, compartilhada pelos
+membros), `mailbox` (a chave própria de um membro; lê apenas a sua própria caixa
+postal) e `control` (chaves de admin). Os tokens são verificados novamente a
+cada requisição, então uma rotação ou mudança de admin revoga as credenciais
+antigas na hora.
 
-## Housekeeping
+## Manutenção
 
-Every minute: expired mailbox items and auth state are dropped, and the
-data-plane log behind a snapshot older than `compaction_grace_secs` is
-deleted. Control-plane entries are kept forever; they are what an admin
-needs to rebuild the community elsewhere (`POST /v1/communities/restore`).
+A cada minuto: itens expirados das caixas postais e estado de autenticação são
+descartados, e o log do plano de dados anterior a um snapshot mais antigo que
+`compaction_grace_secs` é apagado. Entradas do plano de controle são mantidas
+para sempre; são elas que um admin precisa para reconstruir a comunidade em
+outro lugar (`POST /v1/communities/restore`).
 
-## Managed hosting
+## Hospedagem gerenciada
 
-The same binary hosts communities for others: `[[tenants]]` with their own
-provisioning tokens and limits, suspension, and an operator API on a
-separate private listener (`operator_listen`). `community-node
-tenant-token` makes a tenant token. See
+O mesmo binário hospeda comunidades para terceiros: `[[tenants]]` com seus
+próprios tokens de provisionamento e limites, suspensão e uma API de operador em
+um listener privado separado (`operator_listen`). `community-node
+tenant-token` gera um token de cliente. Veja
 [`docs/managed-hosting.md`](../../docs/managed-hosting.md).
 
-## Tests
+## Testes
 
 ```sh
 cargo test -p community-node
 ```
 
-`tests/api.rs` covers provisioning, sequencing and dedupe, the hash chain,
-auth scopes, rotation and the grace window, CRK recovery, mailboxes,
-intake/invites/rate limits, snapshots and compaction, and restore on a new
-node. `tests/stream.rs` covers WebSocket notifications. `tests/managed.rs`
-covers moving a community (freeze, export, restore elsewhere, cancel),
-tenants and quotas, suspension, the operator API, and upgrading a v0
-database in place.
+`tests/api.rs` cobre provisionamento, sequenciamento e deduplicação, a cadeia de
+hashes, escopos de autenticação, rotação e a janela de tolerância, recuperação
+via CRK, caixas postais, intake/convites/limites de taxa, snapshots e
+compactação, e restauração em um novo nó. `tests/stream.rs` cobre notificações
+via WebSocket. `tests/managed.rs` cobre a mudança de uma comunidade (congelar,
+exportar, restaurar em outro lugar, cancelar), clientes e cotas, suspensão, a
+API de operador e a atualização de um banco de dados v0 no próprio lugar.

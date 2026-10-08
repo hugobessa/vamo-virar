@@ -1,8 +1,7 @@
 import { probeAnswer } from "@vamo-virar/matching";
-import { getLocales } from "expo-localization";
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AppState } from "react-native";
-import { pickLang, translator, type Lang, type StringKey } from "../model/i18n";
+import { translator, type StringKey } from "../model/i18n";
 import { MatchingService } from "./matching";
 import { AppStore, type CommunityEntry } from "./store";
 
@@ -10,18 +9,18 @@ interface Ctx {
   store: AppStore;
   calendar: MatchingService;
   t: (k: StringKey) => string;
-  lang: Lang;
   locale: string;
 }
+
+/** The app is in Portuguese only; dates and numbers follow Brazilian conventions. */
+const LOCALE = "pt-BR";
 
 const AppContext = createContext<Ctx | null>(null);
 
 export function AppProvider({ children, store: injected }: { children: ReactNode; store?: AppStore }) {
   const [store] = useState(() => injected ?? new AppStore());
   const [calendar] = useState(() => new MatchingService());
-  const locale = getLocales()[0]?.languageTag ?? "pt-BR";
-  const lang = pickLang(getLocales()[0]?.languageCode);
-  const value = useMemo(() => ({ store, calendar, t: translator(lang), lang, locale }), [store, calendar, lang, locale]);
+  const value = useMemo(() => ({ store, calendar, t: translator(), locale: LOCALE }), [store, calendar]);
 
   useEffect(() => {
     // Answer "who could come?" on the person's behalf only when they turned

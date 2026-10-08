@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { useApp } from "../lib/context";
 import { Banner, Button, Field, Screen } from "../ui/kit";
+import { errorText } from "../model/errors";
 
 export default function Create() {
   const { store, t } = useApp();
@@ -28,7 +29,7 @@ export default function Create() {
       });
       router.replace({ pathname: "/c/[id]", params: { id } });
     } catch (e) {
-      setError(`${t("error")}: ${e instanceof Error ? e.message : String(e)}`);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }

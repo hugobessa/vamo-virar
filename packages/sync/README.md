@@ -1,9 +1,9 @@
 # @vamo-virar/sync
 
-The client side of the protocol: everything a device does to take part in a
-community. It ties together `@vamo-virar/domain` (state), `@vamo-virar/crypto`
-(envelopes) and a community node over HTTP + WebSocket. It uses only `fetch`
-and `WebSocket`, so the same code runs in React Native and Node.
+O lado cliente do protocolo: tudo o que um dispositivo faz para participar de
+uma comunidade. Une `@vamo-virar/domain` (estado), `@vamo-virar/crypto`
+(envelopes) e um nó da comunidade via HTTP + WebSocket. Usa apenas `fetch`
+e `WebSocket`, então o mesmo código roda no React Native e no Node.
 
 ```ts
 import { NodeClient, Replica, parseInvite } from "@vamo-virar/sync";
@@ -25,23 +25,24 @@ const stop = await bia.watch();           // sync when the node announces change
 const bytes = bia.save();                 // persist; Replica.load(client, bytes) later
 ```
 
-`Replica` handles: per-community keys, the verified log tail, the outbox
-(re-sealed under the newest epoch on each send, idempotent by `op_id`),
-optimistic `view` vs `canonical` state, key envelopes and other sealed mail,
-bootstrapping from a snapshot (and again after a `410 Gone`), waiting for a
-missing epoch key instead of folding opaque entries, and admin flows:
-join requests, approve/reject, remove member (with rotation, removal
-notice, and a new intake key if an admin leaves), make admin, snapshots,
-invites, intake mode, and rebuilding the community on another node
-(`restoreTo`, then `moveTo` on other devices).
+`Replica` cuida de: chaves por comunidade, a cauda verificada do log, a fila de
+saída (selada novamente sob a época mais recente a cada envio, idempotente por
+`op_id`), estado otimista `view` vs `canonical`, envelopes de chave e outras
+mensagens seladas, inicialização a partir de um snapshot (e de novo após um
+`410 Gone`), espera por uma chave de época ausente em vez de processar entradas
+opacas, e fluxos de admin: pedidos de entrada, aprovar/rejeitar, remover membro
+(com rotação, aviso de remoção e uma nova chave de entrada se um admin sair),
+tornar admin, snapshots, convites, modo de entrada e reconstrução da comunidade
+em outro nó (`restoreTo`, depois `moveTo` nos outros dispositivos).
 
-## Tests
+## Testes
 
-`test/integration.test.ts` runs against the real `community-node` binary
-(`cargo build -p community-node`, or set `VV_NODE_BIN`); without it those
-tests are skipped locally and required in CI. Scenarios: founding and
-joining (open and invite-only), rejection, 700-op catch-up with
-pagination, removal and rotation with an offline member, an outbox waiting
-for a delayed key, a lost response retried without duplication,
-persistence, live notifications, compaction with snapshot bootstrap for
-both lagging and new members, and moving a community to a new node.
+`test/integration.test.ts` roda contra o binário real `community-node`
+(`cargo build -p community-node`, ou defina `VV_NODE_BIN`); sem ele, esses
+testes são pulados localmente e obrigatórios na CI. Cenários: fundação e
+entrada (aberta e só por convite), rejeição, atualização de 700 operações com
+paginação, remoção e rotação com um membro offline, uma fila de saída
+aguardando uma chave atrasada, uma resposta perdida reenviada sem duplicação,
+persistência, notificações ao vivo, compactação com inicialização por snapshot
+tanto para membros atrasados quanto para novos, e mudança de uma comunidade
+para um novo nó.

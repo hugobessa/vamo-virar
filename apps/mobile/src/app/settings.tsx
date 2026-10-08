@@ -10,6 +10,7 @@ import type { StringKey } from "../model/i18n";
 import { Banner, Body, Button, Card, Field, Heading, Screen } from "../ui/kit";
 import { PlacesSettings } from "../ui/PlacesSettings";
 import { space } from "../ui/theme";
+import { errorText } from "../model/errors";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -50,7 +51,7 @@ function useProvider(source: "google" | "microsoft") {
           clientId,
         }),
       )
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e: unknown) => setError(errorText(e)));
   }, [response, request, calendar, source, clientId, cfg.discovery]);
 
   return { available: !!clientId && !!request, prompt: () => prompt(), error };

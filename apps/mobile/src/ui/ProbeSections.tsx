@@ -7,6 +7,7 @@ import { useApp, useEligibility } from "../lib/context";
 import type { CommunityEntry } from "../lib/store";
 import { Banner, Body, Button, Card, Heading } from "./kit";
 import { space } from "./theme";
+import { errorText } from "../model/errors";
 
 const ANSWER_KEY = { eligible: "probeCan", maybe: "probeMaybe", not_eligible: "probeCant" } as const;
 
@@ -66,7 +67,7 @@ export function ProbeResults({ entry, ev }: { entry: CommunityEntry; ev: Event }
           setError(null);
           void store
             .admin(entry.id, (rep) => rep.askWhoCanCome(ev.event_id))
-            .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+            .catch((e: unknown) => setError(errorText(e)))
             .finally(() => setBusy(false));
         }}
       />

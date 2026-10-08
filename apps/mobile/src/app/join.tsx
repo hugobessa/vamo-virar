@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { useApp } from "../lib/context";
 import { Banner, Button, Field, Screen } from "../ui/kit";
+import { errorText } from "../model/errors";
 
 export default function Join() {
   const { store, t } = useApp();
@@ -38,7 +39,7 @@ export default function Join() {
       });
       router.replace({ pathname: "/c/[id]", params: { id } });
     } catch (e) {
-      setError(`${t("error")}: ${e instanceof Error ? e.message : String(e)}`);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }

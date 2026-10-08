@@ -16,7 +16,7 @@ export default function Home() {
   const communities = store.list();
   return (
     <Screen>
-      {insecureStorage ? <Banner tone="warn" text="Web preview: data is stored unencrypted in this browser. Use the mobile app for real communities." /> : null}
+      {insecureStorage ? <Banner tone="warn" text={t("webPreviewWarning")} /> : null}
       {communities.length === 0 ? (
         <>
           <Title>{t("welcomeTitle")}</Title>

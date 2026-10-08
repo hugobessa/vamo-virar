@@ -1,63 +1,63 @@
-# Security Engineering Rules
+# Regras de engenharia de segurança
 
-Implementation rules for both the TypeScript (`packages/crypto`) and Rust
-(`crates/crypto`) code. The *what* is in [`protocol.md`](protocol.md) §1.3 and
-§2; the *why* is in [`threat-model.md`](threat-model.md).
+Regras de implementação para o código TypeScript (`packages/crypto`) e Rust
+(`crates/crypto`). O *quê* está em [`protocol.md`](protocol.md) §1.3 e
+§2; o *porquê* está em [`threat-model.md`](threat-model.md).
 
-## Cryptography
+## Criptografia
 
-- Use only the `VV1` suite primitives. Do not add algorithms without a
-  protocol change.
-- Libraries: TypeScript `@noble/curves`, `@noble/hashes`, `@noble/ciphers`,
-  and an RFC 9180 HPKE implementation built on them; Rust `ed25519-dalek`
-  (with `verify_strict`), `x25519-dalek`, `hpke`, `chacha20poly1305`, `sha2`,
-  `hkdf`. Pin exact versions; review diffs on upgrade.
-- No custom primitives. Composition only as specified. The one composed
-  construction we implement ourselves, HPKE (RFC 9180) on top of the noble
-  primitives (so React Native needs no WebCrypto), is tested for
-  interoperability against hpke-js in both directions and against the Rust
-  `hpke` crate via the shared vectors.
-- Decoders are strict: CBOR that is not in deterministic form, unknown
-  fields, or wrong lengths are rejected rather than tolerated.
-- Every signature, KDF and AEAD use has a context string from protocol §15.
-- Random values come from the platform CSPRNG only
-  (`crypto.getRandomValues` via `react-native-get-random-values`; `OsRng` in
+- Use apenas as primitivas da suíte `VV1`. Não adicione algoritmos sem uma
+  mudança no protocolo.
+- Bibliotecas: TypeScript `@noble/curves`, `@noble/hashes`, `@noble/ciphers`,
+  e uma implementação de HPKE RFC 9180 construída sobre elas; Rust `ed25519-dalek`
+  (com `verify_strict`), `x25519-dalek`, `hpke`, `chacha20poly1305`, `sha2`,
+  `hkdf`. Fixe versões exatas; revise os diffs ao atualizar.
+- Nada de primitivas próprias. Composição apenas conforme especificado. A única construção
+  composta que implementamos nós mesmos, HPKE (RFC 9180) sobre as primitivas
+  noble (para que o React Native não precise de WebCrypto), é testada quanto à
+  interoperabilidade com o hpke-js nos dois sentidos e com o crate Rust
+  `hpke` através dos vetores compartilhados.
+- Os decodificadores são estritos: CBOR fora da forma determinística, campos
+  desconhecidos ou comprimentos errados são rejeitados em vez de tolerados.
+- Todo uso de assinatura, KDF e AEAD tem uma string de contexto do protocolo §15.
+- Valores aleatórios vêm apenas do CSPRNG da plataforma
+  (`crypto.getRandomValues` via `react-native-get-random-values`; `OsRng` em
   Rust).
-- Compare secrets and MACs in constant time.
-- Both implementations must pass the same test vectors
-  (`tests/vectors/vv1.json`) before either is merged. Regenerate with
-  `VV_WRITE_VECTORS=1 npm run vectors -w @vamo-virar/crypto` only for an
-  intentional wire change, and review the diff.
+- Compare segredos e MACs em tempo constante.
+- As duas implementações precisam passar nos mesmos vetores de teste
+  (`tests/vectors/vv1.json`) antes que qualquer uma seja mesclada. Regenere com
+  `VV_WRITE_VECTORS=1 npm run vectors -w @vamo-virar/crypto` apenas para uma
+  mudança intencional no formato de fio, e revise o diff.
 
-## Keys on devices
+## Chaves nos dispositivos
 
-- Private keys and epoch keys live in the iOS Keychain / Android Keystore
-  (wrapped), never in plaintext SQLite, logs, crash reports or analytics.
-- The local SQLite database is encrypted at rest (SQLCipher) with a key held
-  in the keystore.
-- Wipe decrypted plaintext buffers when practical; never cache plaintext
-  outside the encrypted database.
+- Chaves privadas e chaves de época ficam no Keychain do iOS / Keystore do Android
+  (encapsuladas), nunca em SQLite em texto claro, logs, relatórios de falha ou analytics.
+- O banco SQLite local é criptografado em repouso (SQLCipher) com uma chave guardada
+  no keystore.
+- Apague buffers de texto claro descriptografado quando for viável; nunca faça cache de texto claro
+  fora do banco criptografado.
 
-## Node
+## Nó
 
-- The node never receives private keys, epoch keys or plaintext. Code review
-  must reject any endpoint that would accept one.
-- Logs: no request bodies, no tokens, no IP addresses by default
-  (configurable for abuse handling, off by default, short retention).
-- Rate limiting on `intake`, `auth/challenge` and mailbox posts.
-- TLS required except on `localhost`; the node can obtain certificates via
-  ACME or sit behind a reverse proxy.
+- O nó nunca recebe chaves privadas, chaves de época nem texto claro. A revisão de código
+  deve rejeitar qualquer endpoint que aceite algum deles.
+- Logs: sem corpos de requisição, sem tokens, sem endereços IP por padrão
+  (configurável para tratamento de abuso, desligado por padrão, retenção curta).
+- Limitação de taxa em `intake`, `auth/challenge` e postagens em caixas postais.
+- TLS obrigatório, exceto em `localhost`; o nó pode obter certificados via
+  ACME ou ficar atrás de um proxy reverso.
 
 ## App
 
-- No third-party analytics or crash SDKs that send data off-device by
-  default. Crash reports, if any, are opt-in and scrubbed.
-- Push notifications are content-free (protocol §14).
-- Do not request location "always" permission; "while in use" or manual
-  reference points only.
-- Calendar access is read-only and used only for local matching.
+- Nada de SDKs de analytics ou de relatório de falhas de terceiros que enviem dados para fora do dispositivo por
+  padrão. Relatórios de falha, se houver, são opt-in e higienizados.
+- Notificações push não têm conteúdo (protocolo §14).
+- Não peça a permissão de localização "sempre"; apenas "durante o uso" ou
+  pontos de referência manuais.
+- O acesso ao calendário é somente leitura e usado apenas para a correspondência local.
 
-## Reporting vulnerabilities
+## Relatando vulnerabilidades
 
-Until a dedicated address exists, report privately to the repository owner
-rather than opening a public issue.
+Até que exista um endereço dedicado, relate em privado ao dono do repositório
+em vez de abrir uma issue pública.

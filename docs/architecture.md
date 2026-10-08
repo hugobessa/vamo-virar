@@ -1,163 +1,163 @@
-# Architecture — Decentralized Community Event Coordination Platform
+# Arquitetura — Plataforma Descentralizada de Coordenação de Eventos Comunitários
 
-> Status: design baseline. This is the source design document. The normative
-> wire/protocol details live in [`protocol.md`](protocol.md); where the two
-> disagree, `protocol.md` wins and this document should be updated.
+> Status: linha de base do design. Este é o documento de design de origem. Os
+> detalhes normativos de wire/protocolo ficam em [`protocol.md`](protocol.md); quando os
+> dois divergirem, `protocol.md` prevalece e este documento deve ser atualizado.
 
-## 1. Executive Summary
+## 1. Resumo Executivo
 
-This project is a privacy-preserving, local-first platform for organizing community events and coordinating people who can attend them.
+Este projeto é uma plataforma local-first e que preserva a privacidade, para organizar eventos comunitários e coordenar as pessoas que podem participar deles.
 
-The primary use case is political/community organizing, where communities need to:
+O caso de uso principal é a organização política/comunitária, em que as comunidades precisam:
 
-- create and manage events;
-- recruit and assign people to events;
-- invite specific people;
-- allow members to volunteer;
-- match events against a person's availability and approximate location;
-- integrate with Apple, Google, and Microsoft calendars;
-- continue operating when users or infrastructure are offline;
-- avoid centralizing users' calendars, availability, and precise locations;
-- minimize infrastructure and operational costs;
-- avoid vendor lock-in;
-- allow communities to self-host their infrastructure.
+- criar e gerenciar eventos;
+- recrutar e alocar pessoas para eventos;
+- convidar pessoas específicas;
+- permitir que membros se voluntariem;
+- cruzar eventos com a disponibilidade e a localização aproximada de uma pessoa;
+- integrar com os calendários da Apple, do Google e da Microsoft;
+- continuar funcionando quando usuários ou a infraestrutura estiverem offline;
+- evitar centralizar os calendários, a disponibilidade e as localizações precisas dos usuários;
+- minimizar custos de infraestrutura e de operação;
+- evitar dependência de fornecedor (vendor lock-in);
+- permitir que as comunidades auto-hospedem sua infraestrutura.
 
-The core architectural principle is:
+O princípio arquitetural central é:
 
-> **The user's device owns personal data. The community owns shared organizational state. A community node provides persistence and synchronization, but does not need to be trusted with plaintext private data.**
+> **O dispositivo do usuário é dono dos dados pessoais. A comunidade é dona do estado organizacional compartilhado. Um nó da comunidade fornece persistência e sincronização, mas não precisa ser confiável para guardar dados privados em texto claro.**
 
-The system should be local-first, eventually consistent, encrypted end-to-end for sensitive community data, and portable across infrastructure providers.
+O sistema deve ser local-first, eventualmente consistente, criptografado de ponta a ponta para dados sensíveis da comunidade e portável entre provedores de infraestrutura.
 
-## 2. Goals
+## 2. Objetivos
 
-### 2.1 Primary Goals
+### 2.1 Objetivos Principais
 
-1. Very low operating cost
-2. No mandatory centralized database
-3. Vendor-independent infrastructure
-4. Local-first operation
-5. Offline support
-6. Strong privacy
-7. Simple UX for non-technical users
-8. Native mobile experience
-9. Calendar integration
-10. Community moderation and membership control
-11. Self-hosted community nodes
-12. Optional managed hosting
-13. Recoverability if a node disappears
-14. Scalability to large numbers of users and communities
+1. Custo de operação muito baixo
+2. Nenhum banco de dados centralizado obrigatório
+3. Infraestrutura independente de fornecedor
+4. Operação local-first
+5. Suporte offline
+6. Privacidade forte
+7. UX simples para usuários não técnicos
+8. Experiência mobile nativa
+9. Integração com calendários
+10. Moderação da comunidade e controle de membros
+11. Nós da comunidade auto-hospedados
+12. Hospedagem gerenciada opcional
+13. Recuperabilidade caso um nó desapareça
+14. Escalabilidade para grandes números de usuários e comunidades
 
-### 2.2 Non-Goals for the Initial Version
+### 2.2 Fora do Escopo da Versão Inicial
 
-Do not initially attempt to provide:
+Não tentar fornecer inicialmente:
 
-- perfect anonymity;
-- metadata-free networking;
-- Tor/mixnet-style privacy;
-- blockchain consensus;
-- global decentralized identity;
-- fully autonomous peer discovery;
-- complex multi-region distributed databases;
-- real-time collaboration comparable to Google Docs.
+- anonimato perfeito;
+- rede livre de metadados;
+- privacidade no estilo Tor/mixnet;
+- consenso em blockchain;
+- identidade descentralizada global;
+- descoberta de pares totalmente autônoma;
+- bancos de dados distribuídos multirregião complexos;
+- colaboração em tempo real comparável ao Google Docs.
 
-The initial system should solve the actual organizational problem before solving every theoretical distributed-systems problem.
+O sistema inicial deve resolver o problema organizacional real antes de resolver todo problema teórico de sistemas distribuídos.
 
-## 3. Core Architectural Principles
+## 3. Princípios Arquiteturais Centrais
 
 ### 3.1 Local-First
 
-Personal information should remain on the user's device whenever possible.
+As informações pessoais devem permanecer no dispositivo do usuário sempre que possível.
 
-The platform should not need to receive:
+A plataforma não deve precisar receber:
 
-- the user's complete calendar;
-- personal calendar event titles;
-- detailed availability history;
-- precise GPS history;
-- unrelated appointments;
-- personal location history.
+- o calendário completo do usuário;
+- os títulos de eventos do calendário pessoal;
+- o histórico detalhado de disponibilidade;
+- o histórico preciso de GPS;
+- compromissos não relacionados;
+- o histórico de localização pessoal.
 
-Instead, the device locally evaluates whether the user can participate in an event.
+Em vez disso, o dispositivo avalia localmente se o usuário pode participar de um evento.
 
 ```mermaid
 flowchart TD
-    A[Community Event] --> M[Local Matching Engine]
-    B[Local Calendar] --> M
-    C[Local Location] --> M
-    D[User Preferences] --> M
-    M --> E[Available / Unavailable / Maybe]
+    A[Evento da Comunidade] --> M[Motor de Matching Local]
+    B[Calendário Local] --> M
+    C[Localização Local] --> M
+    D[Preferências do Usuário] --> M
+    M --> E[Disponível / Indisponível / Talvez]
 ```
 
-### 3.2 The Server Is Not the Owner of the Data
+### 3.2 O Servidor Não É o Dono dos Dados
 
-The community node is a synchronization and persistence mechanism. It should not be treated as the authoritative owner of every piece of information.
+O nó da comunidade é um mecanismo de sincronização e persistência. Ele não deve ser tratado como o dono autoritativo de cada informação.
 
-The architecture should make it possible to destroy a node and reconstruct it from authorized devices.
+A arquitetura deve tornar possível destruir um nó e reconstruí-lo a partir de dispositivos autorizados.
 
 ```mermaid
 graph LR
-    A[Device A<br/>local state] --- N[Community Node]
-    B[Device B<br/>local state] --- N
+    A[Dispositivo A<br/>estado local] --- N[Nó da Comunidade]
+    B[Dispositivo B<br/>estado local] --- N
 ```
 
-The node is useful because mobile devices are frequently offline, but the community should not become permanently dependent on one server.
+O nó é útil porque dispositivos móveis ficam offline com frequência, mas a comunidade não deve se tornar permanentemente dependente de um único servidor.
 
-### 3.3 Cryptographic Identity
+### 3.3 Identidade Criptográfica
 
-Users and communities should have cryptographic identities independent of infrastructure.
+Usuários e comunidades devem ter identidades criptográficas independentes da infraestrutura.
 
-A community is identified by its cryptographic identity, not by `https://community.example.com`. Instead, conceptually:
+Uma comunidade é identificada por sua identidade criptográfica, e não por `https://community.example.com`. Em vez disso, conceitualmente:
 
 ```
 Community ID = hash(community public identity key)
 ```
 
-A node address is merely a place where the community can currently be reached. This allows:
+O endereço de um nó é apenas um lugar onde a comunidade pode ser alcançada no momento. Isso permite:
 
 ```mermaid
 flowchart TD
-    A[node-a.example.com] -->|migrate / replace| B[node-b.example.com]
+    A[node-a.example.com] -->|migrar / substituir| B[node-b.example.com]
 ```
 
-without changing the identity of the community.
+sem alterar a identidade da comunidade.
 
-## 4. High-Level Architecture
+## 4. Arquitetura de Alto Nível
 
-The initial architecture contains two major components.
+A arquitetura inicial contém dois componentes principais.
 
 ```mermaid
 flowchart TD
-    APP[React Native App<br/><br/>UI<br/>Calendar integrations<br/>Local database<br/>Identity<br/>Cryptography<br/>Matching engine<br/>Sync engine]
-    NODE[Community Node<br/><br/>Rust<br/>HTTP API<br/>WebSocket sync<br/>Encrypted storage<br/>Membership synchronization<br/>Offline message delivery<br/>Snapshot storage]
+    APP[App React Native<br/><br/>UI<br/>Integrações de calendário<br/>Banco de dados local<br/>Identidade<br/>Criptografia<br/>Motor de matching<br/>Motor de sincronização]
+    NODE[Nó da Comunidade<br/><br/>Rust<br/>API HTTP<br/>Sincronização via WebSocket<br/>Armazenamento criptografado<br/>Sincronização de membros<br/>Entrega de mensagens offline<br/>Armazenamento de snapshots]
     APP <-->|HTTPS / WebSocket| NODE
 ```
 
-Later, multiple nodes can replicate the same community:
+Mais adiante, vários nós podem replicar a mesma comunidade:
 
 ```mermaid
 flowchart TD
-    A[Community Node A] <-->|replication| B[Community Node B]
-    B --> C[Device A]
-    B --> D[Device B]
-    B --> E[Device C]
+    A[Nó da Comunidade A] <-->|replicação| B[Nó da Comunidade B]
+    B --> C[Dispositivo A]
+    B --> D[Dispositivo B]
+    B --> E[Dispositivo C]
 ```
 
-Multi-node replication is not required for the first MVP.
+A replicação multinó não é necessária para o primeiro MVP.
 
-## 5. Mobile Application
+## 5. Aplicativo Mobile
 
-### 5.1 Recommended Technology
+### 5.1 Tecnologia Recomendada
 
 - React Native;
 - TypeScript;
 - SQLite;
-- native calendar APIs;
+- APIs nativas de calendário;
 - Google Calendar API;
 - Microsoft Graph;
-- a dedicated cryptographic library;
-- a shared TypeScript domain/protocol layer.
+- uma biblioteca criptográfica dedicada;
+- uma camada compartilhada de domínio/protocolo em TypeScript.
 
-The mobile application contains the majority of the business logic.
+O aplicativo mobile contém a maior parte da lógica de negócio.
 
 ```
 apps/
@@ -169,59 +169,59 @@ packages/
     sync/
 ```
 
-Platform-specific code remains isolated in `apps/mobile/ios/` and `apps/mobile/android/`. This gives the project a path toward a future web client without coupling the protocol to React Native.
+O código específico de plataforma fica isolado em `apps/mobile/ios/` e `apps/mobile/android/`. Isso dá ao projeto um caminho para um futuro cliente web sem acoplar o protocolo ao React Native.
 
-## 6. Why React Native Instead of a PWA
+## 6. Por Que React Native em Vez de uma PWA
 
-A PWA is technically capable of implementing much of the architecture. However, UX is a critical requirement for this project. The target users may:
+Uma PWA é tecnicamente capaz de implementar boa parte da arquitetura. No entanto, a UX é um requisito crítico para este projeto. Os usuários-alvo podem:
 
-- have limited technical knowledge;
-- be uncomfortable with authorization flows;
-- be unfamiliar with decentralized systems;
-- have older phones;
-- require reliable notifications;
-- need very clear explanations of what the application is doing.
+- ter conhecimento técnico limitado;
+- não se sentir à vontade com fluxos de autorização;
+- não estar familiarizados com sistemas descentralizados;
+- ter celulares mais antigos;
+- precisar de notificações confiáveis;
+- precisar de explicações muito claras sobre o que o aplicativo está fazendo.
 
-Therefore, the production client should prioritize native mobile capabilities. React Native provides:
+Portanto, o cliente de produção deve priorizar recursos mobile nativos. O React Native oferece:
 
-- native push notifications;
-- reliable access to platform APIs;
-- native calendar integrations;
-- better control over lifecycle behavior;
-- a familiar mobile-app experience;
-- a path to iOS and Android from one codebase.
+- notificações push nativas;
+- acesso confiável às APIs da plataforma;
+- integrações nativas de calendário;
+- melhor controle sobre o comportamento do ciclo de vida;
+- uma experiência familiar de app mobile;
+- um caminho para iOS e Android a partir de uma única base de código.
 
-The decentralized protocol should nevertheless remain independent of React Native.
+Ainda assim, o protocolo descentralizado deve permanecer independente do React Native.
 
-## 7. User Identity
+## 7. Identidade do Usuário
 
-Every application installation creates a cryptographic identity (public/private signing key pair).
+Cada instalação do aplicativo cria uma identidade criptográfica (par de chaves de assinatura pública/privada).
 
-The private key must:
+A chave privada deve:
 
-- remain on the user's device;
-- never be sent to the community node;
-- never be required by the server;
-- be protected by the platform's secure storage where possible.
+- permanecer no dispositivo do usuário;
+- nunca ser enviada ao nó da comunidade;
+- nunca ser exigida pelo servidor;
+- ser protegida pelo armazenamento seguro da plataforma sempre que possível.
 
-The public key can be shared with communities.
+A chave pública pode ser compartilhada com as comunidades.
 
-## 8. Separate Signing and Encryption Keys
+## 8. Chaves Separadas de Assinatura e Criptografia
 
-Do not use one key for every cryptographic purpose. At minimum, distinguish between a **signing identity** and an **encryption identity**.
+Não use uma única chave para todos os propósitos criptográficos. No mínimo, distinga entre uma **identidade de assinatura** e uma **identidade de criptografia**.
 
-- Signing answers: *"Did this user actually authorize this operation?"*
-- Encryption answers: *"Who is allowed to read this content?"*
+- A assinatura responde: *"Este usuário realmente autorizou esta operação?"*
+- A criptografia responde: *"Quem tem permissão para ler este conteúdo?"*
 
-This separation makes key rotation and membership management considerably easier.
+Essa separação torna a rotação de chaves e o gerenciamento de membros consideravelmente mais fáceis.
 
-## 9. Community Identity
+## 9. Identidade da Comunidade
 
-A community also has a cryptographic identity: `community_id`, a community public identity key, and community private administrative key material.
+Uma comunidade também tem uma identidade criptográfica: `community_id`, uma chave pública de identidade da comunidade e material de chave administrativa privada da comunidade.
 
-The private administrative key material must not simply live in plaintext on the community node. Initially, one administrator may control it. The protocol should eventually support multiple administrators and threshold authorization (e.g. 2 of 3 administrators) for particularly sensitive operations.
+O material de chave administrativa privada não deve simplesmente ficar em texto claro no nó da comunidade. Inicialmente, um único administrador pode controlá-lo. O protocolo deve, em algum momento, suportar vários administradores e autorização por limiar (threshold; por exemplo, 2 de 3 administradores) para operações particularmente sensíveis.
 
-## 10. Membership
+## 10. Membros
 
 ```
 Member {
@@ -234,9 +234,9 @@ Member {
 }
 ```
 
-Possible roles: `member`, `organizer`, `admin`.
+Papéis possíveis: `member`, `organizer`, `admin`.
 
-Do not trust a server-side role field by itself. Role changes must be represented as signed operations:
+Não confie isoladamente em um campo de papel do lado do servidor. Mudanças de papel devem ser representadas como operações assinadas:
 
 ```
 GrantRole {
@@ -249,44 +249,44 @@ GrantRole {
 }
 ```
 
-Clients can then independently verify that the operation was authorized.
+Os clientes podem então verificar de forma independente que a operação foi autorizada.
 
-## 11. Joining a Community
+## 11. Entrando em uma Comunidade
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant D as Community Directory / Node
-    participant N as Community Node
+    participant U as Usuário
+    participant D as Diretório de Comunidades / Nó
+    participant N as Nó da Comunidade
     participant A as Admin
-    U->>D: 1. Discover community
-    U->>N: 2. Submit encrypted join request
-    N->>N: 3. Store encrypted request
-    N->>A: Deliver request
-    A->>U: 4. Approve / reject
-    U->>U: 5. Receive membership credentials
+    U->>D: 1. Descobre a comunidade
+    U->>N: 2. Envia pedido de entrada criptografado
+    N->>N: 3. Armazena o pedido criptografado
+    N->>A: Entrega o pedido
+    A->>U: 4. Aprova / rejeita
+    U->>U: 5. Recebe as credenciais de membro
 ```
 
-The node does not need to understand the contents of the request.
+O nó não precisa entender o conteúdo do pedido.
 
-## 12. Encrypting Join Requests
+## 12. Criptografando Pedidos de Entrada
 
-A join request may contain sensitive information supplied by the applicant. The requester encrypts the request before uploading it, using a hybrid encryption pattern.
+Um pedido de entrada pode conter informações sensíveis fornecidas pelo solicitante. O solicitante criptografa o pedido antes de enviá-lo, usando um padrão de criptografia híbrida.
 
 ```mermaid
 flowchart TD
-    JR[Join Request] --> K[Random symmetric key]
-    K --> ER[Encrypt request]
-    K --> EK[Encrypt key for admin]
-    ER --> C[Request ciphertext]
-    EK --> E[Admin key envelope]
+    JR[Pedido de Entrada] --> K[Chave simétrica aleatória]
+    K --> ER[Criptografar pedido]
+    K --> EK[Criptografar chave para o admin]
+    ER --> C[Texto cifrado do pedido]
+    EK --> E[Envelope de chave do admin]
 ```
 
-The node simply stores the ciphertext and delivers it to authorized administrators. The node does not have the decryption key.
+O nó simplesmente armazena o texto cifrado e o entrega aos administradores autorizados. O nó não tem a chave de descriptografia.
 
-## 13. Community Encryption Key
+## 13. Chave de Criptografia da Comunidade
 
-Shared community content is protected using an epoch-based symmetric key (e.g. epoch 17, key `K17`). Each member receives an encrypted envelope containing the current community key:
+O conteúdo compartilhado da comunidade é protegido por uma chave simétrica baseada em épocas (por exemplo, época 17, chave `K17`). Cada membro recebe um envelope criptografado contendo a chave atual da comunidade:
 
 ```
 Encrypt(K17, MemberA Public Key)
@@ -294,47 +294,47 @@ Encrypt(K17, MemberB Public Key)
 Encrypt(K17, MemberC Public Key)
 ```
 
-The community node can store these encrypted envelopes. It does not need access to `K17`.
+O nó da comunidade pode armazenar esses envelopes criptografados. Ele não precisa ter acesso a `K17`.
 
-## 14. Key Rotation
+## 14. Rotação de Chaves
 
-Membership changes require key rotation.
-
-```mermaid
-flowchart LR
-    K17[Epoch 17 / K17] --> A[Member A]
-    K17 --> B[Member B]
-    K17 --> C[Member C]
-```
-
-C leaves. Generate epoch 18 / `K18` and distribute only to remaining members:
+Mudanças nos membros exigem rotação de chaves.
 
 ```mermaid
 flowchart LR
-    K18[Epoch 18 / K18] --> A[Member A]
-    K18 --> B[Member B]
-    K18 -.->|not distributed| C[Former Member C]
+    K17[Época 17 / K17] --> A[Membro A]
+    K17 --> B[Membro B]
+    K17 --> C[Membro C]
 ```
 
-C can continue to decrypt data encrypted under `K17`, because they already legitimately possessed that key. C cannot decrypt new data encrypted with `K18`.
+C sai. Gere a época 18 / `K18` e distribua apenas aos membros restantes:
 
-The node does not initiate the rotation. An authorized device does.
+```mermaid
+flowchart LR
+    K18[Época 18 / K18] --> A[Membro A]
+    K18 --> B[Membro B]
+    K18 -.->|não distribuída| C[Ex-membro C]
+```
 
-## 15. Offline Members During Key Rotation
+C pode continuar descriptografando dados criptografados com `K17`, pois já possuía essa chave legitimamente. C não consegue descriptografar novos dados criptografados com `K18`.
 
-Key rotation must not require all members to be online. With 100 members, 1 leaving, 50 online and 49 offline, the new key is encrypted for the remaining 99 members. For offline members the node stores their encrypted key envelopes. When a member reconnects:
+O nó não inicia a rotação. Um dispositivo autorizado é quem inicia.
+
+## 15. Membros Offline Durante a Rotação de Chaves
+
+A rotação de chaves não deve exigir que todos os membros estejam online. Com 100 membros, 1 saindo, 50 online e 49 offline, a nova chave é criptografada para os 99 membros restantes. Para os membros offline, o nó armazena seus envelopes de chave criptografados. Quando um membro se reconecta:
 
 ```mermaid
 flowchart TD
-    D[Member Device] --> N[Community Node]
-    N --> E[Encrypted K18 envelope]
-    E --> D2[Member Device]
-    D2 --> P[Decrypt using private key]
+    D[Dispositivo do Membro] --> N[Nó da Comunidade]
+    N --> E[Envelope criptografado de K18]
+    E --> D2[Dispositivo do Membro]
+    D2 --> P[Descriptografar usando a chave privada]
 ```
 
-The node never needs to know `K18`.
+O nó nunca precisa conhecer `K18`.
 
-## 16. Event Model
+## 16. Modelo de Evento
 
 ```
 Event {
@@ -351,55 +351,55 @@ Event {
 }
 ```
 
-Depending on privacy requirements, some fields can be public within the community while others remain encrypted.
+Dependendo dos requisitos de privacidade, alguns campos podem ser públicos dentro da comunidade, enquanto outros permanecem criptografados.
 
-## 17. Location Model
+## 17. Modelo de Localização
 
-Precise GPS history should never be required. The user chooses a reference location (Home, Work, Recife, Olinda, a custom location, or a point on a map). The app stores `preferred_location` and `preferred_radius` locally. The user can change the reference point manually — e.g. *"I am currently in Recife, but show me events around São Paulo because I will travel there next week."* — without revealing their current GPS location.
+O histórico preciso de GPS nunca deve ser exigido. O usuário escolhe uma localização de referência (Casa, Trabalho, Recife, Olinda, uma localização personalizada ou um ponto no mapa). O app armazena `preferred_location` e `preferred_radius` localmente. O usuário pode mudar o ponto de referência manualmente — por exemplo, *"Estou em Recife agora, mas me mostre eventos perto de São Paulo porque vou viajar para lá semana que vem."* — sem revelar sua localização GPS atual.
 
-## 18. Calendar Integrations
+## 18. Integrações de Calendário
 
-- **Apple Calendar** — native EventKit. Calendar data stays on the device.
-- **Google Calendar** — OAuth 2 with PKCE; the app talks to Google's APIs directly. No client secret in the app.
-- **Microsoft Outlook / Calendar** — Microsoft Graph with OAuth and PKCE. Calendar data is processed locally.
+- **Apple Calendar** — EventKit nativo. Os dados do calendário ficam no dispositivo.
+- **Google Calendar** — OAuth 2 com PKCE; o app conversa diretamente com as APIs do Google. Nenhum client secret no app.
+- **Microsoft Outlook / Calendar** — Microsoft Graph com OAuth e PKCE. Os dados do calendário são processados localmente.
 
-## 19. Calendar Matching
+## 19. Matching de Calendário
 
-The device compares an event (date, time, location) against the local calendar, local preferred location, travel constraints and user preferences, and produces `Available`, `Unavailable` or `Maybe`. The complete personal calendar is never transmitted.
+O dispositivo compara um evento (data, horário, local) com o calendário local, a localização preferida local, as restrições de deslocamento e as preferências do usuário, e produz `Available`, `Unavailable` ou `Maybe`. O calendário pessoal completo nunca é transmitido.
 
-## 20. Volunteer Flow
-
-```mermaid
-flowchart TD
-    E[Event] --> C[Local calendar check]
-    C --> L[Local location check]
-    L --> Q{Can I participate?}
-    Q -->|Yes| V[Volunteer]
-    Q -->|No| X[Do not volunteer]
-```
-
-The community receives only the necessary participation request.
-
-## 21. Invitation Flow
+## 20. Fluxo de Voluntariado
 
 ```mermaid
 flowchart TD
-    O[Organizer] --> S[Select member]
-    S --> I[Invite to event]
-    I --> N[Member receives notification]
-    N --> C[Local availability check]
-    C --> D{Accept / Decline}
+    E[Evento] --> C[Verificação local do calendário]
+    C --> L[Verificação local da localização]
+    L --> Q{Posso participar?}
+    Q -->|Sim| V[Voluntariar-se]
+    Q -->|Não| X[Não se voluntariar]
 ```
 
-The system must not silently assign people to events. The person must explicitly accept.
+A comunidade recebe apenas o pedido de participação necessário.
 
-## 22. Finding Suitable People
+## 21. Fluxo de Convite
 
-A community may want to *"find people who could reasonably attend this event."* Matching runs on members' devices, and the system exposes only a minimal eligibility signal (`eligible: true`) rather than calendar details. The exact information exposed to organizers is a deliberate privacy decision.
+```mermaid
+flowchart TD
+    O[Organizador] --> S[Seleciona o membro]
+    S --> I[Convida para o evento]
+    I --> N[Membro recebe notificação]
+    N --> C[Verificação local de disponibilidade]
+    C --> D{Aceitar / Recusar}
+```
 
-## 23. Community Discovery
+O sistema não deve alocar pessoas a eventos silenciosamente. A pessoa deve aceitar explicitamente.
 
-A small public directory contains:
+## 22. Encontrando Pessoas Adequadas
+
+Uma comunidade pode querer *"encontrar pessoas que poderiam razoavelmente participar deste evento."* O matching roda nos dispositivos dos membros, e o sistema expõe apenas um sinal mínimo de elegibilidade (`eligible: true`) em vez de detalhes do calendário. A informação exata exposta aos organizadores é uma decisão deliberada de privacidade.
+
+## 23. Descoberta de Comunidades
+
+Um pequeno diretório público contém:
 
 ```
 CommunityDirectoryEntry {
@@ -413,11 +413,11 @@ CommunityDirectoryEntry {
 }
 ```
 
-It must not contain member lists, member locations, availability, calendars or private event details.
+Ele não deve conter listas de membros, localizações de membros, disponibilidade, calendários nem detalhes de eventos privados.
 
-## 24. Community Node
+## 24. Nó da Comunidade
 
-A small Rust executable:
+Um pequeno executável em Rust:
 
 ```
 community-node
@@ -431,45 +431,45 @@ community-node
     └── sync protocol
 ```
 
-Avoid microservices, Kubernetes, Kafka, Redis, and requiring PostgreSQL. The first implementation is **Rust binary + SQLite database**.
+Evite microsserviços, Kubernetes, Kafka, Redis e a exigência de PostgreSQL. A primeira implementação é **binário Rust + banco de dados SQLite**.
 
-## 25. Why SQLite
+## 25. Por Que SQLite
 
-SQLite is not the same thing as centralizing the application; it is the node's local persistence. The entire node is `community-node` + `community.sqlite` + `config.toml`, and runs on a VPS, Raspberry Pi, home server, NAS, old computer, or any cloud VM.
+SQLite não é o mesmo que centralizar a aplicação; é a persistência local do nó. O nó inteiro é `community-node` + `community.sqlite` + `config.toml`, e roda em uma VPS, Raspberry Pi, servidor doméstico, NAS, computador antigo ou qualquer VM na nuvem.
 
-## 26. Node Storage
+## 26. Armazenamento do Nó
 
-Conceptually: `communities`, `members`, `operations`, `snapshots`, `key_envelopes`, `delivery_queue`. Most sensitive content is encrypted before reaching the node.
+Conceitualmente: `communities`, `members`, `operations`, `snapshots`, `key_envelopes`, `delivery_queue`. A maior parte do conteúdo sensível é criptografada antes de chegar ao nó.
 
-## 27. Node as a Mailbox
+## 27. O Nó como Caixa Postal
 
 ```mermaid
 sequenceDiagram
-    participant U as User A
-    participant N as Community Node
+    participant U as Usuário A
+    participant N as Nó da Comunidade
     participant A as Admin
-    U->>N: Encrypted message
-    N->>N: Store ciphertext
-    A->>N: Come online / request pending data
-    N-->>A: Encrypted ciphertext
-    A->>A: Decrypt locally
+    U->>N: Mensagem criptografada
+    N->>N: Armazena o texto cifrado
+    A->>N: Fica online / solicita dados pendentes
+    N-->>A: Texto cifrado
+    A->>A: Descriptografa localmente
 ```
 
-This is the key mechanism that allows offline users to communicate without requiring the recipient to be online.
+Este é o mecanismo-chave que permite que usuários offline se comuniquem sem exigir que o destinatário esteja online.
 
-## 28. Offline Delivery
+## 28. Entrega Offline
 
-If the member and admin are offline but the node is online, a new join request is stored as ciphertext and delivered when the admin comes online. No private key needs to exist on the node.
+Se o membro e o admin estiverem offline, mas o nó estiver online, um novo pedido de entrada é armazenado como texto cifrado e entregue quando o admin ficar online. Nenhuma chave privada precisa existir no nó.
 
-## 29. Node Compromise
+## 29. Comprometimento do Nó
 
-An attacker who obtains the entire node database should primarily obtain ciphertexts, public keys, signatures and protocol metadata — **not** calendar contents, personal availability, private community content, private messages or community encryption keys. This is a core security requirement.
+Um atacante que obtenha o banco de dados inteiro do nó deve obter principalmente textos cifrados, chaves públicas, assinaturas e metadados de protocolo — **não** o conteúdo de calendários, a disponibilidade pessoal, o conteúdo privado da comunidade, mensagens privadas ou as chaves de criptografia da comunidade. Este é um requisito central de segurança.
 
-## 30. Sync Protocol
+## 30. Protocolo de Sincronização
 
-Synchronization is version-based. Each community has a monotonically increasing logical version. A device says *"I have version 183"*; the node answers with the current version and the updates after 183.
+A sincronização é baseada em versões. Cada comunidade tem uma versão lógica monotonicamente crescente. Um dispositivo diz *"Tenho a versão 183"*; o nó responde com a versão atual e as atualizações posteriores à 183.
 
-## 31. Operations
+## 31. Operações
 
 ```
 Operation {
@@ -484,34 +484,34 @@ Operation {
 }
 ```
 
-The payload may be encrypted. The signature lets clients verify who authorized the operation.
+O payload pode ser criptografado. A assinatura permite que os clientes verifiquem quem autorizou a operação.
 
-## 32. Idempotency
+## 32. Idempotência
 
-Every operation has a globally unique `operation_id`. Receiving the same operation twice applies it once. This is essential because mobile retransmission is normal.
+Toda operação tem um `operation_id` globalmente único. Receber a mesma operação duas vezes a aplica uma única vez. Isso é essencial porque a retransmissão em redes móveis é normal.
 
-## 33. Resumable Synchronization
+## 33. Sincronização Retomável
 
-If a device disconnects after version 190, it asks for operations after 190 — it does not restart synchronization.
+Se um dispositivo se desconectar após a versão 190, ele pede as operações posteriores à 190 — não reinicia a sincronização.
 
 ## 34. Snapshots
 
 ```mermaid
 flowchart TD
-    O[Operations 1–1000] --> S[Snapshot 1000]
+    O[Operações 1–1000] --> S[Snapshot 1000]
 ```
 
 ```mermaid
 flowchart TD
-    S[Snapshot 1000] --> C[Device catch-up]
-    O[Operations 1001–1032] --> C
+    S[Snapshot 1000] --> C[Atualização do dispositivo]
+    O[Operações 1001–1032] --> C
 ```
 
-A device that has been offline downloads the snapshot and only the operations after it.
+Um dispositivo que ficou offline baixa o snapshot e apenas as operações posteriores a ele.
 
-## 35. Event Compaction
+## 35. Compactação de Eventos
 
-An event may generate many operations (created, volunteers, cancellations, invites, acceptances, completion, attendance). After completion the useful state might simply be:
+Um evento pode gerar muitas operações (criação, voluntários, cancelamentos, convites, aceites, conclusão, presença). Após a conclusão, o estado útil pode ser simplesmente:
 
 ```
 EventSummary {
@@ -523,17 +523,17 @@ EventSummary {
 }
 ```
 
-or, if individual attendance is required, `attendees: [A, C, D]`. Intermediate operations need not remain forever.
+ou, se a presença individual for necessária, `attendees: [A, C, D]`. As operações intermediárias não precisam permanecer para sempre.
 
-## 36. Retention Policy
+## 36. Política de Retenção
 
-| Class | Examples | Retention |
+| Classe | Exemplos | Retenção |
 |---|---|---|
-| Ephemeral | transient messages, temporary sync metadata, availability probes | hours / days |
-| Operational | active events, current memberships, pending invitations and membership requests | until no longer required |
-| Historical | completed event summaries, attendance statistics | months / years, per community policy |
+| Efêmera | mensagens transitórias, metadados temporários de sincronização, sondagens de disponibilidade | horas / dias |
+| Operacional | eventos ativos, vínculos de membros atuais, convites e pedidos de entrada pendentes | até não serem mais necessários |
+| Histórica | resumos de eventos concluídos, estatísticas de presença | meses / anos, conforme a política da comunidade |
 
-## 37. Snapshot Semantics
+## 37. Semântica do Snapshot
 
 ```
 CommunitySnapshot {
@@ -547,111 +547,111 @@ CommunitySnapshot {
 }
 ```
 
-A snapshot never contains personal calendars, GPS history or unrelated personal information.
+Um snapshot nunca contém calendários pessoais, histórico de GPS ou informações pessoais não relacionadas.
 
-## 38. Devices Offline for Months
+## 38. Dispositivos Offline por Meses
 
-A device offline for 90 days receives the latest snapshot plus updates after it. If old operations were compacted, it receives a newer snapshot.
+Um dispositivo offline por 90 dias recebe o snapshot mais recente mais as atualizações posteriores a ele. Se operações antigas tiverem sido compactadas, ele recebe um snapshot mais novo.
 
-## 39. Node Failure
+## 39. Falha do Nó
 
-The node is not the only copy of community state:
+O nó não é a única cópia do estado da comunidade:
 
 ```mermaid
 graph TD
-    N[Community Node] --- A[Device A<br/>local copy]
-    N --- B[Device B<br/>local copy]
+    N[Nó da Comunidade] --- A[Dispositivo A<br/>cópia local]
+    N --- B[Dispositivo B<br/>cópia local]
 ```
 
-If the node disappears, authorized devices provision a new node and repopulate it.
+Se o nó desaparecer, dispositivos autorizados provisionam um novo nó e o repovoam.
 
-## 40. Self-Hosted Nodes
+## 40. Nós Auto-Hospedados
 
 ```
 community-node --community <community-id>
 ```
 
-Runs on a home computer, Raspberry Pi, NAS, VPS or cloud VM. Open, provider-independent software.
+Roda em um computador doméstico, Raspberry Pi, NAS, VPS ou VM na nuvem. Software aberto e independente de provedor.
 
-## 41. Managed Nodes
+## 41. Nós Gerenciados
 
-> **Managed hosting must use exactly the same node software as self-hosting.**
+> **A hospedagem gerenciada deve usar exatamente o mesmo software de nó que a auto-hospedagem.**
 
 ```mermaid
 graph LR
-    S[Self-hosted] <-->|same protocol / same node software| M[Managed hosting]
+    S[Auto-hospedado] <-->|mesmo protocolo / mesmo software de nó| M[Hospedagem gerenciada]
 ```
 
-A community can migrate between them.
+Uma comunidade pode migrar entre os dois.
 
-> Implemented in Phase 10: tenants, quotas and an operator API on the same
-> binary, and a signed `migrate` control op that freezes the old node and
-> that members' devices verify and follow. See
-> [`managed-hosting.md`](managed-hosting.md) and protocol §11.3.
+> Implementado na Fase 10: tenants, cotas e uma API de operador no mesmo
+> binário, e uma operação de controle `migrate` assinada que congela o nó antigo e
+> que os dispositivos dos membros verificam e seguem. Veja
+> [`managed-hosting.md`](managed-hosting.md) e o §11.3 do protocolo.
 
-## 42. Cost Model
+## 42. Modelo de Custo
 
-The node mostly performs: store, retrieve, route, sync, verify. Devices perform: calendar matching, location matching, privacy-sensitive computation, encryption/decryption, state reconstruction. Adding users does not proportionally increase server-side computation.
+O nó executa principalmente: armazenar, recuperar, rotear, sincronizar, verificar. Os dispositivos executam: matching de calendário, matching de localização, computação sensível à privacidade, criptografia/descriptografia, reconstrução de estado. Adicionar usuários não aumenta proporcionalmente a computação do lado do servidor.
 
 ## 43. P2P / WebRTC
 
-WebRTC can be added later to reduce node traffic, but must not be required for correctness. The reliable fallback remains device → node → device, avoiding dependence on NAT traversal, always-online peers, mobile background execution and firewall behavior.
+WebRTC pode ser adicionado mais tarde para reduzir o tráfego do nó, mas não deve ser necessário para a corretude. O fallback confiável continua sendo dispositivo → nó → dispositivo, evitando dependência de travessia de NAT, pares sempre online, execução em segundo plano no mobile e comportamento de firewalls.
 
-## 44. Conflict Resolution
+## 44. Resolução de Conflitos
 
-Operations can arrive in different orders (e.g. accept on device A, decline on device B). The protocol defines deterministic domain rules — for example, once a terminal state is reached, `accepted → declined` may be invalid. Conflict resolution is defined at the domain level rather than relying on timestamps alone.
+Operações podem chegar em ordens diferentes (por exemplo, aceitar no dispositivo A, recusar no dispositivo B). O protocolo define regras de domínio determinísticas — por exemplo, uma vez atingido um estado terminal, `accepted → declined` pode ser inválido. A resolução de conflitos é definida no nível do domínio, em vez de depender apenas de timestamps.
 
-## 45. Eventual Consistency
+## 45. Consistência Eventual
 
-Devices may temporarily disagree. After synchronization they converge, provided both possess the necessary authorized data.
+Os dispositivos podem discordar temporariamente. Após a sincronização, eles convergem, desde que ambos possuam os dados autorizados necessários.
 
 ```mermaid
 flowchart LR
-    A[Device A] -->|sync| S[Converged state]
-    B[Device B] -->|sync| S
+    A[Dispositivo A] -->|sincronização| S[Estado convergido]
+    B[Dispositivo B] -->|sincronização| S
 ```
 
-## 46. Cryptographic Verification
+## 46. Verificação Criptográfica
 
-Clients independently verify critical operations: who created an event, approved a member, granted admin, removed a member, changed community policy. Operations carry author, signature, operation_id and logical version.
+Os clientes verificam de forma independente as operações críticas: quem criou um evento, aprovou um membro, concedeu admin, removeu um membro, alterou a política da comunidade. As operações carregam autor, assinatura, operation_id e versão lógica.
 
-## 47. Security Threat Model
+## 47. Modelo de Ameaças de Segurança
 
-1. compromised community node;
-2. malicious administrator;
-3. stolen node database;
-4. network interception;
-5. compromised user account;
-6. stolen phone;
-7. removed member;
-8. destroyed node;
-9. replaced node;
-10. replayed operation;
-11. duplicated operation;
-12. long-offline devices.
+1. nó da comunidade comprometido;
+2. administrador malicioso;
+3. banco de dados do nó roubado;
+4. interceptação de rede;
+5. conta de usuário comprometida;
+6. celular roubado;
+7. membro removido;
+8. nó destruído;
+9. nó substituído;
+10. operação reproduzida (replay);
+11. operação duplicada;
+12. dispositivos offline por muito tempo.
 
-See [`threat-model.md`](threat-model.md).
+Veja [`threat-model.md`](threat-model.md).
 
-## 48. Transport Security
+## 48. Segurança do Transporte
 
-TLS protects data in transit; application-level encryption protects data if the node's database is compromised. Both are required.
+O TLS protege os dados em trânsito; a criptografia no nível da aplicação protege os dados se o banco de dados do nó for comprometido. Ambos são necessários.
 
 ```mermaid
 flowchart TD
-    T[TLS transport encryption] --> A[Application-level encryption]
+    T[Criptografia de transporte TLS] --> A[Criptografia no nível da aplicação]
 ```
 
-## 49. Metadata Privacy
+## 49. Privacidade de Metadados
 
-Encryption does not hide metadata: a node may learn that a user connected, a community received an update, or a message of ~N bytes was stored. The first version does not attempt perfect metadata privacy. The initial objective:
+A criptografia não esconde metadados: um nó pode descobrir que um usuário se conectou, que uma comunidade recebeu uma atualização ou que uma mensagem de ~N bytes foi armazenada. A primeira versão não tenta oferecer privacidade perfeita de metadados. O objetivo inicial:
 
-> The node cannot reconstruct users' personal calendars, detailed availability, or encrypted community content from its stored data alone.
+> O nó não consegue reconstruir os calendários pessoais dos usuários, a disponibilidade detalhada ou o conteúdo criptografado da comunidade apenas a partir dos dados que armazena.
 
-## 50. Notifications
+## 50. Notificações
 
-Push notifications contain minimal information. Avoid *"You have been invited to a political event at [exact address] at 19:00."* Prefer *"You have a new activity."* The app opens, then fetches and decrypts the content.
+As notificações push contêm o mínimo de informação. Evite *"Você foi convidado para um evento político em [endereço exato] às 19:00."* Prefira *"Você tem uma nova atividade."* O app abre e então busca e descriptografa o conteúdo.
 
-## 51. Repository Structure
+## 51. Estrutura do Repositório
 
 ```
 project/
@@ -679,96 +679,96 @@ project/
     └── integration/
 ```
 
-The protocol is specified independently from the implementation.
+O protocolo é especificado de forma independente da implementação.
 
-## 52. Implementation Plan
+## 52. Plano de Implementação
 
-**Phase 0 — Protocol Specification.** Before any UI, define identities, keys, signatures, community IDs, membership, roles, events, invitations, participation, operations, snapshots, key epochs, synchronization, conflict resolution, retention and node discovery. Deliverable: `docs/protocol.md`. Do not start with the server.
+**Fase 0 — Especificação do Protocolo.** Antes de qualquer UI, definir identidades, chaves, assinaturas, IDs de comunidade, membros, papéis, eventos, convites, participação, operações, snapshots, épocas de chave, sincronização, resolução de conflitos, retenção e descoberta de nós. Entregável: `docs/protocol.md`. Não comece pelo servidor.
 
-**Phase 1 — Local Domain Engine.** The whole community state machine, locally, no networking: create community, add/remove member, create event, invite, accept, decline, volunteer, complete, attendance, snapshot generation/restoration, operation compaction.
+**Fase 1 — Motor de Domínio Local.** Toda a máquina de estados da comunidade, localmente, sem rede: criar comunidade, adicionar/remover membro, criar evento, convidar, aceitar, recusar, voluntariar-se, concluir, presença, geração/restauração de snapshot, compactação de operações.
 
-**Phase 2 — Cryptographic Layer.** Identity generation, signatures, encryption, key envelopes, epochs, membership key rotation, encrypted snapshots and operations. Security tests before moving forward.
+**Fase 2 — Camada Criptográfica.** Geração de identidade, assinaturas, criptografia, envelopes de chave, épocas, rotação de chaves por mudança de membros, snapshots e operações criptografados. Testes de segurança antes de seguir adiante.
 
-**Phase 3 — Rust Node.** Rust + SQLite + HTTP + WebSocket. Authenticate devices, store/retrieve encrypted data, maintain versions, deliver pending messages, store snapshots, provide discovery info. No application intelligence in the node.
+**Fase 3 — Nó em Rust.** Rust + SQLite + HTTP + WebSocket. Autenticar dispositivos, armazenar/recuperar dados criptografados, manter versões, entregar mensagens pendentes, armazenar snapshots, fornecer informações de descoberta. Nenhuma inteligência de aplicação no nó.
 
-**Phase 4 — Synchronization.** `sync(since_version)` with resumability, operation IDs, deduplication, signatures, version tracking, acknowledgements, snapshots. Test: device A offline, device B performs 1,000 operations, device A reconnects.
+**Fase 4 — Sincronização.** `sync(since_version)` com retomada, IDs de operação, deduplicação, assinaturas, rastreamento de versões, confirmações (acks), snapshots. Teste: dispositivo A offline, dispositivo B executa 1,000 operações, dispositivo A se reconecta.
 
-**Phase 5 — Mobile Application.** Built around the local domain engine. UX first. Users never see "CRDT", "epoch", "node", "public key", "encrypted envelope" or "operation log" — they see *Create community, Join community, Create event, Volunteer, Invite, Accept, Decline*.
+**Fase 5 — Aplicativo Mobile.** Construído em torno do motor de domínio local. UX em primeiro lugar. Os usuários nunca veem "CRDT", "época", "nó", "chave pública", "envelope criptografado" ou "log de operações" — eles veem *Criar comunidade, Entrar na comunidade, Criar evento, Voluntariar-se, Convidar, Aceitar, Recusar*.
 
-**Phase 6 — Calendar Integrations.** Apple EventKit, then Google Calendar, then Microsoft Graph. Read-only, availability calculated locally.
+**Fase 6 — Integrações de Calendário.** Apple EventKit, depois Google Calendar, depois Microsoft Graph. Somente leitura, com disponibilidade calculada localmente.
 
-**Phase 7 — Location Matching.** Preferred, current and manually selected location; radius; approximate travel distance/time. Never require precise location sharing.
+**Fase 7 — Matching de Localização.** Localização preferida, atual e selecionada manualmente; raio; distância/tempo de deslocamento aproximados. Nunca exigir o compartilhamento de localização precisa.
 
-**Phase 8 — Real-World Offline Testing.** User offline 24 h / 7 d / 30 d; node offline, destroyed, replaced; admin offline; all admins offline; conflicting operations; flapping connections. More important than performance benchmarks at this stage.
+**Fase 8 — Testes Offline no Mundo Real.** Usuário offline por 24 h / 7 d / 30 d; nó offline, destruído, substituído; admin offline; todos os admins offline; operações conflitantes; conexões instáveis. Mais importante do que benchmarks de desempenho nesta etapa.
 
-**Phase 9 — Community Node Deployment.** One binary that runs anywhere; Docker image + standalone binary, Docker optional; minimal configuration.
+**Fase 9 — Implantação do Nó da Comunidade.** Um binário que roda em qualquer lugar; imagem Docker + binário standalone, Docker opcional; configuração mínima.
 
-**Phase 10 — Managed Hosting.** Only after self-hosting works. The protocol must not depend on AWS, GCP, Azure, Cloudflare, Supabase or Firebase.
+**Fase 10 — Hospedagem Gerenciada.** Somente depois que a auto-hospedagem funcionar. O protocolo não deve depender de AWS, GCP, Azure, Cloudflare, Supabase ou Firebase.
 
-## 53. Testing Strategy
+## 53. Estratégia de Testes
 
-- **Unit tests** — state transitions, cryptographic operations, serialization, snapshots, key rotation, permissions.
-- **Property tests** — random operations delivered in random order, duplicated, delayed, partially missing; resulting valid state must be deterministic.
-- **Integration tests** — devices A, B, C plus a node with simulated network failures.
-- **Security tests** — node compromised ⇒ protected content unreadable; member removed ⇒ new epoch ⇒ former member cannot decrypt new data.
+- **Testes unitários** — transições de estado, operações criptográficas, serialização, snapshots, rotação de chaves, permissões.
+- **Testes de propriedade** — operações aleatórias entregues em ordem aleatória, duplicadas, atrasadas, parcialmente ausentes; o estado válido resultante deve ser determinístico.
+- **Testes de integração** — dispositivos A, B, C mais um nó, com falhas de rede simuladas.
+- **Testes de segurança** — nó comprometido ⇒ conteúdo protegido ilegível; membro removido ⇒ nova época ⇒ ex-membro não consegue descriptografar dados novos.
 
-## 54. First MVP Scope
+## 54. Escopo do Primeiro MVP
 
-- **Users** — identity, profile, community membership.
-- **Communities** — create, discover, request to join, approve, reject, remove member.
-- **Events** — create, edit, cancel, volunteer, invite, accept, decline, complete.
-- **Privacy** — encrypted community state, local calendar matching, local location matching.
-- **Infrastructure** — one Rust node, SQLite, offline synchronization, snapshots.
-- **Platforms** — iOS, Android.
+- **Usuários** — identidade, perfil, vínculo com comunidades.
+- **Comunidades** — criar, descobrir, pedir para entrar, aprovar, rejeitar, remover membro.
+- **Eventos** — criar, editar, cancelar, voluntariar-se, convidar, aceitar, recusar, concluir.
+- **Privacidade** — estado da comunidade criptografado, matching local de calendário, matching local de localização.
+- **Infraestrutura** — um nó em Rust, SQLite, sincronização offline, snapshots.
+- **Plataformas** — iOS, Android.
 
-## 55. Features to Delay
+## 55. Funcionalidades a Adiar
 
-WebRTC, multi-node consensus, threshold signatures, advanced anonymous credentials, complex public directories, sophisticated distributed discovery, serverless functions, Kubernetes, blockchain.
+WebRTC, consenso multinó, assinaturas por limiar (threshold), credenciais anônimas avançadas, diretórios públicos complexos, descoberta distribuída sofisticada, funções serverless, Kubernetes, blockchain.
 
-## 56. Most Important Architectural Decisions
+## 56. Decisões Arquiteturais Mais Importantes
 
-> **The community node stores enough encrypted state to allow offline users to synchronize, but it does not become the authoritative owner of users' private data.**
+> **O nó da comunidade armazena estado criptografado suficiente para permitir que usuários offline sincronizem, mas não se torna o dono autoritativo dos dados privados dos usuários.**
 
-> **The operation log is a synchronization mechanism; the snapshot is the durable representation of meaningful state.**
+> **O log de operações é um mecanismo de sincronização; o snapshot é a representação durável do estado significativo.**
 
-The system retains history only when that history is actually useful.
+O sistema retém histórico apenas quando esse histórico é de fato útil.
 
-## 57. Final Architecture
+## 57. Arquitetura Final
 
 ```mermaid
 flowchart TD
-    C[COMMUNITY<br/>Cryptographic Identity]
-    C --> N1[Community Node A]
-    C --> N2[Community Node B]
-    N1 <--> |Encrypted state replication| N2
-    N1 --> D1[Device A]
-    N2 --> D2[Device B]
-    N2 --> D3[Device C]
-    D1 --> M1[Calendar + Location + Local Matching]
-    D2 --> M2[Calendar + Location + Local Matching]
-    D3 --> M3[Calendar + Location + Local Matching]
-    M1 --> CC[Community Coordination]
+    C[COMUNIDADE<br/>Identidade Criptográfica]
+    C --> N1[Nó da Comunidade A]
+    C --> N2[Nó da Comunidade B]
+    N1 <--> |Replicação de estado criptografado| N2
+    N1 --> D1[Dispositivo A]
+    N2 --> D2[Dispositivo B]
+    N2 --> D3[Dispositivo C]
+    D1 --> M1[Calendário + Localização + Matching Local]
+    D2 --> M2[Calendário + Localização + Matching Local]
+    D3 --> M3[Calendário + Localização + Matching Local]
+    M1 --> CC[Coordenação da Comunidade]
     M2 --> CC
     M3 --> CC
 ```
 
 ```mermaid
 flowchart TD
-    subgraph P[Private data stays on the user device]
-        C[Calendar] --> D[User Device]
-        L[Location] --> D
-        R[Preferences] --> D
-        D --> A[Local availability / matching]
-        D --> E[Local encryption]
+    subgraph P[Dados privados ficam no dispositivo do usuário]
+        C[Calendário] --> D[Dispositivo do Usuário]
+        L[Localização] --> D
+        R[Preferências] --> D
+        D --> A[Disponibilidade / matching local]
+        D --> E[Criptografia local]
     end
-    E -->|Minimal encrypted community data| N[Community Node]
-    N -->|Encrypted state| O[Other devices]
+    E -->|Dados mínimos e criptografados da comunidade| N[Nó da Comunidade]
+    N -->|Estado criptografado| O[Outros dispositivos]
 ```
 
-## 58. Bottom Line
+## 58. Conclusão
 
-The system is not serverless in the traditional cloud sense. It is:
+O sistema não é serverless no sentido tradicional de nuvem. Ele é:
 
-> **local-first + federated + self-hostable + encrypted + eventually consistent.**
+> **local-first + federado + auto-hospedável + criptografado + eventualmente consistente.**
 
-A community can run *Rust binary + SQLite* on a small VPS, a Raspberry Pi, or an administrator's always-on computer, while a managed provider offers the same node as a paid service. The infrastructure provider is replaceable; the community identity, users' identities, encrypted state, protocol and application remain independent of the machine running the node.
+Uma comunidade pode rodar *binário Rust + SQLite* em uma pequena VPS, em um Raspberry Pi ou no computador sempre ligado de um administrador, enquanto um provedor gerenciado oferece o mesmo nó como serviço pago. O provedor de infraestrutura é substituível; a identidade da comunidade, as identidades dos usuários, o estado criptografado, o protocolo e o aplicativo permanecem independentes da máquina que executa o nó.

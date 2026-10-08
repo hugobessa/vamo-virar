@@ -91,7 +91,7 @@ const api2Url = `${appUrl}/node2`;
 const browser = await chromium.launch({ executablePath: chromePath });
 const errors = [];
 async function person(name) {
-  const ctx = await browser.newContext({ locale: "en-US", viewport: { width: 420, height: 900 } });
+  const ctx = await browser.newContext({ locale: "pt-BR", viewport: { width: 420, height: 900 } });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => errors.push(`${name}: ${e.message}`));
   page.on("dialog", (d) => d.accept());
@@ -113,7 +113,7 @@ try {
 
   await step("Ana opens the app and sees the welcome screen", async () => {
     await ana.goto(appUrl);
-    await ana.getByText("Organize your community").waitFor();
+    await ana.getByText("Organize sua comunidade").waitFor();
     await shot(ana, "01-welcome");
   });
 
@@ -125,12 +125,12 @@ try {
     await byId(ana, "setup-code").fill(TOKEN);
     await shot(ana, "02-create");
     await byId(ana, "create-submit").click();
-    await ana.getByText("Up to date").waitFor({ timeout: 15000 });
+    await ana.getByText("Tudo em dia").waitFor({ timeout: 15000 });
     await shot(ana, "03-community");
   });
 
   await step("Ana creates an invite link", async () => {
-    await ana.getByRole("tab", { name: "People" }).click();
+    await ana.getByRole("tab", { name: "Pessoas" }).click();
     await byId(ana, "create-invite").click();
     invite = await byId(ana, "invite-text").textContent({ timeout: 10000 });
     if (!invite?.startsWith("vamovirar://join?")) throw new Error(`bad invite: ${invite}`);
@@ -142,28 +142,28 @@ try {
     await byId(bia, "invite-link").fill(invite);
     await byId(bia, "display-name").fill("Bia");
     await byId(bia, "join-submit").click();
-    await bia.getByText("Request sent").first().waitFor({ timeout: 10000 });
+    await bia.getByText("Pedido enviado").first().waitFor({ timeout: 10000 });
     await shot(bia, "05-waiting");
   });
 
   await step("Ana accepts Bia", async () => {
-    await ana.getByRole("tab", { name: "Events" }).click();
-    await ana.getByRole("tab", { name: "People" }).click(); // reloads requests
+    await ana.getByRole("tab", { name: "Eventos" }).click();
+    await ana.getByRole("tab", { name: "Pessoas" }).click(); // reloads requests
     await ana.getByText("Bia").first().waitFor({ timeout: 10000 });
     await shot(ana, "06-request");
-    await ana.getByRole("button", { name: "Accept" }).first().click();
-    await ana.getByText("No requests right now.").waitFor({ timeout: 15000 });
+    await ana.getByRole("button", { name: "Aceitar" }).first().click();
+    await ana.getByText("Nenhum pedido agora.").waitFor({ timeout: 15000 });
   });
 
   await step("Bia is in", async () => {
     await bia.goto(appUrl);
     await bia.getByText("Coletivo Recife").first().click({ timeout: 15000 });
-    await bia.getByRole("tab", { name: "Events" }).waitFor({ timeout: 15000 });
+    await bia.getByRole("tab", { name: "Eventos" }).waitFor({ timeout: 15000 });
     await shot(bia, "07-bia-in");
   });
 
   await step("Ana creates an event", async () => {
-    await ana.getByRole("tab", { name: "Events" }).click();
+    await ana.getByRole("tab", { name: "Eventos" }).click();
     await byId(ana, "new-event").click();
     await byId(ana, "event-title").fill("Plenária no Derby");
     await byId(ana, "event-place").fill("Praça do Derby");
@@ -172,7 +172,7 @@ try {
     await shot(ana, "08-new-event");
     await byId(ana, "event-save").click();
     await ana.getByText("Plenária no Derby").first().waitFor();
-    await ana.getByText("Up to date").waitFor({ timeout: 15000 });
+    await ana.getByText("Tudo em dia").waitFor({ timeout: 15000 });
     await shot(ana, "09-event-list");
   });
 
@@ -180,50 +180,50 @@ try {
     await bia.reload();
     await bia.getByText("Plenária no Derby").first().click({ timeout: 15000 });
     await byId(bia, "self-volunteer").click();
-    await bia.getByText("You offered to help").last().waitFor();
+    await bia.getByText("Você se ofereceu").last().waitFor();
     await shot(bia, "10-volunteered");
   });
 
   await step("Ana confirms Bia", async () => {
     await ana.reload();
     await ana.getByText("Plenária no Derby").first().click({ timeout: 15000 });
-    await ana.getByRole("button", { name: "Confirm" }).first().click({ timeout: 15000 });
-    await ana.getByText("Confirmed").last().waitFor();
+    await ana.getByRole("button", { name: "Confirmar" }).first().click({ timeout: 15000 });
+    await ana.getByText("Confirmadas").last().waitFor();
     await shot(ana, "11-confirmed");
   });
 
   await step("Bia sees she is going", async () => {
     await bia.reload();
-    await bia.getByText("You're going").last().waitFor({ timeout: 15000 });
+    await bia.getByText("Você vai").last().waitFor({ timeout: 15000 });
     await shot(bia, "12-going");
   });
 
   await step("Calendar settings explain what is read and work without any calendar", async () => {
     await bia.goto(appUrl);
     await byId(bia, "go-settings").click();
-    await bia.getByText("nothing from your calendar leaves your phone", { exact: false }).waitFor();
+    await bia.getByText("nada da sua agenda sai do celular", { exact: false }).waitFor();
     await shot(bia, "13-calendar-settings");
   });
 
   await step("Bia adds a place and sees the event is near her", async () => {
     await byId(bia, "add-place").click();
-    await byId(bia, "place-label").fill("Home");
+    await byId(bia, "place-label").fill("Casa");
     await byId(bia, "place-area").fill("recife");
     await byId(bia, "place-option-Recife, PE").click();
     await byId(bia, "place-save").click();
-    await bia.getByText("Home · 15 km").waitFor();
+    await bia.getByText("Casa · 15 km").waitFor();
     await shot(bia, "14-places");
     await bia.goto(appUrl);
     await bia.getByText("Coletivo Recife").first().click({ timeout: 15000 });
     // The list hides fit hints for events you're already going to; the event page shows them.
     await bia.getByText("Plenária no Derby").first().click({ timeout: 15000 });
-    await bia.getByText("Near Home", { exact: false }).last().waitFor({ timeout: 15000 });
+    await bia.getByText("Perto de Casa", { exact: false }).last().waitFor({ timeout: 15000 });
     await shot(bia, "15-near");
   });
 
   await step("Ana asks who could come", async () => {
     await ana.getByTestId("ask-who-can-come").last().click();
-    await ana.getByText("People asked: 1").last().waitFor({ timeout: 15000 });
+    await ana.getByText("Pessoas perguntadas: 1").last().waitFor({ timeout: 15000 });
   });
 
   await step("Bia gets the question and answers", async () => {
@@ -240,38 +240,38 @@ try {
     await ana.getByText("Plenária no Derby").first().click({ timeout: 15000 });
     await ana.getByTestId("ask-who-can-come").last().waitFor();
     // Results load after the sync that delivers Bia's reply.
-    for (let i = 0; i < 40 && !(await ana.getByText("Can come: Bia").count()); i++) {
+    for (let i = 0; i < 40 && !(await ana.getByText("Podem: Bia").count()); i++) {
       await ana.waitForTimeout(500);
       if (i === 10) await ana.reload();
       if (i === 10) await ana.getByText("Plenária no Derby").first().click({ timeout: 15000 });
     }
-    await ana.getByText("Can come: Bia").last().waitFor({ timeout: 5000 });
+    await ana.getByText("Podem: Bia").last().waitFor({ timeout: 5000 });
     await shot(ana, "17-probe-results");
   });
 
   await step("Ana moves the community to another server", async () => {
     await ana.goto(appUrl);
     await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
-    await ana.getByRole("tab", { name: "Me" }).last().click();
+    await ana.getByRole("tab", { name: "Eu" }).last().click();
     await byId(ana, "move-address").last().fill(api2Url);
     await byId(ana, "move-setup-code").last().fill(TOKEN);
     await shot(ana, "18-move");
     await byId(ana, "move-button").last().click();
-    await ana.getByText("Done: the community is on the new server.").last().waitFor({ timeout: 20000 });
-    await ana.getByText(`Current server: ${api2Url}`).last().waitFor();
+    await ana.getByText("Pronto: a comunidade está no novo servidor.").last().waitFor({ timeout: 20000 });
+    await ana.getByText(`Servidor atual: ${api2Url}`).last().waitFor();
   });
 
   await step("Bia follows on her own and keeps working", async () => {
     await bia.goto(appUrl);
     await bia.getByText("Coletivo Recife").first().click({ timeout: 15000 });
-    await bia.getByRole("tab", { name: "Me" }).last().click();
-    await byId(bia, "my-name").last().fill("Bia Moved");
-    await bia.getByText("Save", { exact: true }).last().click();
-    await bia.getByText("Up to date").last().waitFor({ timeout: 20000 });
+    await bia.getByRole("tab", { name: "Eu" }).last().click();
+    await byId(bia, "my-name").last().fill("Bia Mudou");
+    await bia.getByText("Salvar", { exact: true }).last().click();
+    await bia.getByText("Tudo em dia").last().waitFor({ timeout: 20000 });
     await ana.reload();
     await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
-    await ana.getByRole("tab", { name: "People" }).last().click();
-    await ana.getByText("Bia Moved").last().waitFor({ timeout: 20000 });
+    await ana.getByRole("tab", { name: "Pessoas" }).last().click();
+    await ana.getByText("Bia Mudou").last().waitFor({ timeout: 20000 });
     await shot(ana, "19-after-move");
   });
 
