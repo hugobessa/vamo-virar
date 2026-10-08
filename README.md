@@ -26,6 +26,9 @@ and coordinating the people who attend them.
 - Phase 4 — sync engine: [`packages/sync`](packages/sync) (node client,
   replica with outbox and optimistic view, mailbox, snapshot bootstrap,
   admin flows, node migration; integration tests against the real node).
+- Phase 5 — mobile app: [`apps/mobile`](apps/mobile) (Expo SDK 57; create,
+  join, invite, approve, events, volunteer/invite/confirm, people, encrypted
+  storage; model unit tests and a web end-to-end run against a real node).
 
 ```sh
 npm install && npm test     # TypeScript packages

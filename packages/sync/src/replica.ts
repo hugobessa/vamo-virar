@@ -221,12 +221,21 @@ export class Replica {
     return new Replica(client, decode(bytes) as unknown as ReplicaData, rng);
   }
 
+  /** The node address recorded in a saved replica, to build its client before loading. */
+  static savedNode(bytes: Uint8Array): string {
+    return (decode(bytes) as unknown as ReplicaData).node;
+  }
+
   // -------------------------------------------------------------------------
   // Read side
   // -------------------------------------------------------------------------
 
   get cid(): Uint8Array {
     return this.data.cid;
+  }
+
+  get node(): string {
+    return this.data.node;
   }
 
   get status(): Status {

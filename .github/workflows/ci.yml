@@ -48,3 +48,30 @@ jobs:
         env:
           VV_NODE_BIN: ${{ github.workspace }}/target/debug/community-node
           VV_REQUIRE_NODE: "1"
+
+  mobile-web-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: cargo build -p community-node --locked
+      - run: npm ci
+      - run: npm run build
+      - run: npx expo export --platform web --output-dir dist-web
+        working-directory: apps/mobile
+        env:
+          CI: "1"
+      - run: npm run e2e:web -w @vamo-virar/mobile
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          VV_NODE_BIN: ${{ github.workspace }}/target/debug/community-node
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-web-screenshots
+          path: apps/mobile/e2e/screenshots

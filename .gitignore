@@ -5,3 +5,7 @@ target/
 *.sqlite-*
 dist/
 coverage/
+apps/mobile/dist-web/
+apps/mobile/.expo/
+apps/mobile/expo-env.d.ts
+apps/mobile/e2e/screenshots/

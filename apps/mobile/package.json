@@ -1,0 +1,44 @@
+{
+  "name": "@vamo-virar/mobile",
+  "version": "0.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@expo/metro-runtime": "~57.0.16",
+    "@vamo-virar/crypto": "0.0.0",
+    "@vamo-virar/domain": "0.0.0",
+    "@vamo-virar/protocol": "0.0.0",
+    "@vamo-virar/sync": "0.0.0",
+    "expo": "~57.0.27",
+    "expo-constants": "~57.0.21",
+    "expo-crypto": "~57.0.3",
+    "expo-file-system": "~57.0.7",
+    "expo-linking": "~57.0.12",
+    "expo-localization": "~57.0.2",
+    "expo-router": "~57.0.25",
+    "expo-secure-store": "~57.0.4",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3",
+    "vitest": "3.2.4",
+    "playwright-core": "1.56.1"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "export:web": "expo export --platform web --output-dir dist-web",
+    "e2e:web": "node e2e/web.e2e.mjs"
+  },
+  "private": true
+}
