@@ -99,8 +99,9 @@ node with no backup can be replaced.
   when the node answers (the container health check uses it).
 - **Logs:** `RUST_LOG=info`. The node never logs request bodies or tokens;
   the bundled Caddyfile also drops request URIs and auth headers.
-- **Upgrades:** stop, replace the binary or image, start. The database
-  schema is created and kept compatible on start.
+- **Upgrades:** take a backup, stop, replace the binary or image, start.
+  v0 creates its tables on start but has no schema migrations yet, so read
+  the release notes before upgrading across versions.
 - **Moving to another machine:** copy `node.sqlite` (from a backup) and
   point the DNS name at the new machine, or let an admin rebuild from their
   phone.
