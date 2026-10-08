@@ -31,7 +31,7 @@ export function EventsTab({ entry }: { entry: CommunityEntry }) {
           {n} {t("people")}
           {ev.capacity !== undefined ? ` · ${Math.max(0, ev.capacity - n)} ${t("spotsLeft")}` : ""}
         </Body>
-        {ev.status === "scheduled" && st !== "confirmed" ? <AvailabilityChip start={ev.starts_at} end={ev.ends_at} /> : null}
+        {ev.status === "scheduled" && st !== "confirmed" ? <AvailabilityChip ev={ev} /> : null}
         {ev.status === "cancelled" ? <Chip label={t("cancelled")} tone="danger" /> : null}
         {ev.status === "completed" ? <Chip label={t("completed")} /> : null}
         {st !== "none" ? <Chip label={t(STATUS_TEXT[st])} tone={st === "confirmed" ? "ok" : st === "invited" || st === "reconfirm" ? "warn" : "neutral"} /> : null}

@@ -196,6 +196,43 @@ describe.skipIf(!HAVE_NODE)("against a real node", () => {
     expect(canon(Replica.load(node.client(), again.save()).canonical)).toBe(canon(again.canonical));
   });
 
+  it("organizers can ask who could come; answers are verdicts, signed, and cannot be forged", async () => {
+    const ana = await Replica.found(node.client(), { name: "C11", displayName: "Ana" });
+    const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia);
+    const caio = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
+    await admit(ana, caio);
+    const ev = toHex(new Uint8Array(16).fill(5));
+    ana.submit("event.create", eventBody(ev, "Mutirão"));
+    await syncAll(ana, bia, caio);
+
+    // Members cannot ask.
+    await expect(bia.askWhoCanCome(ev)).rejects.toThrow(/organizers/);
+    const sent = await ana.askWhoCanCome(ev);
+    expect(sent.asked).toBe(2);
+
+    await bia.sync();
+    await caio.sync();
+    expect(bia.incomingProbes.map((p) => p.eventId)).toEqual([ev]);
+    await bia.answerProbe(bia.incomingProbes[0]!.probeId, "eligible");
+    expect(bia.incomingProbes).toHaveLength(0);
+
+    // Caio tries to answer as Bia ("not_eligible"), signing with his own key.
+    const p = caio.incomingProbes[0]!;
+    const { sealMail } = await import("../src/invite.js");
+    const { sign, mailboxId } = await import("@vamo-virar/crypto");
+    const { fromHex } = await import("@vamo-virar/protocol");
+    const forgedSig = sign(caio.keys.signing.sk, "vv/probe-reply/v1", { cid: caio.cid, probe_id: fromHex(p.probeId), member_id: bia.memberId, answer: "not_eligible" });
+    const forged = sealMail(caio.cid, p.replyTo, { kind: "probe_reply", probe_id: fromHex(p.probeId), member_id: bia.memberId, answer: "not_eligible", sig: forgedSig });
+    const access = (caio as unknown as { currentAccess(): Parameters<typeof caio.client.postMailbox>[1] }).currentAccess();
+    await caio.client.postMailbox(caio.cid, access, p.replyMbx, "probe_reply", forged, 3600);
+    expect(p.replyMbx).toEqual(mailboxId(ana.cid, ana.keys.signing.pk));
+    caio.dropProbe(p.probeId); // and never answers for himself
+
+    await ana.sync();
+    expect(ana.probeResults(ev)!.replies).toEqual({ [bia.memberId]: "eligible" });
+  }, 30_000);
+
   it("watch() syncs when the node announces new entries", async () => {
     const ana = await Replica.found(node.client(), { name: "C8", displayName: "Ana" });
     const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });

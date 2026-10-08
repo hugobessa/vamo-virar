@@ -1,4 +1,5 @@
-// Calendar sources on this device (architecture.md §18–§19).
+// Personal matching data on this device: calendar sources (architecture.md
+// §18–§19) and places (§17). Everything here stays on the phone.
 //
 // What is stored: busy intervals (start, end, busy/tentative, all-day) for
 // the next 90 days, sealed like everything else, and OAuth tokens in the
@@ -8,7 +9,9 @@
 import {
   BusyCache,
   CalendarError,
+  DEFAULT_LOCATION_PREFS,
   DEFAULT_PREFS,
+  eligibility,
   fetchGoogleBusy,
   fetchMicrosoftBusy,
   GOOGLE,
@@ -17,6 +20,9 @@ import {
   type Availability,
   type AvailabilityPrefs,
   type CacheData,
+  type Eligibility,
+  type LocationPrefs,
+  type ReferencePoint,
 } from "@vamo-virar/matching";
 import { decode, encode, type CborValue } from "@vamo-virar/protocol";
 import { Platform } from "react-native";
@@ -36,12 +42,19 @@ interface Persisted {
   prefs: AvailabilityPrefs;
   deviceCalendars: string[];
   needsReauth: SourceId[];
+  location: LocationPrefs;
+  /** Answer "who could come?" automatically when the phone knows enough. */
+  autoAnswer: boolean;
 }
+
+
 
 const DAY = 86_400_000;
 const WINDOW_BEFORE = DAY;
 const WINDOW_AFTER = 90 * DAY;
 const REFRESH_EVERY = 15 * 60_000;
+/** A "where I am now" reading is kept for a day, never as history. */
+const HERE_TTL = DAY;
 const BLOB = "calendar";
 
 export const deviceCalendarsSupported = Platform.OS !== "web";
@@ -63,9 +76,16 @@ async function saveTokens(source: "google" | "microsoft", t: OAuthTokens | null)
   else await s.deleteItemAsync(`vv.oauth.${source}`);
 }
 
-export class CalendarService {
+export class MatchingService {
   private cache = new BusyCache();
-  private data: Persisted = { cache: {}, prefs: DEFAULT_PREFS, deviceCalendars: [], needsReauth: [] };
+  private data: Persisted = {
+    cache: {},
+    prefs: DEFAULT_PREFS,
+    deviceCalendars: [],
+    needsReauth: [],
+    location: DEFAULT_LOCATION_PREFS,
+    autoAnswer: false,
+  };
   private readonly listeners = new Set<() => void>();
   private loaded: Promise<void> | null = null;
   private refreshing: Promise<void> | null = null;
@@ -126,6 +146,78 @@ export class CalendarService {
   /** null when no connected calendar covers that time. */
   check(window: { start: number; end: number }): Availability | null {
     return this.cache.check(window, this.data.prefs);
+  }
+
+  /** Calendar and location together for one event (§19, §17). */
+  eligibilityFor(ev: { starts_at: number; ends_at: number; area: { lat_e4: number; lng_e4: number } }): Eligibility {
+    const covered = this.cache.covers(ev.starts_at, ev.ends_at);
+    return eligibility(ev, {
+      busy: covered ? this.cache.intervals() : null,
+      calendarPrefs: this.data.prefs,
+      locationPrefs: { ...this.data.location, points: this.livePoints() },
+    });
+  }
+
+  // --- places ---------------------------------------------------------------
+
+  private livePoints(): ReferencePoint[] {
+    const now = Date.now();
+    return this.data.location.points.filter((p) => p.activeTo === undefined || p.activeTo >= now);
+  }
+
+  places(): ReferencePoint[] {
+    return this.livePoints();
+  }
+
+  locationPrefs(): LocationPrefs {
+    return this.data.location;
+  }
+
+  async addPlace(p: Omit<ReferencePoint, "id">): Promise<void> {
+    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    this.data.location = { ...this.data.location, points: [...this.livePoints(), { ...p, id }] };
+    await this.save();
+  }
+
+  async removePlace(id: string): Promise<void> {
+    this.data.location = { ...this.data.location, points: this.data.location.points.filter((p) => p.id !== id) };
+    await this.save();
+  }
+
+  async setTravelSpeed(kmh: number): Promise<void> {
+    this.data.location = { ...this.data.location, travelKmh: kmh };
+    await this.save();
+  }
+
+  /**
+   * One coarse reading, only when the person asks, kept as a place that
+   * expires in a day. Returns false if permission was refused.
+   */
+  async addCurrentLocation(label: string, radiusKm: number): Promise<boolean> {
+    const Location = await import("expo-location");
+    const perm = await Location.requestForegroundPermissionsAsync();
+    if (!perm.granted) return false;
+    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+    // Rounded to ~1 km: enough to judge distance, not to locate a home.
+    const round = (deg: number) => Math.round(deg * 100) * 100;
+    await this.addPlace({
+      label,
+      lat_e4: round(pos.coords.latitude),
+      lng_e4: round(pos.coords.longitude),
+      radiusKm,
+      activeFrom: Date.now(),
+      activeTo: Date.now() + HERE_TTL,
+    });
+    return true;
+  }
+
+  autoAnswer(): boolean {
+    return this.data.autoAnswer;
+  }
+
+  async setAutoAnswer(on: boolean): Promise<void> {
+    this.data.autoAnswer = on;
+    await this.save();
   }
 
   // --- connect / disconnect -------------------------------------------------

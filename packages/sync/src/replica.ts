@@ -37,6 +37,8 @@ import {
   sealKeyEnvelope,
   sealOp,
   sealSnapshot,
+  sign,
+  verify,
   type ControlArgs,
   type EncryptionKeyPair,
   type JoinRequest,
@@ -48,7 +50,7 @@ import {
 } from "@vamo-virar/crypto";
 import { decode, encode, fromHex, toHex, type CborValue } from "@vamo-virar/protocol";
 import { NodeClient, NodeError } from "./client.js";
-import { inviteHash, inviteLink, openMail, sealMail, type Invite } from "./invite.js";
+import { inviteHash, inviteLink, openMail, sealMail, type Invite, type ProbeAnswer } from "./invite.js";
 
 export type Status =
   /** Join request sent; waiting for an admin. */
@@ -88,6 +90,26 @@ export interface ReplicaData {
   /** Outcomes of our own ops, newest last, bounded. */
   ownOutcomes: { opId: string; type: string; outcome: Outcome }[];
   status: Status;
+  /** Probes from organizers waiting for this person's answer (§10.4). */
+  incomingProbes?: IncomingProbe[];
+  /** Probes this person sent, with the answers received so far. */
+  sentProbes?: SentProbe[];
+}
+
+export interface IncomingProbe {
+  probeId: string;
+  eventId: string;
+  replyTo: Uint8Array;
+  replyMbx: Uint8Array;
+  expires: number;
+}
+
+export interface SentProbe {
+  probeId: string;
+  eventId: string;
+  sentAt: number;
+  asked: number;
+  replies: Record<string, ProbeAnswer>;
 }
 
 export interface SyncReport {
@@ -403,6 +425,20 @@ export class Replica {
           this.data.outbox = [];
         }
         handled = true;
+      } else if (item.kind === "probe") {
+        const m = openMail(this.data.cid, "probe", me.encryption, item.ct);
+        if (m?.kind === "probe" && m.expires > Date.now()) {
+          const probes = (this.data.incomingProbes ??= []);
+          const probeId = toHex(m.probe_id);
+          if (!probes.some((p) => p.probeId === probeId)) {
+            probes.push({ probeId, eventId: m.event_id, replyTo: m.reply_to, replyMbx: m.reply_mbx, expires: m.expires });
+          }
+        }
+        handled = true;
+      } else if (item.kind === "probe_reply") {
+        const m = openMail(this.data.cid, "probe_reply", me.encryption, item.ct);
+        if (m?.kind === "probe_reply") this.acceptProbeReply(m.probe_id, m.member_id, m.answer, m.sig);
+        handled = true;
       } else if (item.kind === "join_result") {
         const m = openMail(this.data.cid, "join_result", me.encryption, item.ct);
         if (m?.kind === "join_result" && !m.accepted && this.data.status === "joining") this.data.status = "rejected";
@@ -555,6 +591,77 @@ export class Replica {
       this.sync().catch((e) => onError?.(e));
     });
     return () => s.close();
+  }
+
+  // -------------------------------------------------------------------------
+  // "Who could come?" probes (§10.4). The node sees only sealed mailbox
+  // items; answers are a single verdict, signed, readable by the organizer.
+  // -------------------------------------------------------------------------
+
+  private probeSigned(probeId: Uint8Array, memberId: string, answer: ProbeAnswer): CborValue {
+    return { cid: this.data.cid, probe_id: probeId, member_id: memberId, answer };
+  }
+
+  /** Organizer: asks every other active member whether they could come. */
+  async askWhoCanCome(eventId: string, ttlMs = 72 * 3_600_000): Promise<SentProbe> {
+    const state = this.data.state;
+    const me = this.me;
+    if (!state || !me || (me.role !== "organizer" && me.role !== "admin") || me.status !== "active") {
+      throw new Error("only organizers can ask");
+    }
+    if (!state.events[eventId] || state.events[eventId]!.status !== "scheduled") throw new Error("no such upcoming event");
+    const probeId = this.rng(16);
+    const expires = Date.now() + ttlMs;
+    const myMbx = mailboxId(this.data.cid, this.data.keys.signing.pk);
+    const others = Object.values(state.members).filter((m) => m.status === "active" && m.member_id !== this.memberId);
+    for (const m of others) {
+      const mail = sealMail(
+        this.data.cid,
+        fromHex(m.mek),
+        { kind: "probe", probe_id: probeId, event_id: eventId, reply_to: this.data.keys.encryption.pk, reply_mbx: myMbx, expires },
+        this.rng,
+      );
+      await this.client.postMailbox(this.data.cid, this.currentAccess(), mailboxId(this.data.cid, fromHex(m.msk)), "probe", mail, Math.ceil(ttlMs / 1000));
+    }
+    const sent: SentProbe = { probeId: toHex(probeId), eventId, sentAt: Date.now(), asked: others.length, replies: {} };
+    (this.data.sentProbes ??= []).push(sent);
+    this.changed();
+    return sent;
+  }
+
+  get incomingProbes(): readonly IncomingProbe[] {
+    const now = Date.now();
+    return (this.data.incomingProbes ?? []).filter((p) => p.expires > now);
+  }
+
+  /** Member: answers a probe. Sends only the verdict (no calendar, time or place). */
+  async answerProbe(probeId: string, answer: ProbeAnswer): Promise<void> {
+    const p = (this.data.incomingProbes ?? []).find((x) => x.probeId === probeId);
+    if (!p) throw new Error("no such question");
+    const id = fromHex(probeId);
+    const sig = sign(this.data.keys.signing.sk, "vv/probe-reply/v1", this.probeSigned(id, this.memberId, answer));
+    const mail = sealMail(this.data.cid, p.replyTo, { kind: "probe_reply", probe_id: id, member_id: this.memberId, answer, sig }, this.rng);
+    await this.client.postMailbox(this.data.cid, this.currentAccess(), p.replyMbx, "probe_reply", mail, Math.max(60, Math.ceil((p.expires - Date.now()) / 1000)));
+    this.dropProbe(probeId);
+  }
+
+  /** Member: never answer this one. Indistinguishable from being offline. */
+  dropProbe(probeId: string): void {
+    this.data.incomingProbes = (this.data.incomingProbes ?? []).filter((x) => x.probeId !== probeId);
+    this.changed();
+  }
+
+  private acceptProbeReply(probeId: Uint8Array, memberId: string, answer: ProbeAnswer, sig: Uint8Array): void {
+    const sent = (this.data.sentProbes ?? []).find((p) => p.probeId === toHex(probeId));
+    const member = this.data.state?.members[memberId];
+    if (!sent || !member || member.status !== "active") return;
+    if (!verify(fromHex(member.msk), "vv/probe-reply/v1", this.probeSigned(probeId, memberId, answer), sig)) return;
+    sent.replies[memberId] = answer;
+  }
+
+  /** Organizer: the latest probe for an event and its answers. */
+  probeResults(eventId: string): SentProbe | undefined {
+    return [...(this.data.sentProbes ?? [])].reverse().find((p) => p.eventId === eventId);
   }
 
   // -------------------------------------------------------------------------

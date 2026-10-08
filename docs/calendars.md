@@ -1,4 +1,4 @@
-# Calendar integrations
+# Calendar and location matching
 
 Implements architecture.md §18–§19: the app checks a person's calendar **on
 their phone** to show whether they can make an event. Nothing from the
@@ -60,3 +60,25 @@ The providers appear in the app only when a client ID is configured in
 
 Device calendars need a development build (`npx expo run:ios|android` or
 EAS): `expo-calendar` is not included in Expo Go.
+
+## Places (Phase 7)
+
+People add places they usually start from ("Home", "Work"), each with a
+radius, optionally limited to dates ("São Paulo, 10–17 Nov"). While a dated
+place is active it takes precedence: it says where the person will be.
+"Use where I am now" takes one coarse reading (rounded to ~1 km), stored as
+a place that expires after a day. There is no background location and no
+history; Android fine and background location permissions are blocked in
+the build.
+
+For each event the app computes the distance to the nearest active place
+(relative to its radius): near, a bit far (up to 1.5 × radius) or far, plus
+an estimated travel time (default 25 km/h + 10 min), which is added to the
+calendar's free buffer around the event.
+
+## "Who could come?"
+
+Organizers can ask the community about an event (protocol.md §10.4). Each
+phone answers with "can / maybe / can't" only, sealed and signed for the
+organizer who asked. Automatic answers are off by default, and never sent
+when the phone has neither a calendar nor a place to judge from.

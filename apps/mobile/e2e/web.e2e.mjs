@@ -197,6 +197,50 @@ try {
     await shot(bia, "13-calendar-settings");
   });
 
+  await step("Bia adds a place and sees the event is near her", async () => {
+    await byId(bia, "add-place").click();
+    await byId(bia, "place-label").fill("Home");
+    await byId(bia, "place-area").fill("recife");
+    await byId(bia, "place-option-Recife, PE").click();
+    await byId(bia, "place-save").click();
+    await bia.getByText("Home · 15 km").waitFor();
+    await shot(bia, "14-places");
+    await bia.goto(appUrl);
+    await bia.getByText("Coletivo Recife").first().click({ timeout: 15000 });
+    // The list hides fit hints for events you're already going to; the event page shows them.
+    await bia.getByText("Plenária no Derby").first().click({ timeout: 15000 });
+    await bia.getByText("Near Home", { exact: false }).last().waitFor({ timeout: 15000 });
+    await shot(bia, "15-near");
+  });
+
+  await step("Ana asks who could come", async () => {
+    await ana.getByTestId("ask-who-can-come").last().click();
+    await ana.getByText("People asked: 1").last().waitFor({ timeout: 15000 });
+  });
+
+  await step("Bia gets the question and answers", async () => {
+    await bia.reload();
+    await bia.getByText("Plenária no Derby").first().click({ timeout: 15000 });
+    await bia.getByTestId("probe-question").last().waitFor({ timeout: 20000 });
+    await shot(bia, "16-probe-question");
+    await bia.getByTestId("probe-eligible").last().click();
+    await bia.getByTestId("probe-question").last().waitFor({ state: "detached", timeout: 15000 });
+  });
+
+  await step("Ana sees the answer", async () => {
+    await ana.reload();
+    await ana.getByText("Plenária no Derby").first().click({ timeout: 15000 });
+    await ana.getByTestId("ask-who-can-come").last().waitFor();
+    // Results load after the sync that delivers Bia's reply.
+    for (let i = 0; i < 40 && !(await ana.getByText("Can come: Bia").count()); i++) {
+      await ana.waitForTimeout(500);
+      if (i === 10) await ana.reload();
+      if (i === 10) await ana.getByText("Plenária no Derby").first().click({ timeout: 15000 });
+    }
+    await ana.getByText("Can come: Bia").last().waitFor({ timeout: 5000 });
+    await shot(ana, "17-probe-results");
+  });
+
   if (errors.length) throw new Error(`page errors:\n${errors.join("\n")}`);
   console.log(`\nE2E PASSED. Screenshots in ${shots}`);
 } catch (e) {

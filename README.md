@@ -33,6 +33,9 @@ and coordinating the people who attend them.
   and the app's calendar settings (phone calendars, Google free/busy,
   Outlook; availability computed on the phone; see
   [`docs/calendars.md`](docs/calendars.md)).
+- Phase 7 — location matching and "who could come?": places with radius and
+  dates, one-off coarse current location, travel time, and signed,
+  verdict-only probe answers (protocol §10.4).
 
 ```sh
 npm install && npm test     # TypeScript packages

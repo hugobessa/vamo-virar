@@ -27,6 +27,8 @@ export class AppStore {
   private timer: ReturnType<typeof setInterval> | null = null;
   private stops = new Map<string, () => void>();
   ready = false;
+  /** Set by the app: answers pending probes when the person allowed it. */
+  autoAnswer: ((e: CommunityEntry) => Promise<void>) | null = null;
 
   constructor(private readonly store: SealedStore = new SealedStore()) {}
 
@@ -123,6 +125,7 @@ export class AppStore {
       e.lastSync = Date.now();
       e.lastReport = report;
       e.unseenRejections.push(...report.rejected.map((r) => ({ type: r.type, reason: r.reason })));
+      if (this.autoAnswer && e.replica.incomingProbes.length) await this.autoAnswer(e).catch(() => undefined);
       await this.persist(e);
     } catch (err) {
       e.connectivity = isOffline(err) ? "offline" : e.connectivity;

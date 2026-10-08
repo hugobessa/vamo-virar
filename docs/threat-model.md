@@ -54,6 +54,8 @@ community, iOS/Android clients. Section numbers (§) refer to `protocol.md`.
 | Spam / harassment via intake (A9) | Rate limits; invite-only policy; open question §17.7. |
 | Traffic analysis linking a person across communities | Mitigated by per-community keys. Not mitigated: same IP / same push token across communities (A1 + A8). |
 | Push notification content leak | Content-free pushes only; tokens sealed to gateway. §14 |
+| "Who could come?" probes revealing schedules | Replies carry one of three verdicts, sealed to the asking organizer and signed by the member; no times, places or distances. The node sees that N items were posted and roughly when replies came back (metadata). Auto-answer is off by default. protocol §10.4 |
+| Location history | Never collected. Places are chosen by the person; "where I am now" is one coarse reading (≈ 1 km) kept for a day, on the device only. iOS/Android background location is disabled in the build. |
 | Coercion (someone forces a member to unlock their phone) | Out of scope for v0. Candidate **[LATER]**: per-community "hide this community" with separate PIN. |
 | Fork attack by node (A1) | Detected only on cross-device comparison; full detection is **[LATER]**. §13 |
 | Malicious snapshot by admin | Detected by members holding the log; not by new members. §17.5 |

@@ -4,10 +4,11 @@ import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { Platform, Switch, View } from "react-native";
-import { deviceCalendarsSupported, type SourceId } from "../lib/calendar";
+import { deviceCalendarsSupported, type SourceId } from "../lib/matching";
 import { useApp, useCalendarService } from "../lib/context";
 import type { StringKey } from "../model/i18n";
 import { Banner, Body, Button, Card, Field, Heading, Screen } from "../ui/kit";
+import { PlacesSettings } from "../ui/PlacesSettings";
 import { space } from "../ui/theme";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -120,6 +121,7 @@ export default function Settings() {
           <Body>{t("allDayBlocks")}</Body>
         </View>
       </View>
+      <PlacesSettings />
     </Screen>
   );
 }

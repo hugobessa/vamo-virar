@@ -1,13 +1,14 @@
+import { probeAnswer } from "@vamo-virar/matching";
 import { getLocales } from "expo-localization";
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AppState } from "react-native";
 import { pickLang, translator, type Lang, type StringKey } from "../model/i18n";
-import { CalendarService } from "./calendar";
+import { MatchingService } from "./matching";
 import { AppStore, type CommunityEntry } from "./store";
 
 interface Ctx {
   store: AppStore;
-  calendar: CalendarService;
+  calendar: MatchingService;
   t: (k: StringKey) => string;
   lang: Lang;
   locale: string;
@@ -17,12 +18,26 @@ const AppContext = createContext<Ctx | null>(null);
 
 export function AppProvider({ children, store: injected }: { children: ReactNode; store?: AppStore }) {
   const [store] = useState(() => injected ?? new AppStore());
-  const [calendar] = useState(() => new CalendarService());
+  const [calendar] = useState(() => new MatchingService());
   const locale = getLocales()[0]?.languageTag ?? "pt-BR";
   const lang = pickLang(getLocales()[0]?.languageCode);
   const value = useMemo(() => ({ store, calendar, t: translator(lang), lang, locale }), [store, calendar, lang, locale]);
 
   useEffect(() => {
+    // Answer "who could come?" on the person's behalf only when they turned
+    // it on and the phone actually knows something (calendar or places).
+    store.autoAnswer = async (entry) => {
+      await calendar.load();
+      if (!calendar.autoAnswer()) return;
+      const state = entry.replica.canonical;
+      for (const p of [...entry.replica.incomingProbes]) {
+        const ev = state?.events[p.eventId];
+        if (!ev) continue;
+        const e = calendar.eligibilityFor({ starts_at: ev.starts_at, ends_at: ev.ends_at, area: ev.location.area });
+        if (!e.known) continue;
+        await entry.replica.answerProbe(p.probeId, probeAnswer(e.verdict));
+      }
+    };
     let alive = true;
     void store.init().then(() => alive && store.start());
     void calendar.refreshStale();
@@ -66,14 +81,14 @@ export function useNow(): number {
   return now;
 }
 
-/** Calendar availability for a time window, or null if no calendar covers it. */
-export function useAvailability(window: { start: number; end: number }) {
+/** Calendar + location fit for an event, computed on the phone. */
+export function useEligibility(ev: { starts_at: number; ends_at: number; area: { lat_e4: number; lng_e4: number } }) {
   const { calendar } = useApp();
   useSyncExternalStore(calendar.subscribe, calendar.getVersion, calendar.getVersion);
-  return calendar.check(window);
+  return calendar.eligibilityFor(ev);
 }
 
-export function useCalendarService(): CalendarService {
+export function useCalendarService(): MatchingService {
   const { calendar } = useApp();
   useSyncExternalStore(calendar.subscribe, calendar.getVersion, calendar.getVersion);
   return calendar;

@@ -23,7 +23,12 @@
       "predictiveBackGestureEnabled": false,
       "package": "org.vamovirar.app",
       "permissions": [
-        "READ_CALENDAR"
+        "READ_CALENDAR",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -40,6 +45,14 @@
         "expo-calendar",
         {
           "calendarPermission": "O Vamo Virar l\u00ea s\u00f3 os hor\u00e1rios em que voc\u00ea est\u00e1 ocupada(o), para mostrar se voc\u00ea pode ir a um evento. Nada da sua agenda sai do celular."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O Vamo Virar usa sua localiza\u00e7\u00e3o s\u00f3 quando voc\u00ea pede, uma vez, para marcar onde voc\u00ea est\u00e1 agora. Ela fica no celular.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
         }
       ]
     ],

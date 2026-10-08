@@ -714,8 +714,8 @@ MailboxItem {
 |---|---|---|---|
 | `key_env` | admin | `KeyEnvelope` | none while epoch current |
 | `join_result` | admin | HPKE to applicant: `{accepted, reason?, K_e envelope?, node addresses, snapshot hint}` | 30 d |
-| `probe` | organizer | §10.4 | ≤ 72 h |
-| `probe_reply` | member | §10.4 | ≤ 72 h |
+| `probe` | organizer | §10.4, sealed mail | ≤ 72 h |
+| `probe_reply` | member | §10.4, sealed mail, signed | ≤ 72 h |
 | `ping` | any | wake-up for push (§14) | 1 h |
 | `ik_env` | admin | HPKE to a new admin's MEK: `{ik_sk}` (the intake key's private half) | none |
 | `removed` | admin | HPKE to a removed member's MEK: `{reason?}`; they can no longer read the log after the rotation, so this is how they learn why | 30 d |
@@ -784,17 +784,28 @@ intake. The link alone grants *the right to ask*, never membership.
 
 ### 10.4 Availability probes ("find suitable people")
 
-1. Organizer posts `probe` items to members' mailboxes:
-   `HPKE.Seal(member MEK, {probe_id, event_id, reply_to: organizer MEK, expires})`.
-   Sending to all active members is fine; the node sees N similar-sized items.
-2. Each member device evaluates locally (calendar, location, preferences).
-3. Device replies with `probe_reply {probe_id, answer: "eligible" | "not_eligible" | "maybe"}`
-   sealed to the organizer — **only if** the member's settings allow automatic
-   replies; otherwise it notifies the user and replies once they choose.
-4. No calendar data, times, or locations are ever in a reply.
+1. An organizer posts one `probe` item to each other active member's mailbox,
+   sealed to their MEK (sealed-mail format above):
+   `{probe_id: bytes(16), event_id, reply_to: organizer MEK, reply_mbx: organizer mailbox_id, expires}`,
+   with `ttl_s` = time to `expires` (default 72 h). The node sees N similar
+   items; it cannot tell what they ask.
+2. Each member's device evaluates locally: calendar busy intervals (with
+   travel time to the event added to the person's free buffer) and the
+   person's places (`@vamo-virar/matching`, `docs/calendars.md`).
+3. The device replies with a `probe_reply` item posted to `reply_mbx`, sealed
+   to `reply_to`:
+   `{probe_id, member_id, answer: "eligible" | "maybe" | "not_eligible", sig}`
+   where `sig = Sign(MSK, "vv/probe-reply/v1", {cid, probe_id, member_id, answer})`.
+   The organizer accepts a reply only if `member_id` is an active member and
+   the signature verifies under that member's MSK, so members cannot answer
+   for each other and replies cannot move between communities or probes.
+4. A reply is sent automatically only if the person turned that on **and**
+   their phone knows something (a covering calendar or a place); otherwise
+   the app asks them, showing its suggestion.
+5. No calendar data, times, places or distances are ever in a reply.
 
-Members MAY set "never answer probes"; organizers then see "no answer", which
-is indistinguishable from offline.
+Members MAY choose "don't answer" (or never turn on auto-answer); organizers
+then see no answer, which is indistinguishable from offline.
 
 ---
 
@@ -1053,7 +1064,7 @@ vv/auth/v1           vv/op-access/v1   vv/op-sig/v1
 vv/ctrl-sig/v1       vv/log-entry/v1   vv/key-env/v1
 vv/join/v1           vv/join-req/v1    vv/invite/v1
 vv/state/v1          vv/directory/v1   vv/snapshot-sig/v1
-vv/snapshot-access/v1
+vv/snapshot-access/v1  vv/probe-reply/v1  vv/mail/<kind>/v1
 ```
 
 ---
