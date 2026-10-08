@@ -239,3 +239,44 @@ fn log_entries_hash_chain() {
         prev = entry.hash();
     }
 }
+
+#[test]
+fn rust_sealing_reproduces_typescript_bytes() {
+    use vv_crypto::envelope::{seal_op, SealOp};
+    let v = vectors();
+    for case in list(&v, "seal") {
+        let cid = h32(&case["cid"]);
+        let keys = EpochKeys::derive(&cid, 0, &h32(&case["epoch_key"]));
+        let author = h32(&case["author_seed"]);
+        let body = cbor::decode(&h(&case["body_cbor"])).unwrap();
+        let control = case["control"].as_object().map(|c| {
+            (
+                c["kind"].as_str().unwrap().to_owned(),
+                cbor::decode(&h(&c["args_cbor"])).unwrap(),
+            )
+        });
+        let env = seal_op(SealOp {
+            cid,
+            op_id: h(&case["op_id"]).try_into().unwrap(),
+            epoch: 0,
+            op_key: &keys.op_key,
+            eak_seed: &keys.eak_seed,
+            author_seed: &author,
+            base: case["base"].as_u64().unwrap(),
+            ts: case["ts"].as_u64().unwrap(),
+            op_type: case["type"].as_str().unwrap(),
+            body,
+            control: control
+                .as_ref()
+                .map(|(k, a)| (&author, k.as_str(), a.clone())),
+            nonce: h(&case["nonce"]).try_into().unwrap(),
+        })
+        .unwrap();
+        assert_eq!(
+            hex::encode(env.encode()),
+            case["envelope_cbor"].as_str().unwrap(),
+            "{}",
+            case["type"]
+        );
+    }
+}

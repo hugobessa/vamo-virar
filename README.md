@@ -20,6 +20,9 @@ and coordinating the people who attend them.
   (strict CBOR), [`packages/crypto`](packages/crypto) (VV1 suite, envelopes,
   rotation, snapshots, intake) and [`crates/vv-crypto`](crates/vv-crypto)
   (Rust, same test vectors).
+- Phase 3 — community node: [`apps/node`](apps/node) (Rust + SQLite,
+  HTTP + WebSocket; sequencing, auth scopes, mailboxes, intake, snapshots,
+  compaction, restore).
 
 ```sh
 npm install && npm test     # TypeScript packages

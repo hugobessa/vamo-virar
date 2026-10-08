@@ -160,6 +160,41 @@ function generate(): unknown {
     };
   });
 
+  // Sealing vectors: fixed author seed and nonce, so other implementations
+  // must reproduce the envelope byte for byte.
+  const sealVectors = [false, true].map((control) => {
+    const author = signingKeyPair(rng(32));
+    const nonce = rng(24);
+    const opId = rng(16);
+    const body: CborValue = control ? { reason: "scheduled", removed: [] } : { event_id: h(rng(16)), title: "Plenária", capacity: 50 };
+    const args = { new_epoch: 1, eak: rng(32) };
+    const env = sealOp({
+      cid,
+      opId,
+      epoch: k0,
+      author,
+      base: 41,
+      ts: 1_759_276_800_123,
+      type: control ? "epoch.rotate" : "event.create",
+      body,
+      ...(control ? { control: { kind: "rotate" as const, signer: author, args } } : {}),
+      rng: () => nonce,
+    });
+    return {
+      cid: h(cid),
+      op_id: h(opId),
+      epoch_key: h(k0.key),
+      author_seed: h(author.sk),
+      base: 41,
+      ts: 1_759_276_800_123,
+      type: control ? "epoch.rotate" : "event.create",
+      body_cbor: h(encode(body)),
+      control: control ? { kind: "rotate", args_cbor: h(encode(args)) } : null,
+      nonce: h(nonce),
+      envelope_cbor: h(encodeEnvelope(env)),
+    };
+  });
+
   const e1 = { seq: 1, prev: GENESIS_PREV, env: dataOp, at: 1_759_276_860_000 };
   const e2 = { seq: 2, prev: entryHash(e1), env: rotateOp, at: 1_759_276_920_000 };
   const logEntries = [e1, e2].map((e) => ({ entry_cbor: h(encode(logEntryToCbor(e))), entry_hash: h(entryHash(e)) }));
@@ -177,6 +212,7 @@ function generate(): unknown {
     hpke,
     key_envelopes: keyEnvelopes,
     op_envelopes: opVectors,
+    seal: sealVectors,
     log_entries: logEntries,
   };
 }

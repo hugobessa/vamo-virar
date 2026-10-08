@@ -1,0 +1,23 @@
+[package]
+name = "community-node"
+version = "0.0.0"
+description = "vamo-virar community node: sequencer, encrypted mailbox and snapshot store (docs/protocol.md)"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+getrandom = "0.3"
+rusqlite = { version = "0.40.2", features = ["bundled", "fallible_uint"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+toml = "1.1.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+vv-crypto = { path = "../../crates/vv-crypto" }
+
+[dev-dependencies]
+futures-util = "0.3.34"
+http-body-util = "0.1.5"
+tokio-tungstenite = "0.30.0"
+tower = { version = "0.5", features = ["util"] }

@@ -1,0 +1,21 @@
+# community-node configuration. Every key is optional; these are the defaults
+# unless noted. Command-line flags --listen and --data-dir override this file,
+# and VV_PROVISIONING_TOKEN overrides provisioning_token.
+
+listen = "127.0.0.1:8787"   # put a TLS reverse proxy (Caddy, nginx) in front for public use
+data_dir = "./data"         # node.sqlite lives here; back this directory up
+
+# Creating or restoring a community on this node needs this token in the
+# x-vv-provision-token header. Without a token, provisioning is closed unless
+# open_provisioning = true (only sensible on a private network).
+# provisioning_token = "change-me"
+open_provisioning = false
+
+epoch_grace_secs = 600            # old-epoch writes accepted this long after a key rotation
+compaction_grace_secs = 2592000   # 30 days: log behind a snapshot is kept this long
+session_ttl_secs = 3600
+max_batch = 100
+max_mailbox_items = 1000
+max_mailbox_ttl_secs = 2592000
+intake_per_ip_per_hour = 20
+intake_per_community_per_hour = 200

@@ -400,3 +400,91 @@ pub fn open_key_envelope(raw: &[u8], recipient_sk: &[u8; 32]) -> Result<Option<[
     ]));
     Ok(hpke_open(recipient_sk, &enc, &info, &aad, ct).and_then(|k| <[u8; 32]>::try_from(k).ok()))
 }
+
+// ---------------------------------------------------------------------------
+// Sealing (used by Rust clients and node tests)
+// ---------------------------------------------------------------------------
+
+/// Inputs for [`seal_op`]. Byte-for-byte equivalent to `sealOp` in
+/// packages/crypto given the same nonce.
+pub struct SealOp<'a> {
+    pub cid: [u8; 32],
+    pub op_id: [u8; 16],
+    pub epoch: u32,
+    pub op_key: &'a [u8; 32],
+    pub eak_seed: &'a [u8; 32],
+    pub author_seed: &'a [u8; 32],
+    pub base: u64,
+    pub ts: u64,
+    pub op_type: &'a str,
+    pub body: Value,
+    /// Control-plane ops: (signer seed, kind, args).
+    pub control: Option<(&'a [u8; 32], &'a str, Value)>,
+    pub nonce: [u8; 24],
+}
+
+pub fn seal_op(s: SealOp<'_>) -> Result<OpEnvelope> {
+    use crate::primitives::{aead_seal, public_key, sign};
+
+    let unsigned = Value::map([
+        ("op_id", Value::Bytes(s.op_id.to_vec())),
+        ("cid", Value::Bytes(s.cid.to_vec())),
+        ("epoch", Value::Int(s.epoch as i64)),
+        ("author", Value::Bytes(public_key(s.author_seed).to_vec())),
+        ("base", Value::Int(s.base as i64)),
+        ("ts", Value::Int(s.ts as i64)),
+        ("type", Value::Text(s.op_type.to_owned())),
+        ("body", s.body),
+    ]);
+    let sig = sign(s.author_seed, ctx::OP_SIG, &cbor::encode(&unsigned));
+    let Value::Map(mut fields) = unsigned else {
+        unreachable!()
+    };
+    fields.push(("sig".into(), Value::Bytes(sig.to_vec())));
+    let plaintext = cbor::encode(&Value::Map(fields));
+
+    let ctrl = match s.control {
+        None => None,
+        Some((signer_seed, kind, args)) => {
+            let signed = Value::map([
+                ("cid", Value::Bytes(s.cid.to_vec())),
+                ("op_id", Value::Bytes(s.op_id.to_vec())),
+                ("epoch", Value::Int(s.epoch as i64)),
+                ("kind", Value::Text(kind.to_owned())),
+                ("args", args.clone()),
+            ]);
+            let csig = sign(signer_seed, ctx::CTRL_SIG, &cbor::encode(&signed));
+            let header = Value::map([
+                ("kind", Value::Text(kind.to_owned())),
+                ("signer", Value::Bytes(public_key(signer_seed).to_vec())),
+                ("csig", Value::Bytes(csig.to_vec())),
+                ("args", args),
+            ]);
+            // Round-trip through the strict decoder so args are validated and canonical.
+            Some(ControlHeader::from_value(&cbor::decode(&cbor::encode(
+                &header,
+            ))?)?)
+        }
+    };
+
+    let mut env = OpEnvelope {
+        cid: s.cid,
+        op_id: s.op_id,
+        epoch: s.epoch,
+        plane: if ctrl.is_some() {
+            Plane::Control
+        } else {
+            Plane::Data
+        },
+        ctrl,
+        nonce: s.nonce,
+        ct: Vec::new(),
+        asig: [0; 64],
+    };
+    env.ct = aead_seal(s.op_key, &s.nonce, &plaintext, &env.aad());
+    let mut e = env.header_entries();
+    e.push(("nonce", Value::Bytes(env.nonce.to_vec())));
+    e.push(("ct", Value::Bytes(env.ct.clone())));
+    env.asig = sign(s.eak_seed, ctx::OP_ACCESS, &cbor::encode(&Value::map(e)));
+    Ok(env)
+}

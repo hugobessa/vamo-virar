@@ -57,8 +57,8 @@ to do access control lives in the data plane.
   "Core Deterministic Encoding"): definite lengths, shortest-form integers,
   map keys sorted bytewise.
 - Map keys are short text strings as given in this document.
-- Byte strings are CBOR major type 2. In JSON/HTTP debug views and URLs they
-  are rendered as **unpadded base64url**.
+- Byte strings are CBOR major type 2. In URLs and JSON debug views they are
+  rendered as **lowercase hex**.
 - Timestamps are integer **milliseconds since Unix epoch, UTC** (`u64`).
   Timestamps produced by devices are *advisory* — never used for ordering or
   conflict resolution (see §8).
@@ -978,38 +978,52 @@ optional (the app works, with polling, without it) and contain no state.
 
 ## 15. Node HTTP API [MVP]
 
-Base: `https://<node>/v1`. Bodies are CBOR (`application/cbor`); JSON
-(`application/json`, base64url bytes) MAY be accepted for debugging.
+Base: `https://<node>/v1`. Request and response bodies are deterministic
+CBOR (`application/cbor`); `.well-known` is JSON. Identifiers in paths
+(`{cid}`, `{mbx}`) are **lowercase hex**. Authenticated calls send
+`Authorization: Bearer <token>` from §3.1.
 
-| Method & path | Scope | Purpose |
+| Method & path | Scope | Request → response |
 |---|---|---|
-| `GET /.well-known/vamo-virar` | — | Node info |
-| `POST /auth/challenge` | — | §3.1 |
-| `POST /auth/session` | — | §3.1 |
-| `POST /communities` | — (operator policy, e.g. allowlist / provisioning token) | Create from genesis envelope |
-| `POST /c/{cid}/restore` | control | §11.3 |
-| `GET /c/{cid}/directory` | — | §11.2 |
-| `PUT /c/{cid}/directory` | control | Update signed entry |
-| `POST /c/{cid}/ops` | community / control | Submit batch → `[{op_id, seq}]` or per-item errors |
-| `GET /c/{cid}/ops?after=&limit=` | community | → `{entries, head_seq}` or `410 {snapshot_seq}` |
-| `GET /c/{cid}/snapshot` | community | Latest `SnapshotEnvelope` |
-| `PUT /c/{cid}/snapshot` | community (`author` verified by devices) | Upload snapshot |
-| `PUT /c/{cid}/cursor` | community | §6.5 |
-| `POST /c/{cid}/mailbox/{mbx}` | community | Post item |
-| `GET /c/{cid}/mailbox/{mbx}?after=` | mailbox | List items |
-| `DELETE /c/{cid}/mailbox/{mbx}/{item_id}` | mailbox | Ack |
-| `POST /c/{cid}/intake` | intake | Submit sealed join request |
-| `GET /c/{cid}/intake?after=` / `DELETE …/{id}` | control | Admins read/ack intake |
-| `POST /c/{cid}/invites` | control | Register invite hash |
-| `PUT /c/{cid}/push` | mailbox | §14 |
-| `GET /c/{cid}/stream` (WebSocket) | community + mailbox | Server → client: `{head_seq}`, `{mailbox: n}` |
+| `GET /.well-known/vamo-virar` | — | → JSON `{protocol, node_id, api, limits}` |
+| `POST /auth/challenge` | — | `{community_id}` → `{nonce, node_id, expires_at}` (single use, 60 s) |
+| `POST /auth/session` | — | `{community_id, nonce, scope, public_key, sig}` → `{token, expires_at}` |
+| `POST /communities` | provisioning token (`x-vv-provision-token`) | `{genesis: OpEnvelope}` → `{community_id, seq}` |
+| `POST /communities/restore` | provisioning token | `{control_chain: [LogEntry], snapshot?, tail: [LogEntry]}` → `{community_id, head_seq}` (§11.3) |
+| `POST /c/{cid}/ops` | community | `{ops: [OpEnvelope]}` (≤ 100) → `{results: [{op_id, seq} \| {op_id, error}], head_seq}` |
+| `GET /c/{cid}/ops?after=&limit=` | community | → `{entries: [LogEntry], head_seq}` or `410 {code: "gone", snapshot_seq}` |
+| `GET /c/{cid}/control` | community | → `{entries}`: every control-plane entry (never compacted) |
+| `GET /c/{cid}/snapshot` | community | → latest `SnapshotEnvelope` |
+| `PUT /c/{cid}/snapshot` | **control** | `SnapshotEnvelope` → `{seq}`; `head` must equal the hash of entry `seq` |
+| `POST /c/{cid}/mailbox/{mbx}` | community | `{kind, ct, ttl_s?}` → `{id}`; `key_env` items never expire |
+| `GET /c/{cid}/mailbox/{mbx}?after=` | mailbox (own `mbx` only) | → `{items: [{id, kind, ct, posted_at}]}` |
+| `DELETE /c/{cid}/mailbox/{mbx}/{id}` | mailbox | ack |
+| `POST /c/{cid}/intake` | — (rate-limited) | `{enc, ct, invite?}` → `{id}`; `invite` is the raw secret, checked against registered hashes in `invite_only` mode |
+| `GET /c/{cid}/intake?after=` / `DELETE …/{id}` | control | admins read/ack sealed join requests |
+| `PUT /c/{cid}/intake-policy` | control | `{mode: "open" \| "invite_only" \| "closed"}` |
+| `POST /c/{cid}/invites` | control | `{hash, expires_at, max_uses}` |
+| `GET /c/{cid}/directory` / `PUT` | — / control | opaque signed `DirectoryEntry` (§11.2) |
+| `PUT /c/{cid}/cursor` | community | §6.5 **[LATER]** |
+| `PUT /c/{cid}/push` | mailbox | §14 **[LATER]** |
+| `GET /c/{cid}/stream?token=&mailbox_token=` (WebSocket) | community (+ mailbox) | server → client CBOR: `{head_seq}`, `{mailbox}`, `{resync: true}` |
 
 The WebSocket carries **notifications only**; data is always fetched over the
 idempotent HTTP endpoints, so a dropped socket never loses data.
 
-Errors: `{code: text, detail?: text}` with codes `unauthorized`,
-`epoch_stale`, `epoch_conflict`, `op_conflict`, `gone`, `too_large`,
-`rate_limited`, `not_hosted`.
+Tokens are re-validated on every request: a `community` token stops working
+when its EAK is no longer current (after the grace window), a `control`
+token when its key leaves the admin set.
+
+> **Design note — snapshot upload is admin-only.** Uploading a snapshot lets
+> the node compact the log behind it after `compaction_grace`. If any member
+> holding the EAK could upload one, a malicious member could plant a junk
+> snapshot and, a month later, leave new members with nothing usable. Found
+> while implementing Phase 3.
+
+Errors: `{code: text, detail: text}` with codes `malformed`, `unauthorized`,
+`forbidden`, `not_hosted`, `not_found`, `epoch_stale`, `epoch_conflict`
+(a `rotate` that lost a race, §7.5), `op_conflict`, `already_exists`,
+`gone`, `stale`, `too_large`, `rate_limited`, `closed`.
 
 ### Context strings
 

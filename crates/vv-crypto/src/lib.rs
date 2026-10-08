@@ -8,3 +8,4 @@ pub mod ctx;
 pub mod envelope;
 pub mod keys;
 pub mod primitives;
+pub mod snapshot;
