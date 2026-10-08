@@ -37,7 +37,9 @@ import {
   sealKeyEnvelope,
   sealOp,
   sealSnapshot,
+  communityId,
   sign,
+  signingKeyPair,
   verify,
   type ControlArgs,
   type EncryptionKeyPair,
@@ -291,6 +293,14 @@ export class Replica {
     const s = this.data.state;
     const m = this.me;
     return !!s && !!m && isAdmin(s, m);
+  }
+
+  /**
+   * The founder's community root key, to show once as a recovery code and
+   * keep somewhere safe off the phone (§2.4, §11.4). Undefined elsewhere.
+   */
+  get recoveryKey(): Uint8Array | undefined {
+    return this.data.crk?.sk;
   }
 
   get pending(): readonly OutboxItem[] {
@@ -551,16 +561,46 @@ export class Replica {
         if (!this.data.state) throw new Error("log was compacted but no readable snapshot exists");
         continue;
       }
-      for (const e of page.entries) {
-        if (this.needsKey(e)) {
-          this.data.status = "waiting_for_key";
-          return pulled;
+      // Each page applies atomically: if any entry fails verification (a
+      // node that rewrote history), nothing from the page is kept.
+      const before = { ...this.checkpoint(), rejected: report.rejected.length };
+      let pagePulled = 0;
+      try {
+        for (const e of page.entries) {
+          if (this.needsKey(e)) {
+            this.data.status = "waiting_for_key";
+            return pulled + pagePulled;
+          }
+          this.ingest(e, report);
+          pagePulled++;
         }
-        this.ingest(e, report);
-        pulled++;
+      } catch (err) {
+        this.rollback(before);
+        report.rejected.length = before.rejected;
+        throw err;
       }
+      pulled += pagePulled;
       if (page.entries.length === 0 || this.verifier.seq >= page.head) return pulled;
     }
+  }
+
+  private checkpoint() {
+    return {
+      state: this.data.state ? clone(this.data.state) : null,
+      verifier: this.verifier.checkpoint(),
+      log: this.data.log.length,
+      control: this.data.control.length,
+      own: this.data.ownOutcomes.length,
+      rejected: 0,
+    };
+  }
+
+  private rollback(c: ReturnType<Replica["checkpoint"]>): void {
+    this.data.state = c.state;
+    this.verifier = new LogVerifier(this.data.cid, this.keyring, c.verifier);
+    this.data.log.length = c.log;
+    this.data.control.length = c.control;
+    this.data.ownOutcomes.length = Math.min(this.data.ownOutcomes.length, c.own);
   }
 
   private ingest(e: LogEntry, report: SyncReport): void {
@@ -809,6 +849,49 @@ export class Replica {
         await this.client.postMailbox(this.data.cid, this.currentAccess(), mailboxId(this.data.cid, fromHex(m.msk)), "ik_env", mail);
       }
     }
+  }
+
+  /**
+   * Recovery when every admin device is lost (§11.4): the founder types the
+   * community root key (their recovery code) into any member's phone. This
+   * device checks the key belongs to this community, signs an `admin.set`
+   * with it, and submits it with its own member access. The key is used once
+   * and not stored.
+   */
+  async recoverAdmins(crkSeed: Uint8Array, memberIds: string[]): Promise<void> {
+    const state = this.data.state;
+    if (!state) throw new Error("not synced yet");
+    const crk = signingKeyPair(crkSeed);
+    if (toHex(communityId(crk.pk)) !== toHex(this.data.cid) || toHex(crk.pk) !== state.community.crk) {
+      throw new Error("this recovery code is not for this community");
+    }
+    const admins = memberIds.map((id) => {
+      const m = state.members[id];
+      if (!m || m.status !== "active") throw new Error("new admins must be active members");
+      return fromHex(m.msk);
+    });
+    const env = sealOp({
+      cid: this.data.cid,
+      opId: this.rng(16),
+      epoch: this.keyring.latest()!,
+      author: this.data.keys.signing,
+      base: this.verifier.seq,
+      ts: Date.now(),
+      type: "admin.set",
+      body: { recovery: true },
+      control: { kind: "admin.set", signer: crk, args: { admins } },
+      rng: this.rng,
+    });
+    const { results } = await this.client.submit(this.data.cid, this.currentAccess(), [env]);
+    const r = results[0]!;
+    if (!("seq" in r)) throw new NodeError(409, r.error, "recovery refused");
+    await this.sync();
+  }
+
+  /** Replaces the intake key (e.g. after recovery, when no device holds the old one). */
+  async rotateIntakeKey(): Promise<void> {
+    const state = this.requireAdmin();
+    await this.setAdmins(state.admin_set, true);
   }
 
   /** Seals the canonical state as a snapshot and uploads it (§12.3). */

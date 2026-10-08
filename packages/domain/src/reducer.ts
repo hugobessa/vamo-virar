@@ -278,13 +278,18 @@ function activeMemberByKey(s: CommunityState, msk: string): MemberRecord | undef
   return m?.status === "active" ? m : undefined;
 }
 
-/** Admin in effect: data-plane role admin AND key in the control-plane admin set (§9.2). */
+/**
+ * Admin power comes from the control-plane admin set alone (§9.2): the set
+ * the node enforces and the CRK can reset. The data-plane role "admin" is a
+ * label; on its own it grants organizer rights. This keeps CRK recovery from
+ * deadlocking when every admin device is lost.
+ */
 export function isAdmin(s: CommunityState, m: MemberRecord): boolean {
-  return m.status === "active" && m.role === "admin" && s.admin_set.includes(m.msk);
+  return m.status === "active" && s.admin_set.includes(m.msk);
 }
 
 export function isOrganizer(s: CommunityState, m: MemberRecord): boolean {
-  return m.status === "active" && (m.role === "organizer" || m.role === "admin");
+  return m.status === "active" && (m.role === "organizer" || m.role === "admin" || s.admin_set.includes(m.msk));
 }
 
 function activeAdminCount(s: CommunityState): number {

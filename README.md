@@ -36,6 +36,10 @@ and coordinating the people who attend them.
 - Phase 7 — location matching and "who could come?": places with radius and
   dates, one-off coarse current location, travel time, and signed,
   verdict-only probe answers (protocol §10.4).
+- Phase 8 — offline and failure scenarios: [`tests/offline`](tests/offline)
+  against the real node with a moving clock and a fault-injecting proxy
+  (see [`docs/offline-testing.md`](docs/offline-testing.md)); admin
+  recovery with the founder's recovery code.
 
 ```sh
 npm install && npm test     # TypeScript packages

@@ -576,9 +576,16 @@ MemberRecord {
 | `member.profile` | `{profile}` | self | self active |
 
 `member.add` for an admin role is not allowed directly: add as member, then
-`member.role` + control-plane `admin.set`. Devices treat a member as admin only
-if **both** the data-plane role is `admin` **and** their `msk` is in the
-control-plane admin set; mismatch is surfaced as a warning to admins.
+control-plane `admin.set` (and, for display, `member.role admin`).
+**Admin power comes from the control-plane admin set alone**: a member is an
+admin iff they are active and their `msk` is in `admin_set`. The data-plane
+role `admin` is a label; on its own it grants organizer rights.
+
+> **Design note (Phase 8).** An earlier draft required both the role and the
+> admin set. If every admin device is lost, the CRK holder can reset the admin
+> set to an existing member's key, but that member could then not get the
+> data-plane role (only an admin can grant it): recovery deadlocked. The admin
+> set is what the node enforces and the CRK controls, so it is authoritative.
 
 `member.remove`/`member.leave` MUST be followed by a `rotate` (§7.2). Admin
 clients do this automatically and atomically from the user's point of view.
@@ -718,7 +725,7 @@ MailboxItem {
 | `probe_reply` | member | §10.4, sealed mail, signed | ≤ 72 h |
 | `ping` | any | wake-up for push (§14) | 1 h |
 | `ik_env` | admin | HPKE to a new admin's MEK: `{ik_sk}` (the intake key's private half) | none |
-| `removed` | admin | HPKE to a removed member's MEK: `{reason?}`; they can no longer read the log after the rotation, so this is how they learn why | 30 d |
+| `removed` | admin | HPKE to a removed member's MEK: `{reason?}`; they can no longer read the log after the rotation, so this is how they learn why | none (until acked) |
 
 Sealed mail kinds other than `key_env` use `HPKE.Seal(MEK, info = "vv/mail/<kind>/v1" || cid, aad = "", cbor(body))`,
 carried as `cbor({enc, ct})`.

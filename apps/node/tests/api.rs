@@ -325,21 +325,30 @@ async fn mailboxes() {
         StatusCode::UNAUTHORIZED
     );
 
-    // The probe expires; the key envelope stays until acknowledged.
+    // Removal notices also persist.
+    assert_eq!(
+        call(&app, "POST", &path, Some(&ct), Some(post("removed", 1)))
+            .await
+            .0,
+        StatusCode::OK
+    );
+    // The probe expires; the key envelope and removal notice stay until acknowledged.
     app.clock.advance(61_000);
     app.housekeeping().unwrap();
     let (_, v) = call(&app, "GET", &path, Some(&at), None).await;
     let Value::Array(items) = v.get("items").unwrap() else {
         panic!()
     };
-    assert_eq!(items.len(), 1);
-    let id = items[0].get("id").unwrap().as_uint().unwrap();
-    assert_eq!(
-        call(&app, "DELETE", &format!("{path}/{id}"), Some(&at), None)
-            .await
-            .0,
-        StatusCode::OK
-    );
+    assert_eq!(items.len(), 2);
+    for item in items {
+        let id = item.get("id").unwrap().as_uint().unwrap();
+        assert_eq!(
+            call(&app, "DELETE", &format!("{path}/{id}"), Some(&at), None)
+                .await
+                .0,
+            StatusCode::OK
+        );
+    }
     let (_, v) = call(&app, "GET", &path, Some(&at), None).await;
     assert_eq!(v.get("items"), Some(&Value::Array(vec![])));
 }

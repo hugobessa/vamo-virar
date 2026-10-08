@@ -153,16 +153,26 @@ describe("membership", () => {
     expect(last(b).out).toEqual(rejected("last_admin"));
   });
 
-  it("a second admin needs both the role and the admin set", () => {
-    const { b, ana, bia } = setup();
-    b.op(ana, "member.role", { member_id: bia.id, role: "admin" });
+  it("admin power comes from the admin set; the role is a label", () => {
+    const { b, ana, bia, caio } = setup();
+    b.op(ana, "member.role", { member_id: caio.id, role: "admin" });
     let s = last(b).state;
-    expect(isAdmin(s, s.members[bia.id]!)).toBe(false);
-    b.adminSet(ana, [ana, bia]);
+    expect(isAdmin(s, s.members[caio.id]!)).toBe(false); // label only
+    b.add(caio, person("Eva"));
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.adminSet(ana, [ana, bia]); // Bia is an organizer, not labelled admin
     s = last(b).state;
     expect(isAdmin(s, s.members[bia.id]!)).toBe(true);
     // Now Ana can leave.
     b.op(ana, "member.leave", {});
+    expect(last(b).out).toEqual(applied);
+  });
+
+  it("CRK recovery: a member in the reset admin set can act as admin at once", () => {
+    const { b, caio } = setup();
+    b.adminSet(key(1), [caio]); // signed by the CRK
+    const dave = person("Dave");
+    b.add(caio, dave);
     expect(last(b).out).toEqual(applied);
   });
 

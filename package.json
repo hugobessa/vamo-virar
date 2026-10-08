@@ -7,7 +7,8 @@
     "packages/crypto",
     "packages/sync",
     "packages/matching",
-    "apps/mobile"
+    "apps/mobile",
+    "tests/offline"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

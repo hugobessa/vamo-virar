@@ -35,7 +35,7 @@ const MAX_PENDING_CHALLENGES: usize = 100_000;
 type Shared = Arc<App>;
 
 pub fn router(app: Shared) -> Router {
-    Router::new()
+    let r = Router::new()
         .route("/.well-known/vamo-virar", get(well_known))
         .route("/v1/auth/challenge", post(challenge))
         .route("/v1/auth/session", post(session))
@@ -57,8 +57,20 @@ pub fn router(app: Shared) -> Router {
             "/v1/c/{cid}/directory",
             get(get_directory).put(put_directory),
         )
-        .route("/v1/c/{cid}/stream", get(stream))
-        .with_state(app)
+        .route("/v1/c/{cid}/stream", get(stream));
+    #[cfg(feature = "test-clock")]
+    let r = r.route("/v1/test/clock", post(test_clock));
+    r.with_state(app)
+}
+
+/// Test builds only: moves the node clock forward and runs housekeeping.
+#[cfg(feature = "test-clock")]
+async fn test_clock(State(app): State<Shared>, body: Bytes) -> Result<Response, ApiError> {
+    let v = parse(&body)?;
+    let secs = uint_field(&v, "advance_secs")?;
+    app.clock.advance(secs * 1000);
+    app.housekeeping()?;
+    ok(Value::map([("now", int(app.clock.now()))]))
 }
 
 // ---------------------------------------------------------------------------
@@ -692,8 +704,10 @@ async fn post_mailbox(
         ));
     }
     let now = app.clock.now();
-    // Key envelopes stay until acknowledged (§7.3); everything else expires.
-    let expires_at = if kind == "key_env" {
+    // Key envelopes and removal notices stay until acknowledged (§7.3,
+    // §10): a member may be offline for longer than any TTL. Everything
+    // else expires.
+    let expires_at = if kind == "key_env" || kind == "removed" {
         None
     } else {
         let ttl = v

@@ -5,6 +5,11 @@ description = "vamo-virar community node: sequencer, encrypted mailbox and snaps
 edition.workspace = true
 publish.workspace = true
 
+[features]
+# Test-only endpoints (moving the clock, forcing housekeeping) for the offline
+# scenario suite. Never enable in a deployed node.
+test-clock = []
+
 [dependencies]
 axum = { version = "0.8", features = ["ws"] }
 getrandom = "0.3"

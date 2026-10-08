@@ -75,3 +75,23 @@ jobs:
         with:
           name: mobile-web-screenshots
           path: apps/mobile/e2e/screenshots
+
+  offline-scenarios:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: cargo build -p community-node --features test-clock --locked
+        env:
+          CARGO_TARGET_DIR: target/test-clock
+      - run: npm ci
+      - run: npm run build
+      - run: npm test -w @vamo-virar/offline-tests
+        env:
+          VV_NODE_TEST_BIN: ${{ github.workspace }}/target/test-clock/debug/community-node
+          VV_REQUIRE_NODE: "1"
