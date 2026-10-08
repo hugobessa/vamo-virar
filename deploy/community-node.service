@@ -1,0 +1,56 @@
+# systemd unit for a community node on a Linux host (VPS, Raspberry Pi, NAS).
+#
+#   sudo install -m 0755 community-node /usr/local/bin/
+#   sudo install -m 0644 deploy/community-node.service /etc/systemd/system/
+#   echo 'VV_PROVISIONING_TOKEN=<long random string>' | sudo tee /etc/community-node.env
+#   sudo chmod 600 /etc/community-node.env
+#   sudo systemctl enable --now community-node
+#
+# Data lives in /var/lib/community-node. Put a TLS reverse proxy in front.
+
+[Unit]
+Description=vamo-virar community node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/community-node serve
+Environment=VV_LISTEN=127.0.0.1:8787
+Environment=VV_DATA_DIR=/var/lib/community-node
+EnvironmentFile=-/etc/community-node.env
+Restart=on-failure
+RestartSec=5
+
+DynamicUser=yes
+StateDirectory=community-node
+StateDirectoryMode=0700
+UMask=0077
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

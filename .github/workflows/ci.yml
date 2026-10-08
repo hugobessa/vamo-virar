@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+
+  # Phase 10: the node protocol must not depend on any cloud vendor.
+  vendor-independence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-vendor-independence.mjs
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: cargo build -p community-node --locked
+      - run: npm ci
+      - run: npm run build
+      - run: npm test -w @vamo-virar/sync
+        env:
+          VV_NODE_BIN: ${{ github.workspace }}/target/debug/community-node
+          VV_REQUIRE_NODE: "1"
+
+  mobile-web-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: cargo build -p community-node --locked
+      - run: npm ci
+      - run: npm run build
+      - run: npx expo export --platform web --output-dir dist-web
+        working-directory: apps/mobile
+        env:
+          CI: "1"
+      - run: npm run e2e:web -w @vamo-virar/mobile
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+          VV_NODE_BIN: ${{ github.workspace }}/target/debug/community-node
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-web-screenshots
+          path: apps/mobile/e2e/screenshots
+
+  offline-scenarios:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: cargo build -p community-node --features test-clock --locked
+        env:
+          CARGO_TARGET_DIR: target/test-clock
+      - run: npm ci
+      - run: npm run build
+      - run: npm test -w @vamo-virar/offline-tests
+        env:
+          VV_NODE_TEST_BIN: ${{ github.workspace }}/target/test-clock/debug/community-node
+          VV_REQUIRE_NODE: "1"
+
+  node-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          tags: vamo-virar/community-node:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Container starts healthy and serves discovery
+        run: |
+          docker run -d --name node -p 8787:8787 vamo-virar/community-node:ci
+          for i in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' node)" = healthy ] && break
+            sleep 2
+          done
+          docker inspect -f '{{.State.Health.Status}}' node | grep -qx healthy
+          curl -fsS http://127.0.0.1:8787/.well-known/vamo-virar | grep -q '"protocol":"vv/0"'
+          test "$(docker inspect -f '{{.Config.User}}' node)" = "65532:65532"

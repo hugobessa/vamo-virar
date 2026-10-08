@@ -1,0 +1,15 @@
+{$DOMAIN} {
+	# Caddy appends the client address to X-Forwarded-For; the node trusts
+	# it for rate limiting only because VV_TRUST_FORWARDED_FOR is set.
+	reverse_proxy node:8787
+	# Don't log request bodies or query strings (auth tokens appear there for streams).
+	log {
+		format filter {
+			wrap console
+			fields {
+				request>uri delete
+				request>headers>Authorization delete
+			}
+		}
+	}
+}

@@ -1,0 +1,23 @@
+{
+  "name": "vamo-virar",
+  "private": true,
+  "license": "MIT",
+  "workspaces": [
+    "packages/protocol",
+    "packages/domain",
+    "packages/crypto",
+    "packages/sync",
+    "packages/matching",
+    "apps/mobile",
+    "tests/offline"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run build && npm run typecheck --workspaces --if-present",
+    "test": "npm run build && npm run test --workspaces --if-present",
+    "check:vendors": "node scripts/check-vendor-independence.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

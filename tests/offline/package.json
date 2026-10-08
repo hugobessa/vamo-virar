@@ -1,0 +1,23 @@
+{
+  "name": "@vamo-virar/offline-tests",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "description": "Phase 8: real-world offline and failure scenarios against the real community node",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vamo-virar/crypto": "0.0.0",
+    "@vamo-virar/domain": "0.0.0",
+    "@vamo-virar/protocol": "0.0.0",
+    "@vamo-virar/sync": "0.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}

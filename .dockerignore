@@ -1,0 +1,8 @@
+# Only the Rust workspace is needed to build the node image.
+**
+!Cargo.toml
+!Cargo.lock
+!crates/**
+!apps/node/**
+crates/**/target
+apps/node/target
