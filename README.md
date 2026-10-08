@@ -77,3 +77,7 @@ tests/           Shared protocol/crypto test vectors, integration tests
 ```
 
 See the implementation plan in `docs/architecture.md` §52.
+
+## License
+
+[MIT](LICENSE).
