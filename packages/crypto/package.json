@@ -1,0 +1,37 @@
+{
+  "name": "@vamo-virar/crypto",
+  "version": "0.0.0",
+  "private": true,
+  "description": "VV1 cryptographic suite and protocol envelopes (protocol.md \u00a71.3, \u00a72\u2013\u00a77, \u00a710, \u00a712)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "vectors": "vitest run test/vectors.test.ts"
+  },
+  "dependencies": {
+    "@noble/ciphers": "1.3.0",
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0",
+    "@vamo-virar/domain": "0.0.0",
+    "@vamo-virar/protocol": "0.0.0"
+  },
+  "devDependencies": {
+    "@hpke/chacha20poly1305": "1.8.0",
+    "@hpke/core": "1.9.0",
+    "@hpke/dhkem-x25519": "1.8.0",
+    "@types/node": "22.20.5",
+    "fast-check": "4.3.0",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}

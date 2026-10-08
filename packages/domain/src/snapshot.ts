@@ -4,9 +4,9 @@
 // the same state as replaying the whole log.
 
 import { sha256 } from "@noble/hashes/sha2";
-import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils";
+import { concatBytes, encode, toHex, utf8, type CborValue } from "@vamo-virar/protocol";
 import type { CommunityState } from "./types.js";
-import { canonicalJson, clone } from "./util.js";
+import { clone } from "./util.js";
 
 export type SnapshotState = Omit<CommunityState, "op_ids">;
 
@@ -28,12 +28,10 @@ export function restoreSnapshot(snapshot: Snapshot): CommunityState {
   return { ...clone(snapshot.state), op_ids: {} };
 }
 
-/**
- * SHA-256("vv/state/v1" || canonical(state)). Provisional: canonical JSON
- * stands in for deterministic CBOR until the protocol package lands, so this
- * hash is not yet wire-compatible with the Rust side.
- */
+const STATE_CTX = utf8("vv/state/v1");
+
+/** state_hash = SHA-256("vv/state/v1" || cbor(state)), protocol.md §12.1. Hex. */
 export function stateHash(state: CommunityState | SnapshotState): string {
   const { op_ids: _ignored, ...rest } = state as CommunityState;
-  return bytesToHex(sha256(utf8ToBytes(`vv/state/v1${canonicalJson(rest)}`)));
+  return toHex(sha256(concatBytes(STATE_CTX, encode(rest as unknown as CborValue))));
 }

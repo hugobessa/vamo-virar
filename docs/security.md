@@ -12,14 +12,22 @@ Implementation rules for both the TypeScript (`packages/crypto`) and Rust
   and an RFC 9180 HPKE implementation built on them; Rust `ed25519-dalek`
   (with `verify_strict`), `x25519-dalek`, `hpke`, `chacha20poly1305`, `sha2`,
   `hkdf`. Pin exact versions; review diffs on upgrade.
-- No custom primitives. Composition only as specified.
+- No custom primitives. Composition only as specified. The one composed
+  construction we implement ourselves, HPKE (RFC 9180) on top of the noble
+  primitives (so React Native needs no WebCrypto), is tested for
+  interoperability against hpke-js in both directions and against the Rust
+  `hpke` crate via the shared vectors.
+- Decoders are strict: CBOR that is not in deterministic form, unknown
+  fields, or wrong lengths are rejected rather than tolerated.
 - Every signature, KDF and AEAD use has a context string from protocol §15.
 - Random values come from the platform CSPRNG only
   (`crypto.getRandomValues` via `react-native-get-random-values`; `OsRng` in
   Rust).
 - Compare secrets and MACs in constant time.
 - Both implementations must pass the same test vectors
-  (`tests/crypto/vectors/`) before either is merged.
+  (`tests/vectors/vv1.json`) before either is merged. Regenerate with
+  `VV_WRITE_VECTORS=1 npm run vectors -w @vamo-virar/crypto` only for an
+  intentional wire change, and review the diff.
 
 ## Keys on devices
 

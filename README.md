@@ -16,10 +16,14 @@ and coordinating the people who attend them.
 - Phase 0 — protocol specification: draft v0 in `docs/`.
 - Phase 1 — local domain engine: [`packages/domain`](packages/domain) (state
   machine, snapshots, retention; unit and property tests).
+- Phase 2 — cryptographic layer: [`packages/protocol`](packages/protocol)
+  (strict CBOR), [`packages/crypto`](packages/crypto) (VV1 suite, envelopes,
+  rotation, snapshots, intake) and [`crates/vv-crypto`](crates/vv-crypto)
+  (Rust, same test vectors).
 
 ```sh
-npm install
-npm test
+npm install && npm test     # TypeScript packages
+cargo test                  # Rust crates
 ```
 
 | Document | Contents |
