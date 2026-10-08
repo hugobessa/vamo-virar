@@ -1,6 +1,7 @@
 {
   "name": "@vamo-virar/crypto",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "description": "VV1 cryptographic suite and protocol envelopes (protocol.md \u00a71.3, \u00a72\u2013\u00a77, \u00a710, \u00a712)",
   "type": "module",

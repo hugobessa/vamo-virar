@@ -1,6 +1,7 @@
 {
   "name": "@vamo-virar/domain",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "description": "Deterministic community state machine (protocol.md \u00a78, \u00a79, \u00a712)",
   "type": "module",

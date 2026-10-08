@@ -1,6 +1,7 @@
 {
   "name": "@vamo-virar/sync",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "description": "Sync engine: node client, replica, outbox, mailbox, snapshots, admin flows (protocol.md §6, §7, §10–§12)",
   "type": "module",

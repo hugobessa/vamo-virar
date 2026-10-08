@@ -5,3 +5,4 @@ members = ["crates/*", "apps/node"]
 [workspace.package]
 edition = "2021"
 publish = false
+license = "MIT"

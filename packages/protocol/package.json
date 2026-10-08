@@ -1,6 +1,7 @@
 {
   "name": "@vamo-virar/protocol",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "description": "Wire encoding: strict deterministic CBOR (protocol.md §1.1)",
   "type": "module",

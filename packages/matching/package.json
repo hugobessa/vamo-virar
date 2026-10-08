@@ -1,6 +1,7 @@
 {
   "name": "@vamo-virar/matching",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "description": "On-device matching: availability from calendars (and, in Phase 7, location). Nothing here leaves the device.",
   "type": "module",

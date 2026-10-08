@@ -1,6 +1,7 @@
 {
   "name": "vamo-virar",
   "private": true,
+  "license": "MIT",
   "workspaces": [
     "packages/protocol",
     "packages/domain",

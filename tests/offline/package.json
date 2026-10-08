@@ -1,6 +1,7 @@
 {
   "name": "@vamo-virar/offline-tests",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "description": "Phase 8: real-world offline and failure scenarios against the real community node",
   "type": "module",
