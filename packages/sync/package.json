@@ -1,0 +1,30 @@
+{
+  "name": "@vamo-virar/sync",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sync engine: node client, replica, outbox, mailbox, snapshots, admin flows (protocol.md §6, §7, §10–§12)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vamo-virar/crypto": "0.0.0",
+    "@vamo-virar/domain": "0.0.0",
+    "@vamo-virar/protocol": "0.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}

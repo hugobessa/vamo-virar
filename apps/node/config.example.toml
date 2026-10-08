@@ -19,3 +19,4 @@ max_mailbox_items = 1000
 max_mailbox_ttl_secs = 2592000
 intake_per_ip_per_hour = 20
 intake_per_community_per_hour = 200
+housekeeping_interval_secs = 60

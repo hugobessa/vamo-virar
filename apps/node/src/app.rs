@@ -36,6 +36,8 @@ pub struct Config {
     pub max_mailbox_ttl_secs: u64,
     pub intake_per_ip_per_hour: u32,
     pub intake_per_community_per_hour: u32,
+    /// How often expiry and compaction run.
+    pub housekeeping_interval_secs: u64,
 }
 
 impl Default for Config {
@@ -53,6 +55,7 @@ impl Default for Config {
             max_mailbox_ttl_secs: 30 * 24 * 3600,
             intake_per_ip_per_hour: 20,
             intake_per_community_per_hour: 200,
+            housekeeping_interval_secs: 60,
         }
     }
 }

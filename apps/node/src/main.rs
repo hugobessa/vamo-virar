@@ -80,8 +80,9 @@ async fn main() {
     let app = Arc::new(App::new(config, store).expect("initialise node identity"));
 
     let hk = app.clone();
+    let every = Duration::from_secs(app.config.housekeeping_interval_secs.max(1));
     tokio::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(60));
+        let mut tick = tokio::time::interval(every);
         loop {
             tick.tick().await;
             if let Err(e) = hk.housekeeping() {

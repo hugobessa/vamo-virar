@@ -30,3 +30,21 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: cargo build -p community-node --locked
+      - run: npm ci
+      - run: npm run build
+      - run: npm test -w @vamo-virar/sync
+        env:
+          VV_NODE_BIN: ${{ github.workspace }}/target/debug/community-node
+          VV_REQUIRE_NODE: "1"

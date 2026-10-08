@@ -14,4 +14,4 @@ export {
 } from "./reducer.js";
 export { createSnapshot, restoreSnapshot, stateHash } from "./snapshot.js";
 export type { Snapshot, SnapshotState } from "./snapshot.js";
-export { canonicalJson, memberIdOf } from "./util.js";
+export { canonicalJson, clone, memberIdOf } from "./util.js";

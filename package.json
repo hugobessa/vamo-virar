@@ -4,7 +4,8 @@
   "workspaces": [
     "packages/protocol",
     "packages/domain",
-    "packages/crypto"
+    "packages/crypto",
+    "packages/sync"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

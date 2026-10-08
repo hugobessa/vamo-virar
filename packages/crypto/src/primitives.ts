@@ -86,12 +86,27 @@ export function sign(sk: Uint8Array, ctx: string, value: CborValue): Uint8Array 
 export function verify(pk: Uint8Array, ctx: string, value: CborValue, sig: Uint8Array): boolean {
   if (pk.length !== 32 || sig.length !== 64) return false;
   try {
-    if (ed25519.Point.fromHex(pk).isSmallOrder()) return false;
+    if (!publicKeyOk(pk)) return false;
     if (ed25519.Point.fromHex(sig.subarray(0, 32)).isSmallOrder()) return false;
     return ed25519.verify(sig, frame(ctx, value), pk, { zip215: false });
   } catch {
     return false;
   }
+}
+
+// Public keys repeat constantly (the epoch access key, members' keys), and the
+// small-order check costs a point decompression, so remember keys that passed.
+const OK_KEYS = new Set<string>();
+const OK_KEYS_MAX = 4096;
+
+function publicKeyOk(pk: Uint8Array): boolean {
+  let k = "";
+  for (const b of pk) k += String.fromCharCode(b);
+  if (OK_KEYS.has(k)) return true;
+  if (ed25519.Point.fromHex(pk).isSmallOrder()) return false;
+  if (OK_KEYS.size >= OK_KEYS_MAX) OK_KEYS.clear();
+  OK_KEYS.add(k);
+  return true;
 }
 
 // ---------------------------------------------------------------------------

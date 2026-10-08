@@ -356,6 +356,20 @@ loop:
   wait:  WebSocket "head" notification, or backoff timer
 ```
 
+Client rules learned in Phase 4 (`packages/sync`):
+
+- The outbox stores the op (type, body, `op_id`), not its envelope. Each
+  send re-seals it under the latest epoch the device holds, keeping the
+  `op_id`, so an op written before a rotation still lands after it.
+- `op_conflict` on resend means an earlier send of that `op_id` was
+  accepted and its response was lost: the op is in the log; drop it from
+  the outbox.
+- An active member who meets an entry under an epoch newer than any key it
+  holds **stops pulling** (`waiting_for_key`) instead of folding opaque
+  entries, and resumes when the key envelope arrives. Removed members carry
+  on (opaque is correct for them).
+- Order of a sync: mailbox (keys may have arrived), then push, then pull.
+
 Locally authored ops are applied **optimistically** to a pending overlay
 (shown in the UI as "sending…") and re-applied in canonical order once they
 come back with a `seq`. If the canonical application rejects them, the UI
@@ -703,6 +717,11 @@ MailboxItem {
 | `probe` | organizer | §10.4 | ≤ 72 h |
 | `probe_reply` | member | §10.4 | ≤ 72 h |
 | `ping` | any | wake-up for push (§14) | 1 h |
+| `ik_env` | admin | HPKE to a new admin's MEK: `{ik_sk}` (the intake key's private half) | none |
+| `removed` | admin | HPKE to a removed member's MEK: `{reason?}`; they can no longer read the log after the rotation, so this is how they learn why | 30 d |
+
+Sealed mail kinds other than `key_env` use `HPKE.Seal(MEK, info = "vv/mail/<kind>/v1" || cid, aad = "", cbor(body))`,
+carried as `cbor({enc, ct})`.
 
 Posting requires `community` scope (any current member). Reading/acking
 requires `mailbox` scope for that `mailbox_id`. Items for non-existent

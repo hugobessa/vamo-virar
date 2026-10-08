@@ -23,6 +23,9 @@ and coordinating the people who attend them.
 - Phase 3 — community node: [`apps/node`](apps/node) (Rust + SQLite,
   HTTP + WebSocket; sequencing, auth scopes, mailboxes, intake, snapshots,
   compaction, restore).
+- Phase 4 — sync engine: [`packages/sync`](packages/sync) (node client,
+  replica with outbox and optimistic view, mailbox, snapshot bootstrap,
+  admin flows, node migration; integration tests against the real node).
 
 ```sh
 npm install && npm test     # TypeScript packages
