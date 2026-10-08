@@ -17,7 +17,6 @@
     "expo-crypto": "~57.0.3",
     "expo-file-system": "~57.0.7",
     "expo-linking": "~57.0.12",
-    "expo-localization": "~57.0.2",
     "expo-location": "~57.0.20",
     "expo-router": "~57.0.25",
     "expo-secure-store": "~57.0.4",
@@ -32,9 +31,9 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "playwright-core": "1.56.1",
     "typescript": "~6.0.3",
-    "vitest": "3.2.4",
-    "playwright-core": "1.56.1"
+    "vitest": "3.2.4"
   },
   "scripts": {
     "start": "expo start",

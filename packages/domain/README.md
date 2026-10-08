@@ -1,12 +1,12 @@
 # @vamo-virar/domain
 
-The community state machine: `state = fold(reduce, genesis, log)`
+A máquina de estados da comunidade: `state = fold(reduce, genesis, log)`
 ([`docs/protocol.md`](../../docs/protocol.md) §8, §9, §12).
 
-Pure TypeScript with no networking, storage or crypto. It takes log entries
-that the crypto layer (Phase 2) has already decrypted and verified, and
-returns the next state plus an outcome (`applied`, `rejected(reason)`,
-`opaque`, `duplicate`).
+TypeScript puro, sem rede, armazenamento ou criptografia. Recebe entradas do log
+que a camada de criptografia (Fase 2) já decifrou e verificou, e devolve o
+próximo estado mais um resultado (`applied`, `rejected(reason)`, `opaque`,
+`duplicate`).
 
 ```ts
 import { fold, applyInPlace, createSnapshot, restoreSnapshot } from "@vamo-virar/domain";
@@ -17,20 +17,20 @@ const restored = restoreSnapshot(snap);             // …later, on another devi
 for (const e of tail) applyInPlace(restored, e);    // same state as a full replay
 ```
 
-Guarantees, enforced by the property tests in `test/properties.test.ts`:
+Garantias, asseguradas pelos testes de propriedade em `test/properties.test.ts`:
 
-- deterministic: same log ⇒ same state, on every device;
-- snapshot + tail ⇒ same state as the full log, at any cut point;
-- rejected ops and duplicate `op_id`s change nothing but bookkeeping;
-- nobody is confirmed for an event without their own `accept` or `volunteer`;
-- a new confirmation never exceeds capacity;
-- removed members hold no open place in a scheduled event.
+- determinístico: mesmo log ⇒ mesmo estado, em todo dispositivo;
+- snapshot + cauda ⇒ mesmo estado que o log completo, em qualquer ponto de corte;
+- operações rejeitadas e `op_id`s duplicados não mudam nada além da contabilidade interna;
+- ninguém é confirmado em um evento sem o seu próprio `accept` ou `volunteer`;
+- uma nova confirmação nunca excede a capacidade;
+- membros removidos não ocupam vaga aberta em um evento agendado.
 
-Not yet: deterministic CBOR (state hashes use canonical JSON until the
-protocol package exists), crypto verification, the pending-op overlay used
-by sync (Phase 4).
+Ainda não: CBOR determinístico (os hashes de estado usam JSON canônico até o
+pacote de protocolo existir), verificação criptográfica, a camada de operações
+pendentes usada pelo sync (Fase 4).
 
 ```sh
-npm test            # from the repo root
+npm test            # a partir da raiz do repositório
 npm run typecheck
 ```

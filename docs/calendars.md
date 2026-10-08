@@ -1,44 +1,44 @@
-# Calendar and location matching
+# Correspondência de calendário e localização
 
-Implements architecture.md §18–§19: the app checks a person's calendar **on
-their phone** to show whether they can make an event. Nothing from the
-calendar is sent to the community, the node, or anyone else.
+Implementa architecture.md §18–§19: o app consulta o calendário de uma pessoa **no
+celular dela** para mostrar se ela pode ir a um evento. Nada do
+calendário é enviado à comunidade, ao nó nem a mais ninguém.
 
-## What is read, per source
+## O que é lido, por fonte
 
-| Source | How | Permission / scope | What we keep |
+| Fonte | Como | Permissão / escopo | O que guardamos |
 |---|---|---|---|
-| Phone calendars (iOS EventKit, Android CalendarContract) | `expo-calendar` `listEvents` | iOS full calendar access (read); Android `READ_CALENDAR` | start, end, all-day, busy/tentative |
-| Google Calendar | `freeBusy.query`, primary calendar | `https://www.googleapis.com/auth/calendar.freebusy` (busy times only: Google never returns titles, places or guests to us) | start, end |
-| Outlook / Microsoft 365 | Graph `GET /me/calendarView` with `$select=start,end,showAs,isAllDay,isCancelled` | `Calendars.ReadBasic` (least privileged for calendarView) + `offline_access` | start, end, all-day, busy/tentative |
+| Calendários do celular (iOS EventKit, Android CalendarContract) | `expo-calendar` `listEvents` | iOS acesso total ao calendário (leitura); Android `READ_CALENDAR` | início, fim, dia inteiro, ocupado/provisório |
+| Google Agenda | `freeBusy.query`, calendário principal | `https://www.googleapis.com/auth/calendar.freebusy` (apenas horários ocupados: o Google nunca nos devolve títulos, locais ou convidados) | início, fim |
+| Outlook / Microsoft 365 | Graph `GET /me/calendarView` com `$select=start,end,showAs,isAllDay,isCancelled` | `Calendars.ReadBasic` (menor privilégio para calendarView) + `offline_access` | início, fim, dia inteiro, ocupado/provisório |
 
-- Only the window from yesterday to 90 days ahead is fetched; refreshed at
-  most every 15 minutes while the app is open.
-- Busy intervals are stored sealed (XChaCha20-Poly1305 under the device key,
-  like community data). OAuth tokens are kept in the Keychain/Keystore.
-- Google and Microsoft are called directly from the phone with OAuth 2
-  authorization code + PKCE. There is no client secret in the app.
-- Disconnecting deletes the tokens and cached intervals (and asks Google
-  to revoke the grant).
+- Só é buscada a janela de ontem até 90 dias à frente; atualizada no
+  máximo a cada 15 minutos enquanto o app está aberto.
+- Os intervalos ocupados são armazenados selados (XChaCha20-Poly1305 sob a chave do dispositivo,
+  como os dados da comunidade). Os tokens OAuth ficam no Keychain/Keystore.
+- Google e Microsoft são chamados diretamente do celular com OAuth 2
+  authorization code + PKCE. Não há client secret no app.
+- Desconectar apaga os tokens e os intervalos em cache (e pede ao Google
+  que revogue a autorização).
 
-## How availability is decided
+## Como a disponibilidade é decidida
 
-`@vamo-virar/matching` (`availability()`), per event time window:
+`@vamo-virar/matching` (`availability()`), por janela de horário do evento:
 
-- overlaps a busy entry → "You have something at that time";
-- overlaps a tentative entry, an all-day entry (unless the person says
-  all-day entries make them busy), or comes within the person's chosen
-  free buffer (default 30 min) of another commitment → "Maybe";
-- otherwise → "You're free at that time";
-- no connected calendar covers that time → nothing is shown (unknown is
-  never presented as free).
+- sobrepõe uma entrada ocupada → "Você tem algo nesse horário";
+- sobrepõe uma entrada provisória, uma entrada de dia inteiro (a menos que a pessoa diga que
+  entradas de dia inteiro a deixam ocupada), ou fica dentro da margem livre escolhida
+  pela pessoa (padrão de 30 min) em relação a outro compromisso → "Talvez";
+- caso contrário → "Você está livre nesse horário";
+- nenhum calendário conectado cobre esse horário → nada é mostrado (desconhecido
+  nunca é apresentado como livre).
 
-The verdict is shown only to the person. It is a hint: they can still
-volunteer or accept.
+O veredito é mostrado apenas à pessoa. É uma sugestão: ela ainda pode
+se voluntariar ou aceitar.
 
-## Setting up the OAuth clients (maintainers)
+## Configurando os clientes OAuth (mantenedores)
 
-The providers appear in the app only when a client ID is configured in
+Os provedores só aparecem no app quando um client ID está configurado em
 `apps/mobile/app.json` → `expo.extra`:
 
 ```json
@@ -50,35 +50,35 @@ The providers appear in the app only when a client ID is configured in
 }
 ```
 
-- **Google Cloud Console**: create OAuth client IDs of type iOS and Android
-  for bundle/package `org.vamovirar.app`; enable the Google Calendar API;
-  add only the `calendar.freebusy` scope to the consent screen.
-- **Microsoft Entra ID**: register a public client (mobile) app, allow
-  personal and work accounts (`common`), add the redirect URI
-  `vamovirar://oauth`, and the delegated permissions
-  `Calendars.ReadBasic` and `offline_access`.
+- **Google Cloud Console**: crie client IDs OAuth do tipo iOS e Android
+  para o bundle/pacote `org.vamovirar.app`; ative a Google Calendar API;
+  adicione apenas o escopo `calendar.freebusy` à tela de consentimento.
+- **Microsoft Entra ID**: registre um app de cliente público (mobile), permita
+  contas pessoais e corporativas (`common`), adicione o redirect URI
+  `vamovirar://oauth` e as permissões delegadas
+  `Calendars.ReadBasic` e `offline_access`.
 
-Device calendars need a development build (`npx expo run:ios|android` or
-EAS): `expo-calendar` is not included in Expo Go.
+Calendários do dispositivo exigem um development build (`npx expo run:ios|android` ou
+EAS): `expo-calendar` não está incluído no Expo Go.
 
-## Places (Phase 7)
+## Lugares (Fase 7)
 
-People add places they usually start from ("Home", "Work"), each with a
-radius, optionally limited to dates ("São Paulo, 10–17 Nov"). While a dated
-place is active it takes precedence: it says where the person will be.
-"Use where I am now" takes one coarse reading (rounded to ~1 km), stored as
-a place that expires after a day. There is no background location and no
-history; Android fine and background location permissions are blocked in
-the build.
+As pessoas adicionam lugares de onde costumam sair ("Casa", "Trabalho"), cada um com um
+raio, opcionalmente limitado a datas ("São Paulo, 10–17 nov"). Enquanto um lugar com data
+está ativo, ele tem precedência: indica onde a pessoa vai estar.
+"Usar onde estou agora" faz uma única leitura aproximada (arredondada para ~1 km), armazenada como
+um lugar que expira depois de um dia. Não há localização em segundo plano nem
+histórico; as permissões de localização precisa e em segundo plano do Android são bloqueadas no
+build.
 
-For each event the app computes the distance to the nearest active place
-(relative to its radius): near, a bit far (up to 1.5 × radius) or far, plus
-an estimated travel time (default 25 km/h + 10 min), which is added to the
-calendar's free buffer around the event.
+Para cada evento, o app calcula a distância até o lugar ativo mais próximo
+(em relação ao seu raio): perto, um pouco longe (até 1.5 × raio) ou longe, além de
+um tempo estimado de deslocamento (padrão de 25 km/h + 10 min), que é somado à
+margem livre do calendário em torno do evento.
 
-## "Who could come?"
+## "Quem poderia vir?"
 
-Organizers can ask the community about an event (protocol.md §10.4). Each
-phone answers with "can / maybe / can't" only, sealed and signed for the
-organizer who asked. Automatic answers are off by default, and never sent
-when the phone has neither a calendar nor a place to judge from.
+Organizadores podem perguntar à comunidade sobre um evento (protocol.md §10.4). Cada
+celular responde apenas com "posso / talvez / não posso", selado e assinado para o
+organizador que perguntou. Respostas automáticas vêm desligadas por padrão e nunca são enviadas
+quando o celular não tem nem calendário nem lugar para avaliar.

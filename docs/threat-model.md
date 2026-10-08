@@ -1,74 +1,74 @@
-# Threat Model — v0 (draft)
+# Modelo de ameaças — v0 (rascunho)
 
-Scope: the protocol in [`protocol.md`](protocol.md), one community node per
-community, iOS/Android clients. Section numbers (§) refer to `protocol.md`.
+Escopo: o protocolo em [`protocol.md`](protocol.md), um nó da comunidade por
+comunidade, clientes iOS/Android. Números de seção (§) referem-se a `protocol.md`.
 
-## Assets
+## Ativos
 
-| Asset | Where it lives | Sensitivity |
+| Ativo | Onde fica | Sensibilidade |
 |---|---|---|
-| Personal calendar | device only | high |
-| Location (GPS, reference points) | device only | high |
-| Who is a member of which community | encrypted in log (data plane) | **high** (political organizing) |
-| Who attends which event | encrypted in log | high |
-| Event details (time, place) | encrypted in log | medium–high |
-| Admin set (per-community public keys) | node, cleartext | low–medium |
-| Community name/description in directory | public by choice | low |
-| Private keys | device secure storage | critical |
+| Calendário pessoal | apenas no dispositivo | alta |
+| Localização (GPS, pontos de referência) | apenas no dispositivo | alta |
+| Quem é membro de qual comunidade | criptografado no log (plano de dados) | **alta** (organização política) |
+| Quem participa de qual evento | criptografado no log | alta |
+| Detalhes do evento (horário, local) | criptografado no log | média–alta |
+| Conjunto de admins (chaves públicas por comunidade) | nó, em texto claro | baixa–média |
+| Nome/descrição da comunidade no diretório | público por escolha | baixa |
+| Chaves privadas | armazenamento seguro do dispositivo | crítica |
 
-## Adversaries
+## Adversários
 
-| # | Adversary | Capabilities assumed |
+| # | Adversário | Capacidades presumidas |
 |---|---|---|
-| A1 | Curious/compromised node operator | Full read/write of node DB and process; sees all traffic metadata |
-| A2 | Database thief | One-time copy of `community.sqlite` |
-| A3 | Network attacker | Passive and active on the path; cannot break TLS without a CA compromise |
-| A4 | Removed member | Holds every key up to their removal epoch; knows the protocol |
-| A5 | Malicious member | Current member, valid keys |
-| A6 | Malicious admin | Current admin |
-| A7 | Device thief | Physical access to a phone, possibly unlocked |
-| A8 | Push provider (Apple/Google), push gateway | Sees push tokens and timing |
-| A9 | Outsider spammer/harasser | Knows community ID and node URL |
+| A1 | Operador do nó curioso/comprometido | Leitura/escrita total do banco e do processo do nó; vê todos os metadados de tráfego |
+| A2 | Ladrão do banco de dados | Cópia única de `community.sqlite` |
+| A3 | Atacante de rede | Passivo e ativo no caminho; não consegue quebrar TLS sem comprometer uma CA |
+| A4 | Membro removido | Tem todas as chaves até a época da sua remoção; conhece o protocolo |
+| A5 | Membro malicioso | Membro atual, chaves válidas |
+| A6 | Admin malicioso | Admin atual |
+| A7 | Ladrão de dispositivo | Acesso físico a um celular, possivelmente desbloqueado |
+| A8 | Provedor de push (Apple/Google), gateway de push | Vê tokens de push e horários |
+| A9 | Spammer/assediador externo | Conhece o ID da comunidade e a URL do nó |
 
-## The 12 scenarios from the architecture
+## Os 12 cenários da arquitetura
 
-| # | Scenario | Outcome in v0 | Mechanism |
+| # | Cenário | Resultado na v0 | Mecanismo |
 |---|---|---|---|
-| 1 | Compromised node (A1) | Cannot read content, forge ops, or learn roster/roles beyond admins. **Can** withhold/delay ops, fork the log per device, observe timing, IPs, sizes, mailbox activity. | §3, §4, §13 |
-| 2 | Malicious admin (A6) | Can add/remove members, read everything, write false snapshots, rotate keys to exclude others. **Cannot** forge other members' ops (e.g. fake an acceptance). CRK holder can remove them via `admin.set`. | §5, §9.2, §11.4 |
-| 3 | Stolen node DB (A2) | Ciphertexts, public keys, signatures, `op_id` index, metadata. No keys. | §2, §29 arch |
-| 4 | Network interception (A3) | TLS; even with TLS broken, payloads are E2E encrypted and auth tokens are scope- and node-bound. | §3.1, §4 |
-| 5 | Compromised user device/account (A5 via malware) | Attacker acts as that member until removed. Their reach is that member's role. Mitigated by removal + rotation. | §7.2 |
-| 6 | Stolen phone (A7) | Locked phone: keys protected by keystore. Unlocked phone: attacker has that membership. App SHOULD support an app PIN/biometric gate and remote "I lost my phone" via another member contacting an admin. | §2.4 |
-| 7 | Removed member (A4) | Reads history up to removal (unavoidable). Cannot read anything after the `rotate`. Late ops in grace window rejected by reducer. | §7.3–7.4 |
-| 8 | Destroyed node | Rebuild from admin device. | §11.3 |
-| 9 | Replaced / impostor node | Devices pin `node_id` per community; new node URL must come from a signed `DirectoryEntry` or in-band signed op. Impostor cannot produce entries that chain from the device's head. | §11, §13 |
-| 10 | Replayed operation | Inner signature binds `op_id`, `cid`, `epoch`; node and reducer dedupe by `op_id`. | §4.3, §6.3 |
-| 11 | Duplicated operation | Idempotent submission; reducer ignores duplicate `op_id`. | §6.3 |
-| 12 | Long-offline device | Log replay ≤ 30 d, else snapshot. Key envelopes for the current epoch never expire. | §7.3, §12.4 |
+| 1 | Nó comprometido (A1) | Não consegue ler conteúdo, forjar operações nem descobrir a lista de membros/papéis além dos admins. **Consegue** reter/atrasar operações, bifurcar o log por dispositivo, observar horários, IPs, tamanhos e atividade das caixas postais. | §3, §4, §13 |
+| 2 | Admin malicioso (A6) | Pode adicionar/remover membros, ler tudo, escrever snapshots falsos, rotacionar chaves para excluir outros. **Não consegue** forjar operações de outros membros (por exemplo, falsificar uma aceitação). Quem tem a CRK pode removê-lo via `admin.set`. | §5, §9.2, §11.4 |
+| 3 | Banco do nó roubado (A2) | Textos cifrados, chaves públicas, assinaturas, índice de `op_id`, metadados. Nenhuma chave. | §2, §29 arq. |
+| 4 | Interceptação de rede (A3) | TLS; mesmo com o TLS quebrado, os payloads têm criptografia ponta a ponta e os tokens de autenticação são vinculados a escopo e ao nó. | §3.1, §4 |
+| 5 | Dispositivo/conta de usuário comprometido (A5 via malware) | O atacante age como aquele membro até ser removido. Seu alcance é o papel daquele membro. Mitigado por remoção + rotação. | §7.2 |
+| 6 | Celular roubado (A7) | Celular bloqueado: chaves protegidas pelo keystore. Celular desbloqueado: o atacante tem aquela participação. O app DEVERIA oferecer bloqueio por PIN/biometria e um "perdi meu celular" remoto, via outro membro que contate um admin. | §2.4 |
+| 7 | Membro removido (A4) | Lê o histórico até a remoção (inevitável). Não consegue ler nada após o `rotate`. Operações atrasadas na janela de tolerância são rejeitadas pelo reducer. | §7.3–7.4 |
+| 8 | Nó destruído | Reconstruir a partir do dispositivo de um admin. | §11.3 |
+| 9 | Nó substituído / impostor | Os dispositivos fixam o `node_id` por comunidade; a nova URL do nó precisa vir de um `DirectoryEntry` assinado ou de uma operação assinada dentro do próprio canal. Um impostor não consegue produzir entradas que se encadeiem a partir do head do dispositivo. | §11, §13 |
+| 10 | Operação reenviada (replay) | A assinatura interna vincula `op_id`, `cid`, `epoch`; nó e reducer eliminam duplicatas por `op_id`. | §4.3, §6.3 |
+| 11 | Operação duplicada | Envio idempotente; o reducer ignora `op_id` duplicado. | §6.3 |
+| 12 | Dispositivo offline por muito tempo | Replay do log ≤ 30 d, senão snapshot. Os envelopes de chave da época atual nunca expiram. | §7.3, §12.4 |
 
-## Additional threats
+## Ameaças adicionais
 
-| Threat | Status |
+| Ameaça | Situação |
 |---|---|
-| Spam / harassment via intake (A9) | Rate limits; invite-only policy; open question §17.7. |
-| Traffic analysis linking a person across communities | Mitigated by per-community keys. Not mitigated: same IP / same push token across communities (A1 + A8). |
-| Push notification content leak | Content-free pushes only; tokens sealed to gateway. §14 |
-| "Who could come?" probes revealing schedules | Replies carry one of three verdicts, sealed to the asking organizer and signed by the member; no times, places or distances. The node sees that N items were posted and roughly when replies came back (metadata). Auto-answer is off by default. protocol §10.4 |
-| Location history | Never collected. Places are chosen by the person; "where I am now" is one coarse reading (≈ 1 km) kept for a day, on the device only. iOS/Android background location is disabled in the build. |
-| Coercion (someone forces a member to unlock their phone) | Out of scope for v0. Candidate **[LATER]**: per-community "hide this community" with separate PIN. |
-| Fork attack by node (A1) | Detected only on cross-device comparison; full detection is **[LATER]**. §13 |
-| Malicious snapshot by admin | Detected by members holding the log; not by new members. §17.5 |
-| Supply chain (malicious app update) | Out of protocol scope. Reproducible builds and F-Droid distribution are desirable. |
-| Hosting provider holds a community hostage (A1 as a business) | Suspension stops writes only; reads, `GET /export` and `migrate` keep working, and admins' phones can rebuild the community anywhere without the provider. Quotas also never block `migrate`. [`managed-hosting.md`](managed-hosting.md) |
-| Forged "moved" redirect (A1, A3) | Devices move only on an admin-signed `migrate` entry they verify themselves; a bare `409 moved` just keeps their changes queued. Tested in `tests/offline` ("a node claiming the community moved…"). protocol §11.3 |
-| `migrate` reveals the new node address | The node list is in the cleartext control header (the old node must enforce the freeze and answer with it). The old operator, and removed members who still pull from it, learn where the community went; neither gains access there (no current EAK). Accepted for v0. |
-| Operator API exposure | Separate listener, bearer token, no content or key endpoints; metrics are per tenant, never per community, so monitoring services do not receive a community list. |
+| Spam / assédio via entrada (A9) | Limites de taxa; política só por convite; questão em aberto §17.7. |
+| Análise de tráfego ligando uma pessoa entre comunidades | Mitigada por chaves por comunidade. Não mitigada: mesmo IP / mesmo token de push entre comunidades (A1 + A8). |
+| Vazamento de conteúdo em notificações push | Apenas pushes sem conteúdo; tokens selados para o gateway. §14 |
+| Consultas de disponibilidade "Quem poderia vir?" revelando agendas | As respostas trazem um de três vereditos, seladas para o organizador que perguntou e assinadas pelo membro; sem horários, locais ou distâncias. O nó vê que N itens foram postados e aproximadamente quando as respostas voltaram (metadados). A resposta automática vem desligada por padrão. protocolo §10.4 |
+| Histórico de localização | Nunca coletado. Os lugares são escolhidos pela pessoa; "onde estou agora" é uma única leitura aproximada (≈ 1 km) mantida por um dia, apenas no dispositivo. A localização em segundo plano do iOS/Android é desativada no build. |
+| Coerção (alguém obriga um membro a desbloquear o celular) | Fora do escopo da v0. Candidato **[LATER]**: "ocultar esta comunidade" por comunidade, com PIN separado. |
+| Ataque de bifurcação pelo nó (A1) | Detectado apenas por comparação entre dispositivos; a detecção completa é **[LATER]**. §13 |
+| Snapshot malicioso de um admin | Detectado por membros que têm o log; não por membros novos. §17.5 |
+| Cadeia de suprimentos (atualização maliciosa do app) | Fora do escopo do protocolo. Builds reproduzíveis e distribuição via F-Droid são desejáveis. |
+| Provedor de hospedagem mantém uma comunidade como refém (A1 como negócio) | A suspensão bloqueia apenas escritas; leituras, `GET /export` e `migrate` continuam funcionando, e os celulares dos admins podem reconstruir a comunidade em qualquer lugar sem o provedor. As cotas também nunca bloqueiam `migrate`. [`managed-hosting.md`](managed-hosting.md) |
+| Redirecionamento "moved" forjado (A1, A3) | Os dispositivos só se movem com uma entrada `migrate` assinada por um admin, que eles mesmos verificam; um `409 moved` isolado apenas mantém suas alterações na fila. Testado em `tests/offline` ("a node claiming the community moved…"). protocolo §11.3 |
+| `migrate` revela o endereço do novo nó | A lista de nós fica no cabeçalho de controle em texto claro (o nó antigo precisa aplicar o congelamento e responder com ela). O operador antigo, e membros removidos que ainda puxam dele, descobrem para onde a comunidade foi; nenhum dos dois ganha acesso lá (sem EAK atual). Aceito para a v0. |
+| Exposição da API de operador | Listener separado, bearer token, nenhum endpoint de conteúdo ou de chaves; as métricas são por cliente (tenant), nunca por comunidade, então serviços de monitoramento não recebem uma lista de comunidades. |
 
-## Explicit non-goals for v0
+## Não objetivos explícitos da v0
 
-- Hiding *that* a device talks to a given node (IP-level metadata).
-- Hiding message sizes and timing.
-- Protecting a member against their own unlocked, compromised device.
-- Forward secrecy within an epoch (a device compromise exposes the whole
-  current epoch). Shorter epochs via scheduled rotation reduce this.
+- Ocultar *que* um dispositivo se comunica com determinado nó (metadados no nível de IP).
+- Ocultar tamanhos e horários das mensagens.
+- Proteger um membro contra o próprio dispositivo desbloqueado e comprometido.
+- Sigilo futuro (forward secrecy) dentro de uma época (o comprometimento de um dispositivo expõe toda a
+  época atual). Épocas mais curtas, via rotação agendada, reduzem isso.

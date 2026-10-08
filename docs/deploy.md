@@ -1,32 +1,32 @@
-# Running a community node
+# Rodando um nó da comunidade
 
-A node is **one binary and one SQLite file**. It needs no database server,
-queue or cache, and it never holds keys that can read community content
-(see [threat-model.md](threat-model.md)): if the machine is lost or seized,
-the community loses availability, not privacy, and an admin can rebuild it
-elsewhere from their phone.
+Um nó é **um binário e um arquivo SQLite**. Ele não precisa de servidor de banco de dados,
+fila nem cache, e nunca guarda chaves capazes de ler o conteúdo da comunidade
+(veja [threat-model.md](threat-model.md)): se a máquina for perdida ou apreendida,
+a comunidade perde disponibilidade, não privacidade, e um admin pode reconstruí-la
+em outro lugar a partir do celular.
 
-Typical footprint: a few MB of RAM per active community, disk growing with
-the encrypted log until snapshots let it be compacted. A Raspberry Pi 4, a
-small VPS or a spare computer is plenty.
+Consumo típico: alguns MB de RAM por comunidade ativa, com o disco crescendo junto
+com o log criptografado até que snapshots permitam compactá-lo. Um Raspberry Pi 4, uma
+VPS pequena ou um computador sobrando é mais do que suficiente.
 
-## Pick a way to run it
+## Escolha como rodá-lo
 
-### 1. Docker Compose with automatic TLS (recommended for a VPS)
+### 1. Docker Compose com TLS automático (recomendado para uma VPS)
 
 ```sh
 git clone <this repository> && cd vamo-virar/deploy
 cat > .env <<'ENV'
 DOMAIN=node.example.org
-VV_PROVISIONING_TOKEN=$(openssl rand -hex 24)   # paste the generated value
+VV_PROVISIONING_TOKEN=$(openssl rand -hex 24)   # cole o valor gerado
 ENV
 docker compose up -d
 ```
 
-Point the domain's DNS at the machine first; Caddy obtains and renews the
-certificate. The node is reachable only through Caddy.
+Aponte primeiro o DNS do domínio para a máquina; o Caddy obtém e renova o
+certificado. O nó só é acessível através do Caddy.
 
-### 2. Docker alone
+### 2. Só Docker
 
 ```sh
 docker build -f deploy/Dockerfile -t vamo-virar/community-node .
@@ -35,18 +35,18 @@ docker run -d --name community-node -p 127.0.0.1:8787:8787 \
   -v community-node-data:/data vamo-virar/community-node
 ```
 
-The image is ~50 MB (distroless, no shell), runs as a non-root user, keeps
-everything in `/data`, and has a built-in health check. Put your own TLS
-proxy in front. Behind a TLS-intercepting corporate proxy, pass its CA
-bundle when building: `--secret id=ca_bundle,src=ca.pem`.
+A imagem tem ~50 MB (distroless, sem shell), roda como usuário não root, guarda
+tudo em `/data` e tem health check embutido. Coloque seu próprio proxy
+TLS na frente. Atrás de um proxy corporativo que intercepta TLS, passe o bundle de CA
+dele no build: `--secret id=ca_bundle,src=ca.pem`.
 
-Release tags also publish multi-arch images (amd64, arm64) to
+As tags de release também publicam imagens multiarquitetura (amd64, arm64) em
 `ghcr.io/<owner>/community-node`.
 
-### 3. A plain binary with systemd (Raspberry Pi, NAS, any Linux)
+### 3. Um binário simples com systemd (Raspberry Pi, NAS, qualquer Linux)
 
-Download `community-node-<version>-<target>.tar.gz` from the release page
-(Linux x86-64 and ARM64, macOS, Windows), or `cargo build -p community-node --release`.
+Baixe `community-node-<version>-<target>.tar.gz` na página de releases
+(Linux x86-64 e ARM64, macOS, Windows), ou rode `cargo build -p community-node --release`.
 
 ```sh
 sudo install -m 0755 community-node /usr/local/bin/
@@ -56,72 +56,72 @@ sudo chmod 600 /etc/community-node.env
 sudo systemctl enable --now community-node
 ```
 
-The unit runs with a throwaway user and a hardened sandbox, keeps data in
-`/var/lib/community-node`, and listens on `127.0.0.1:8787`; put Caddy or
-nginx in front for TLS and set `VV_TRUST_FORWARDED_FOR=1` in the env file.
+A unit roda com um usuário descartável e um sandbox reforçado, guarda os dados em
+`/var/lib/community-node` e escuta em `127.0.0.1:8787`; coloque Caddy ou
+nginx na frente para TLS e defina `VV_TRUST_FORWARDED_FOR=1` no arquivo de env.
 
-## Configuration
+## Configuração
 
-Everything has a default. Precedence: environment > flags > config file.
+Tudo tem um valor padrão. Precedência: ambiente > flags > arquivo de configuração.
 
-| Setting | Env | Default | Notes |
+| Opção | Env | Padrão | Observações |
 |---|---|---|---|
 | `listen` | `VV_LISTEN` | `127.0.0.1:8787` | |
-| `data_dir` | `VV_DATA_DIR` | `./data` | holds `node.sqlite` |
-| `provisioning_token` | `VV_PROVISIONING_TOKEN` | none | required to create or restore a community here; give it only to people allowed to host on this node |
-| `open_provisioning` | | `false` | lets anyone create communities; only on a private network |
-| `trust_forwarded_for` | `VV_TRUST_FORWARDED_FOR` | `false` | set when behind a reverse proxy, so join-request rate limits apply per client |
-| `epoch_grace_secs` | | 600 | old-key writes accepted after a key change |
-| `compaction_grace_secs` | | 30 days | how long log entries behind a snapshot are kept |
-| `max_mailbox_ttl_secs` | | 30 days | |
-| `intake_per_ip_per_hour` / `intake_per_community_per_hour` | | 20 / 200 | join request limits |
-| `operator_listen` | `VV_OPERATOR_LISTEN` | off | managed hosting: private address for the operator API |
-| `operator_token` | `VV_OPERATOR_TOKEN` | none | required with `operator_listen` (≥ 16 characters) |
-| `[[tenants]]` | | none | managed hosting: customers with their own provisioning token and limits |
+| `data_dir` | `VV_DATA_DIR` | `./data` | contém `node.sqlite` |
+| `provisioning_token` | `VV_PROVISIONING_TOKEN` | nenhum | necessário para criar ou restaurar uma comunidade aqui; entregue-o só a quem pode hospedar neste nó |
+| `open_provisioning` | | `false` | permite que qualquer pessoa crie comunidades; só numa rede privada |
+| `trust_forwarded_for` | `VV_TRUST_FORWARDED_FOR` | `false` | defina quando estiver atrás de um proxy reverso, para que os limites de taxa de pedidos de entrada se apliquem por cliente |
+| `epoch_grace_secs` | | 600 | escritas com a chave antiga aceitas após uma troca de chave |
+| `compaction_grace_secs` | | 30 dias | por quanto tempo as entradas de log anteriores a um snapshot são mantidas |
+| `max_mailbox_ttl_secs` | | 30 dias | |
+| `intake_per_ip_per_hour` / `intake_per_community_per_hour` | | 20 / 200 | limites de pedidos de entrada |
+| `operator_listen` | `VV_OPERATOR_LISTEN` | desligado | hospedagem gerenciada: endereço privado para a API de operador |
+| `operator_token` | `VV_OPERATOR_TOKEN` | nenhum | obrigatório com `operator_listen` (≥ 16 caracteres) |
+| `[[tenants]]` | | nenhum | hospedagem gerenciada: clientes (tenants) com seu próprio token de provisionamento e limites |
 
-Running a node for other people's communities (tenants, quotas, the
-operator API, moving communities in and out) is described in
+Rodar um nó para comunidades de outras pessoas (clientes, cotas, a
+API de operador, mover comunidades para dentro e para fora) está descrito em
 [`managed-hosting.md`](managed-hosting.md).
 
-See [`apps/node/config.example.toml`](../apps/node/config.example.toml).
+Veja [`apps/node/config.example.toml`](../apps/node/config.example.toml).
 
-## Backups and restore
+## Backups e restauração
 
 ```sh
 community-node backup --data-dir /var/lib/community-node --out /backups/node-$(date +%F).sqlite
-# in Docker:
+# no Docker:
 docker exec community-node /usr/local/bin/community-node backup --out /data/backup.sqlite
 ```
 
-`backup` uses SQLite's online backup and is safe while the node runs. To
-restore, stop the node, put the file back as `node.sqlite`, start it.
+`backup` usa o backup online do SQLite e é seguro com o nó rodando. Para
+restaurar, pare o nó, coloque o arquivo de volta como `node.sqlite` e inicie-o.
 
-Backups are a convenience, not the only copy: an admin's phone can rebuild
-the community on any node (`Replica.restoreTo`, protocol §11.3), so even a
-node with no backup can be replaced.
+Backups são uma conveniência, não a única cópia: o celular de um admin pode reconstruir
+a comunidade em qualquer nó (`Replica.restoreTo`, protocolo §11.3), então até um
+nó sem backup pode ser substituído.
 
-## Operating
+## Operação
 
-- **Health:** `community-node health --url http://127.0.0.1:8787` exits 0
-  when the node answers (the container health check uses it).
-- **Logs:** `RUST_LOG=info`. The node never logs request bodies or tokens;
-  the bundled Caddyfile also drops request URIs and auth headers.
-- **Upgrades:** take a backup, stop, replace the binary or image, start.
-  Schema changes are applied on start, in order, and recorded in SQLite's
-  `user_version`; each runs in its own transaction. An older binary refuses
-  to open a database a newer one has upgraded, so keep the backup if you
-  might roll back.
-- **Moving to another machine:** copy `node.sqlite` (from a backup) and
-  point the DNS name at the new machine, or let an admin rebuild from their
-  phone.
-- **Moving a community to another node** (another address, another
-  operator): the admin does it from the app, and members follow on their
-  own; see [`managed-hosting.md`](managed-hosting.md#moving-a-community-in-or-out-protocolmd-113).
+- **Saúde:** `community-node health --url http://127.0.0.1:8787` sai com 0
+  quando o nó responde (o health check do contêiner usa isso).
+- **Logs:** `RUST_LOG=info`. O nó nunca registra corpos de requisição nem tokens;
+  o Caddyfile incluído também descarta URIs de requisição e cabeçalhos de autenticação.
+- **Atualizações:** faça um backup, pare, substitua o binário ou a imagem, inicie.
+  Mudanças de schema são aplicadas na inicialização, em ordem, e registradas no
+  `user_version` do SQLite; cada uma roda na sua própria transação. Um binário mais antigo se recusa
+  a abrir um banco de dados que um mais novo já atualizou, então guarde o backup se você
+  puder precisar voltar atrás.
+- **Mudar para outra máquina:** copie `node.sqlite` (de um backup) e
+  aponte o nome DNS para a nova máquina, ou deixe um admin reconstruir a partir do
+  celular.
+- **Mover uma comunidade para outro nó** (outro endereço, outro
+  operador): o admin faz isso pelo app, e os membros acompanham por conta
+  própria; veja [`managed-hosting.md`](managed-hosting.md#mover-uma-comunidade-para-dentro-ou-para-fora-protocolmd-113).
 
-## What you, as an operator, can and cannot see
+## O que você, como operador, pode e não pode ver
 
-You can see: that communities exist (opaque ids), how many log entries and
-mailbox items they have and when, the admins' public keys, IP addresses of
-connecting devices (in memory, for rate limiting only), and the size and
-timing of encrypted data. You cannot see names, events, who attends what,
-calendars, locations, or any message content.
+Você pode ver: que comunidades existem (ids opacos), quantas entradas de log e
+itens de caixa postal elas têm e quando, as chaves públicas dos admins, os endereços IP dos
+dispositivos que se conectam (em memória, apenas para limitação de taxa) e o tamanho e
+o momento dos dados criptografados. Você não pode ver nomes, eventos, quem participa de quê,
+calendários, localizações nem qualquer conteúdo de mensagem.

@@ -8,6 +8,7 @@ import { Text } from "react-native";
 import { NodeClient } from "@vamo-virar/sync";
 import { Banner, Body, Button, Card, Field, Heading } from "../kit";
 import { useTheme } from "../theme";
+import { errorText } from "../../model/errors";
 
 export function MeTab({ entry }: { entry: CommunityEntry }) {
   const { t, store } = useApp();
@@ -69,7 +70,7 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
                     setCode("");
                     setRecoverMsg({ tone: "ok", text: t("recoverDone") });
                   } catch (e) {
-                    setRecoverMsg({ tone: "danger", text: `${t("error")}: ${e instanceof Error ? e.message : String(e)}` });
+                    setRecoverMsg({ tone: "danger", text: errorText(e) });
                   }
                 }}
               />
@@ -130,7 +131,7 @@ function MoveCard({ entry }: { entry: CommunityEntry }) {
             setSetupCode("");
             setMsg({ tone: "ok", text: t("moveDone") });
           } catch (e) {
-            setMsg({ tone: "danger", text: `${t("error")}: ${e instanceof Error ? e.message : String(e)}` });
+            setMsg({ tone: "danger", text: errorText(e) });
           } finally {
             setBusy(false);
           }

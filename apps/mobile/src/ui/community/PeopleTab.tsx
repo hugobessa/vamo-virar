@@ -8,6 +8,7 @@ import type { CommunityEntry } from "../../lib/store";
 import { roleKey } from "../../model/events";
 import { Banner, Body, Button, Card, Chip, Heading } from "../kit";
 import { space, useTheme } from "../theme";
+import { errorText } from "../../model/errors";
 
 export function PeopleTab({ entry }: { entry: CommunityEntry }) {
   const { t, store } = useApp();
@@ -41,7 +42,7 @@ export function PeopleTab({ entry }: { entry: CommunityEntry }) {
       await store.admin(entry.id, f);
       await loadRequests();
     } catch (e) {
-      setError(`${t("error")}: ${e instanceof Error ? e.message : String(e)}`);
+      setError(errorText(e));
     } finally {
       setBusy(null);
     }

@@ -1,58 +1,58 @@
-# Managed hosting
+# Hospedagem gerenciada
 
-Phase 10 (architecture.md §41, §52). A managed host runs **the same
-`community-node` binary** that a community can run on a Raspberry Pi. There
-is no separate managed build, no vendor SDK, and no protocol feature that
-only a managed host has. What managed hosting adds is operational:
+Fase 10 (architecture.md §41, §52). Um host gerenciado roda **o mesmo
+binário `community-node`** que uma comunidade pode rodar num Raspberry Pi. Não
+existe build gerenciado separado, nem SDK de fornecedor, nem recurso do protocolo que
+só um host gerenciado tenha. O que a hospedagem gerenciada acrescenta é operacional:
 
-- **tenants**: customers who provision communities with their own token,
-  each with optional limits;
-- **an operator API** on a separate, private listener: usage, suspension,
-  deletion, export and Prometheus metrics;
-- **moving a community in or out**: an admin moves it between any two
-  nodes from the app, and every member follows on their own.
+- **clientes (tenants)**: clientes que provisionam comunidades com seu próprio token,
+  cada um com limites opcionais;
+- **uma API de operador** num listener separado e privado: uso, suspensão,
+  exclusão, exportação e métricas Prometheus;
+- **mover uma comunidade para dentro ou para fora**: um admin a move entre quaisquer dois
+  nós pelo app, e cada membro acompanha por conta própria.
 
-The rule this design keeps: **the provider is replaceable**. A community
-can always leave, even when suspended or over quota, and a node never holds
-a community's data hostage.
+A regra que este design preserva: **o provedor é substituível**. Uma comunidade
+sempre pode sair, mesmo suspensa ou acima da cota, e um nó nunca mantém
+os dados de uma comunidade como refém.
 
-## Provider independence
+## Independência de provedor
 
-The node protocol does not depend on AWS, GCP, Azure, Cloudflare, Supabase
-or Firebase. `scripts/check-vendor-independence.mjs` enforces this in CI
-(job `vendor-independence`): no cloud-vendor SDK may appear in `Cargo.lock`
-or `package-lock.json`, and no vendor host or SDK may be referenced in the
-node, the protocol packages or `deploy/`. Any machine that runs a Linux
-binary or a container works; storage is one SQLite file on a local disk.
+O protocolo do nó não depende de AWS, GCP, Azure, Cloudflare, Supabase
+nem Firebase. `scripts/check-vendor-independence.mjs` garante isso no CI
+(job `vendor-independence`): nenhum SDK de fornecedor de nuvem pode aparecer em `Cargo.lock`
+ou `package-lock.json`, e nenhum host ou SDK de fornecedor pode ser referenciado no
+nó, nos pacotes do protocolo nem em `deploy/`. Qualquer máquina que rode um binário
+Linux ou um contêiner serve; o armazenamento é um único arquivo SQLite num disco local.
 
-The mobile app's optional calendar adapters call Google and Microsoft
-calendar APIs on the person's behalf, on the device. That is a calendar
-integration chosen by the person, not part of the node protocol.
+Os adaptadores opcionais de calendário do app móvel chamam as APIs de calendário do Google e da Microsoft
+em nome da pessoa, no dispositivo. Trata-se de uma integração de calendário
+escolhida pela pessoa, não de parte do protocolo do nó.
 
-## Running a node for many communities
+## Rodando um nó para muitas comunidades
 
-One node process holds any number of communities in one database; there is
-nothing per-community to start or stop. A typical managed setup:
+Um único processo do nó guarda qualquer número de comunidades num só banco de dados; não há
+nada por comunidade para iniciar ou parar. Uma configuração gerenciada típica:
 
 ```toml
 # /etc/community-node/config.toml
-listen = "127.0.0.1:8787"            # behind Caddy/nginx with TLS
+listen = "127.0.0.1:8787"            # atrás de Caddy/nginx com TLS
 data_dir = "/var/lib/community-node"
 trust_forwarded_for = true
 
-# The operator API: never on a public interface.
+# A API de operador: nunca numa interface pública.
 operator_listen = "127.0.0.1:9787"
-# operator_token comes from VV_OPERATOR_TOKEN (at least 16 characters).
+# operator_token vem de VV_OPERATOR_TOKEN (pelo menos 16 caracteres).
 
-# Your own provisioning token, for communities you host without a plan
-# (and for restores you do on someone's behalf). Optional.
+# Seu próprio token de provisionamento, para comunidades que você hospeda sem plano
+# (e para restaurações que você faz em nome de alguém). Opcional.
 # provisioning_token = "..."
 
 [[tenants]]
 name = "coletivo-recife"
-token_sha256 = "9f2c…"               # from `community-node tenant-token`
+token_sha256 = "9f2c…"               # de `community-node tenant-token`
 max_communities = 3
-max_log_bytes = 268435456             # 256 MiB of log per community
+max_log_bytes = 268435456             # 256 MiB de log por comunidade
 
 [[tenants]]
 name = "free-tier"
@@ -61,43 +61,43 @@ max_communities = 1
 max_log_bytes = 16777216
 ```
 
-`community-node tenant-token` prints a new random token for the customer
-and the `token_sha256` line for the config. The config file holds only the
-hash. A tenant uses their token as the "setup code" when creating a
-community in the app (or when moving one in).
+`community-node tenant-token` imprime um novo token aleatório para o cliente
+e a linha `token_sha256` para a configuração. O arquivo de configuração guarda apenas o
+hash. Um cliente usa seu token como "código de configuração" ao criar uma
+comunidade no app (ou ao trazer uma para cá).
 
-Scale by running more nodes, each with its own disk, and giving each
-tenant (or community) the address of the node that hosts it. Nodes do not
-talk to each other; a community lives on exactly one node at a time, and
-moving it is the protocol operation below.
+Escale rodando mais nós, cada um com seu próprio disco, e dando a cada
+cliente (ou comunidade) o endereço do nó que o hospeda. Os nós não
+conversam entre si; uma comunidade vive em exatamente um nó por vez, e
+movê-la é a operação do protocolo descrita abaixo.
 
-### Limits
+### Limites
 
-| Limit | Applies to | When reached |
+| Limite | Aplica-se a | Quando atingido |
 |---|---|---|
-| `max_communities` | create and restore with that tenant's token | `507 quota_exceeded`; the app shows the error |
-| `max_log_bytes` | each community the tenant provisioned | ops are refused one by one with `quota_exceeded`; they **stay in the members' outboxes** and the app says the community ran out of space |
+| `max_communities` | criação e restauração com o token daquele cliente | `507 quota_exceeded`; o app mostra o erro |
+| `max_log_bytes` | cada comunidade que o cliente provisionou | as operações são recusadas uma a uma com `quota_exceeded`; elas **ficam nas caixas de saída dos membros** e o app avisa que a comunidade ficou sem espaço |
 
-Log size counts stored log entries. An admin's snapshot lets the node
-compact the log behind it (after `compaction_grace_secs`), which frees
-quota; snapshot uploads are accepted while over quota for that reason.
-Mailboxes are bounded separately (`max_mailbox_items`, TTLs) and do not
-count. `migrate` is always accepted, so a community over quota can leave.
+O tamanho do log conta as entradas de log armazenadas. Um snapshot de um admin permite que o nó
+compacte o log anterior a ele (após `compaction_grace_secs`), o que libera
+cota; por esse motivo, uploads de snapshot são aceitos mesmo acima da cota.
+As caixas postais têm limites próprios (`max_mailbox_items`, TTLs) e não
+contam. `migrate` é sempre aceito, então uma comunidade acima da cota pode sair.
 
-## The operator API
+## A API de operador
 
-Served only when `operator_listen` is set, on that address only, with
-`Authorization: Bearer <operator_token>`. JSON, except export (CBOR).
+Servida apenas quando `operator_listen` está definido, somente nesse endereço, com
+`Authorization: Bearer <operator_token>`. JSON, exceto a exportação (CBOR).
 
-| Method & path | What it does |
+| Método e caminho | O que faz |
 |---|---|
-| `GET /operator/v1/communities` | Every community: id, tenant, created_at, head_seq, epoch, log/snapshot/mailbox bytes and counts, waiting join requests, suspended, moved_to, intake mode |
-| `GET /operator/v1/tenants` | Per tenant: communities, log bytes, and the configured limits |
-| `POST /operator/v1/communities/{id}/suspend` | Writes are refused with `403 suspended`; reads, export and `migrate` keep working |
-| `POST /operator/v1/communities/{id}/resume` | Undoes a suspension |
-| `GET /operator/v1/communities/{id}/export` | The community's restore payload (`application/cbor`), e.g. to hand it back when closing an account |
-| `DELETE /operator/v1/communities/{id}?confirm={id}` | Deletes every row of the community and ends its sessions. Irreversible |
-| `GET /operator/v1/metrics` | Prometheus text format |
+| `GET /operator/v1/communities` | Cada comunidade: id, cliente, created_at, head_seq, época, bytes e contagens de log/snapshot/caixa postal, pedidos de entrada pendentes, suspensa, moved_to, modo de entrada |
+| `GET /operator/v1/tenants` | Por cliente: comunidades, bytes de log e os limites configurados |
+| `POST /operator/v1/communities/{id}/suspend` | Escritas são recusadas com `403 suspended`; leituras, exportação e `migrate` continuam funcionando |
+| `POST /operator/v1/communities/{id}/resume` | Desfaz uma suspensão |
+| `GET /operator/v1/communities/{id}/export` | O payload de restauração da comunidade (`application/cbor`), por exemplo para devolvê-lo ao encerrar uma conta |
+| `DELETE /operator/v1/communities/{id}?confirm={id}` | Apaga todas as linhas da comunidade e encerra suas sessões. Irreversível |
+| `GET /operator/v1/metrics` | Formato de texto do Prometheus |
 
 ```sh
 export T=$VV_OPERATOR_TOKEN
@@ -105,83 +105,83 @@ curl -s -H "Authorization: Bearer $T" http://127.0.0.1:9787/operator/v1/communit
 curl -s -H "Authorization: Bearer $T" -X POST http://127.0.0.1:9787/operator/v1/communities/$ID/suspend
 ```
 
-Metrics are aggregated **per tenant, never per community**
+As métricas são agregadas **por cliente, nunca por comunidade**
 (`vv_communities`, `vv_communities_suspended`, `vv_communities_moved`,
 `vv_log_bytes`, `vv_snapshot_bytes`, `vv_mailbox_items`,
-`vv_mailbox_bytes`, `vv_intake_items` with a `tenant` label, plus
-`vv_sessions` and `vv_schema_version`), so shipping them to a monitoring
-service does not publish a list of communities.
+`vv_mailbox_bytes`, `vv_intake_items` com um rótulo `tenant`, além de
+`vv_sessions` e `vv_schema_version`), de modo que enviá-las a um serviço de
+monitoramento não publica uma lista de comunidades.
 
-What the operator API can see is exactly what the database already holds
-(threat-model.md, adversary A1): opaque ids, sizes, counts, times and
-admins' public keys. It has no endpoint that reveals or changes content,
-members, roles or keys. Suspension and deletion are the only levers, and
-neither can make a community stay: export works while suspended, and the
-admins' phones can rebuild the community anywhere even after a deletion.
+O que a API de operador consegue ver é exatamente o que o banco de dados já guarda
+(threat-model.md, adversário A1): ids opacos, tamanhos, contagens, horários e
+chaves públicas dos admins. Ela não tem nenhum endpoint que revele ou altere conteúdo,
+membros, papéis ou chaves. Suspensão e exclusão são as únicas alavancas, e
+nenhuma delas consegue obrigar uma comunidade a ficar: a exportação funciona durante a suspensão, e os
+celulares dos admins podem reconstruir a comunidade em qualquer lugar, mesmo depois de uma exclusão.
 
-## Moving a community in or out (protocol.md §11.3)
+## Mover uma comunidade para dentro ou para fora (protocol.md §11.3)
 
-From the app: **Me → Move to another server**, enter the new server's
-address and, if it asks for one, its setup code (the node's provisioning
-token or a tenant token). Under the hood, `Replica.migrateTo`:
+Pelo app: **Eu → Mudar de servidor**, informe o endereço do novo servidor
+e, se ele pedir, seu código de configuração (o token de provisionamento do nó
+ou um token de cliente). Por baixo dos panos, `Replica.migrateTo`:
 
-1. checks the target answers `/.well-known/vamo-virar`;
-2. submits a `migrate` control op, signed by the admin, naming the new
-   node. The old node accepts it and from then on **refuses every write**
-   with `409 moved` and the new address, so nothing can land there that the
-   new node would not have. Reads keep working;
-3. restores the community on the target from the log this device has
-   verified (`POST /v1/communities/restore`), carrying over the intake mode
-   and outstanding invite links from the old node's export;
-4. re-delivers the current key to every member's mailbox on the new node
-   (mailboxes are not moved) and switches to it.
+1. verifica se o destino responde em `/.well-known/vamo-virar`;
+2. envia uma operação de controle `migrate`, assinada pelo admin, indicando o novo
+   nó. O nó antigo a aceita e, a partir daí, **recusa toda escrita**
+   com `409 moved` e o novo endereço, para que nada caia ali que o
+   novo nó não teria. Leituras continuam funcionando;
+3. restaura a comunidade no destino a partir do log que este dispositivo
+   verificou (`POST /v1/communities/restore`), levando junto o modo de entrada
+   e os links de convite pendentes da exportação do nó antigo;
+4. reentrega a chave atual na caixa postal de cada membro no novo nó
+   (as caixas postais não são movidas) e passa a usá-lo.
 
-If the restore fails (no setup code, quota, a typo), the app signs a second
-`migrate` with an empty list, which cancels the move on the old node.
+Se a restauração falhar (sem código de configuração, cota, um erro de digitação), o app assina um segundo
+`migrate` com uma lista vazia, o que cancela a mudança no nó antigo.
 
-Members' phones follow on their next sync:
+Os celulares dos membros acompanham na próxima sincronização:
 
-- a phone that tries to write gets `409 moved` and keeps the change in its
-  outbox;
-- it pulls the log from the old node, finds the `migrate` entry, **checks
-  the admin's signature itself**, and switches to the first listed node
-  that already hosts the community;
-- it then sends what was waiting. Nothing is lost or duplicated (op ids are
-  kept).
+- um celular que tenta escrever recebe `409 moved` e mantém a alteração na sua
+  caixa de saída;
+- ele puxa o log do nó antigo, encontra a entrada `migrate`, **verifica
+  ele mesmo a assinatura do admin** e passa para o primeiro nó listado
+  que já hospeda a comunidade;
+- em seguida envia o que estava aguardando. Nada é perdido nem duplicado (os ids das operações
+  são mantidos).
 
-A phone never follows a bare `409 moved` from a node: only a signed
-`migrate` in the log moves it. A dishonest node or network can at most stop
-a phone from writing, which it could do anyway.
+Um celular nunca segue um `409 moved` isolado vindo de um nó: só um `migrate`
+assinado no log o move. Um nó ou rede desonesto pode, no máximo, impedir
+um celular de escrever, o que já poderia fazer de qualquer forma.
 
-Invite links shared before the move keep working: a join request sent to
-the old node is answered with the new address and re-sent there (it is
-sealed to the community's intake key, so following the hint can at worst
-lose it, never expose it).
+Links de convite compartilhados antes da mudança continuam funcionando: um pedido de entrada enviado ao
+nó antigo é respondido com o novo endereço e reenviado para lá (ele é
+selado para a chave de entrada da comunidade, então seguir a indicação pode, no pior caso,
+perdê-lo, nunca expô-lo).
 
-### Keep moved communities readable for a while
+### Mantenha as comunidades movidas legíveis por um tempo
 
-Members who are offline during the move learn the new address from the old
-node's log. Keep a moved community on the old node, read-only, for at least
-`compaction_grace_secs` (30 days by default); the operator listing shows
-`moved_to`. After that, delete it with the operator API. A member who
-missed that window can still be pointed at the new node by hand
-(`Replica.moveTo`; in the app, by re-joining with a new link from the new
-node).
+Membros que estão offline durante a mudança descobrem o novo endereço pelo log do nó
+antigo. Mantenha uma comunidade movida no nó antigo, somente leitura, por pelo menos
+`compaction_grace_secs` (30 dias por padrão); a listagem do operador mostra
+`moved_to`. Depois disso, apague-a com a API de operador. Um membro que
+perdeu essa janela ainda pode ser apontado manualmente para o novo nó
+(`Replica.moveTo`; no app, entrando de novo com um novo link do novo
+nó).
 
-### When the old node is gone
+### Quando o nó antigo não existe mais
 
-`migrate` needs the old node. If it disappeared, an admin rebuilds the
-community from their phone with `Replica.restoreTo` (§11.3, §11.4), and
-members are pointed at the new address out of band (a new link). This was
-already possible before managed hosting and still is.
+`migrate` precisa do nó antigo. Se ele desapareceu, um admin reconstrói a
+comunidade pelo celular com `Replica.restoreTo` (§11.3, §11.4), e os
+membros recebem o novo endereço por outro canal (um novo link). Isso
+já era possível antes da hospedagem gerenciada e continua sendo.
 
-## Checklist for a hosting provider
+## Checklist para um provedor de hospedagem
 
-- Run the release binary or image unchanged; do not patch the node.
-- `operator_listen` on loopback or a private network only; a long random
-  `VV_OPERATOR_TOKEN`; TLS in front of `listen` (the bundled Caddy setup).
-- Back up `node.sqlite` with `community-node backup` (deploy.md).
-- Never suspend without notice, and never delete a community that has not
-  been offered its export or had time to move.
-- Upgrade by replacing the binary: schema changes are applied on start
-  (deploy.md, "Upgrades").
+- Rode o binário ou a imagem da release sem alterações; não modifique o nó.
+- `operator_listen` apenas em loopback ou numa rede privada; um
+  `VV_OPERATOR_TOKEN` longo e aleatório; TLS na frente de `listen` (a configuração do Caddy incluída).
+- Faça backup de `node.sqlite` com `community-node backup` (deploy.md).
+- Nunca suspenda sem aviso, e nunca apague uma comunidade à qual não
+  foi oferecida sua exportação ou que não teve tempo de se mudar.
+- Atualize substituindo o binário: mudanças de schema são aplicadas na inicialização
+  (deploy.md, "Atualizações").
