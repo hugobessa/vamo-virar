@@ -5,6 +5,7 @@ import { useApp } from "../../lib/context";
 import type { CommunityEntry } from "../../lib/store";
 import { fromHex, toHex } from "@vamo-virar/protocol";
 import { Text } from "react-native";
+import { NodeClient } from "@vamo-virar/sync";
 import { Banner, Body, Button, Card, Field, Heading } from "../kit";
 import { useTheme } from "../theme";
 
@@ -75,6 +76,7 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
               {recoverMsg ? <Banner tone={recoverMsg.tone} text={recoverMsg.text} /> : null}
             </Card>
           ) : null}
+          {r.isAdmin ? <MoveCard entry={entry} /> : null}
           <Button
             kind="danger"
             label={t("leave")}
@@ -85,5 +87,56 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
         </>
       )}
     </>
+  );
+}
+
+/** Admins: move the community to another server (managed ↔ self-hosted). */
+function MoveCard({ entry }: { entry: CommunityEntry }) {
+  const { t, store } = useApp();
+  const [address, setAddress] = useState("");
+  const [setupCode, setSetupCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
+  const valid = /^https?:\/\/\S+$/.test(address.trim());
+  return (
+    <Card>
+      <Heading>{t("moveTitle")}</Heading>
+      <Body muted>{t("moveHelp")}</Body>
+      <Body muted>{`${t("movedFrom")}: ${entry.replica.node}`}</Body>
+      <Field
+        testID="move-address"
+        label={t("serverAddress")}
+        value={address}
+        onChangeText={setAddress}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+      />
+      <Field testID="move-setup-code" label={t("setupCode")} value={setupCode} onChangeText={setSetupCode} autoCapitalize="none" autoCorrect={false} />
+      <Button
+        testID="move-button"
+        kind="secondary"
+        label={t("moveButton")}
+        busy={busy}
+        disabled={!valid || busy}
+        onPress={async () => {
+          if (!(await confirm(t("moveConfirm"), t("yes"), t("no")))) return;
+          setBusy(true);
+          setMsg(null);
+          try {
+            const target = new NodeClient(address.trim(), setupCode.trim() ? { provisioningToken: setupCode.trim() } : {});
+            await store.admin(entry.id, (rep) => rep.migrateTo(target));
+            setAddress("");
+            setSetupCode("");
+            setMsg({ tone: "ok", text: t("moveDone") });
+          } catch (e) {
+            setMsg({ tone: "danger", text: `${t("error")}: ${e instanceof Error ? e.message : String(e)}` });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+      {msg ? <Banner tone={msg.tone} text={msg.text} /> : null}
+    </Card>
   );
 }

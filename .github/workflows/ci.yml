@@ -19,6 +19,16 @@ jobs:
       - run: npm run build
       - run: npm test
 
+  # Phase 10: the node protocol must not depend on any cloud vendor.
+  vendor-independence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-vendor-independence.mjs
+
   rust:
     runs-on: ubuntu-latest
     steps:

@@ -45,6 +45,12 @@ and coordinating the people who attend them.
   `health`/`backup` subcommands, and a tag-triggered release of binaries
   (Linux x86-64/ARM64, macOS, Windows) and multi-arch images. See
   [`docs/deploy.md`](docs/deploy.md).
+- Phase 10 — managed hosting: the same binary with tenants and quotas, a
+  private operator API (usage, suspension, export, metrics), schema
+  upgrades on start, and moving a community between any two nodes with a
+  signed `migrate` that members follow on their own. CI checks the node
+  protocol stays free of cloud-vendor dependencies. See
+  [`docs/managed-hosting.md`](docs/managed-hosting.md).
 
 ```sh
 npm install && npm test     # TypeScript packages
@@ -57,6 +63,8 @@ cargo test                  # Rust crates
 | [`docs/protocol.md`](docs/protocol.md) | Normative wire protocol, operations, sync, keys (draft v0) |
 | [`docs/threat-model.md`](docs/threat-model.md) | Adversaries and what the design does and doesn't protect against |
 | [`docs/security.md`](docs/security.md) | Implementation rules for crypto, keys, node and app |
+| [`docs/deploy.md`](docs/deploy.md) | Running a community node |
+| [`docs/managed-hosting.md`](docs/managed-hosting.md) | Hosting many communities; moving a community between nodes |
 
 ## Planned layout
 

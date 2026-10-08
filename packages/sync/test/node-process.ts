@@ -22,13 +22,14 @@ export interface RunningNode {
   dataDir: string;
 }
 
-export async function startNode(config: Record<string, number | boolean | string> = {}): Promise<RunningNode> {
+/** `extraToml` is appended verbatim, for tables such as `[[tenants]]`. */
+export async function startNode(config: Record<string, number | boolean | string> = {}, extraToml = ""): Promise<RunningNode> {
   const dataDir = mkdtempSync(join(tmpdir(), "vv-node-"));
   const lines = Object.entries({ provisioning_token: TOKEN, ...config }).map(
     ([k, v]) => `${k} = ${typeof v === "string" ? JSON.stringify(v) : v}`,
   );
   const configPath = join(dataDir, "config.toml");
-  writeFileSync(configPath, `${lines.join("\n")}\n`);
+  writeFileSync(configPath, `${lines.join("\n")}\n${extraToml}`);
   const child: ChildProcess = spawn(NODE_BIN, ["--config", configPath, "--listen", "127.0.0.1:0", "--data-dir", dataDir], {
     stdio: ["ignore", "pipe", "pipe"],
   });

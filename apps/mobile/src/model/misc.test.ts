@@ -39,4 +39,11 @@ describe("sync status", () => {
     expect(syncStatusKey({ status: "active", connectivity: "ok", pending: 2 }).key).toBe("syncSending");
     expect(syncStatusKey({ status: "active", connectivity: "ok", pending: 0 }).key).toBe("syncUpToDate");
   });
+
+  it("says why the server is holding changes back", () => {
+    expect(syncStatusKey({ status: "active", connectivity: "ok", pending: 1, blocked: "moved" }).key).toBe("syncMoving");
+    expect(syncStatusKey({ status: "active", connectivity: "ok", pending: 1, blocked: "suspended" }).key).toBe("syncSuspended");
+    expect(syncStatusKey({ status: "active", connectivity: "ok", pending: 1, blocked: "quota_exceeded" }).key).toBe("syncFull");
+    expect(syncStatusKey({ status: "active", connectivity: "offline", pending: 1, blocked: "moved" }).key).toBe("syncOffline");
+  });
 });

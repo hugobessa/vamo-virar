@@ -28,6 +28,24 @@ export class NodeError extends Error {
   }
 }
 
+/** The admin-signed new location, when a node says the community moved (§11.3). */
+export function movedTo(e: unknown): string[] | null {
+  if (!(e instanceof NodeError) || e.code !== "moved") return null;
+  const nodes = e.extra.nodes;
+  return Array.isArray(nodes) ? nodes.filter((n): n is string => typeof n === "string") : [];
+}
+
+export interface RestoreInput {
+  controlChain: LogEntry[];
+  snapshot?: SnapshotEnvelope;
+  tail: LogEntry[];
+  intakeMode?: IntakeMode;
+  /** Hashes of outstanding invite links, so they keep working after a move. */
+  invites?: { hash: Uint8Array; expires_at: number; uses_left: number }[];
+}
+
+export type IntakeMode = "open" | "invite_only" | "closed";
+
 export type SubmitResult = { op_id: Uint8Array; seq: number } | { op_id?: Uint8Array; error: string };
 
 export interface MailboxItem {
@@ -67,6 +85,11 @@ export class NodeClient {
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.fetchImpl = opts.fetch ?? ((...a) => fetch(...a));
+  }
+
+  /** A client for another node, with the same transport (used to follow a move). */
+  elsewhere(baseUrl: string, opts: Omit<NodeClientOptions, "fetch"> = {}): NodeClient {
+    return new NodeClient(baseUrl, { ...opts, fetch: this.fetchImpl });
   }
 
   // -------------------------------------------------------------------------
@@ -164,11 +187,13 @@ export class NodeClient {
     await this.raw("POST", "/v1/communities", { genesis: envelopeToCbor(genesis) }, this.provisionHeaders());
   }
 
-  async restoreCommunity(input: { controlChain: LogEntry[]; snapshot?: SnapshotEnvelope; tail: LogEntry[] }): Promise<number> {
+  async restoreCommunity(input: RestoreInput): Promise<number> {
     const body: Obj = {
       control_chain: input.controlChain.map(logEntryToCbor),
       tail: input.tail.map(logEntryToCbor),
       snapshot: input.snapshot ? snapshotEnvelopeToCbor(input.snapshot) : undefined,
+      intake_mode: input.intakeMode,
+      invites: input.invites,
     };
     const res = (await this.raw("POST", "/v1/communities/restore", body, this.provisionHeaders())) as Obj;
     return res.head_seq as number;
@@ -251,8 +276,29 @@ export class NodeClient {
     await this.authed("DELETE", `/v1/c/${toHex(cid)}/intake/${id}`, cid, "control", admin);
   }
 
-  async setIntakeMode(cid: Uint8Array, admin: SigningKeyPair, mode: "open" | "invite_only" | "closed"): Promise<void> {
+  async setIntakeMode(cid: Uint8Array, admin: SigningKeyPair, mode: IntakeMode): Promise<void> {
     await this.authed("PUT", `/v1/c/${toHex(cid)}/intake-policy`, cid, "control", admin, { mode });
+  }
+
+  async intakeMode(cid: Uint8Array, admin: SigningKeyPair): Promise<IntakeMode> {
+    const res = (await this.authed("GET", `/v1/c/${toHex(cid)}/intake-policy`, cid, "control", admin)) as Obj;
+    return res.mode as IntakeMode;
+  }
+
+  /** Admin export (§11.3): exactly what `restoreCommunity` takes. */
+  async exportCommunity(cid: Uint8Array, admin: SigningKeyPair): Promise<RestoreInput> {
+    const res = (await this.authed("GET", `/v1/c/${toHex(cid)}/export`, cid, "control", admin)) as Obj;
+    return {
+      controlChain: (res.control_chain as CborValue[]).map(logEntryFromCbor),
+      tail: (res.tail as CborValue[]).map(logEntryFromCbor),
+      ...(res.snapshot ? { snapshot: snapshotEnvelopeFromCbor(res.snapshot) } : {}),
+      intakeMode: res.intake_mode as IntakeMode,
+      invites: (res.invites as Obj[]).map((i) => ({
+        hash: i.hash as Uint8Array,
+        expires_at: i.expires_at as number,
+        uses_left: i.uses_left as number,
+      })),
+    };
   }
 
   async registerInvite(cid: Uint8Array, admin: SigningKeyPair, hash: Uint8Array, expiresAt: number, maxUses: number): Promise<void> {

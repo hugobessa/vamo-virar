@@ -56,6 +56,36 @@ fn key_list(v: Option<&Value>) -> Result<Vec<[u8; 32]>> {
     items.iter().map(|k| bytes::<32>(Some(k), "key")).collect()
 }
 
+pub const MAX_NODES: usize = 5;
+pub const MAX_NODE_URL: usize = 200;
+
+/// `migrate` targets: up to five http(s) base URLs of printable ASCII.
+fn node_list(v: Option<&Value>) -> Result<Vec<String>> {
+    let Some(Value::Array(items)) = v else {
+        return Err(WireError::Malformed("node list"));
+    };
+    if items.len() > MAX_NODES {
+        return Err(WireError::Malformed("node list"));
+    }
+    items
+        .iter()
+        .map(|n| {
+            let url = n.as_text().ok_or(WireError::Malformed("node url"))?;
+            let rest = url
+                .strip_prefix("https://")
+                .or_else(|| url.strip_prefix("http://"))
+                .ok_or(WireError::Malformed("node url"))?;
+            if rest.is_empty()
+                || url.len() > MAX_NODE_URL
+                || !url.bytes().all(|c| (0x21..=0x7e).contains(&c))
+            {
+                return Err(WireError::Malformed("node url"));
+            }
+            Ok(url.to_owned())
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // Control headers
 // ---------------------------------------------------------------------------
@@ -75,6 +105,10 @@ pub enum ControlArgs {
     AdminSet {
         admins: Vec<[u8; 32]>,
         ik: Option<[u8; 32]>,
+    },
+    /// Where the community lives from now on (§11.3). Empty cancels a move.
+    Migrate {
+        nodes: Vec<String>,
     },
 }
 
@@ -121,6 +155,12 @@ impl ControlHeader {
                 ControlArgs::AdminSet {
                     admins: key_list(a.get("admins"))?,
                     ik: a.get("ik").map(|ik| bytes(Some(ik), "ik")).transpose()?,
+                }
+            }
+            "migrate" => {
+                map_fields(a, &["nodes"], "migrate args")?;
+                ControlArgs::Migrate {
+                    nodes: node_list(a.get("nodes"))?,
                 }
             }
             _ => return Err(WireError::Malformed("ctrl kind")),

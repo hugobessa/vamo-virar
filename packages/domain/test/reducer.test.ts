@@ -239,6 +239,21 @@ describe("control plane", () => {
     expect(last(b).out).toEqual(applied);
     expect(last(b).state.admin_set).toEqual([bia.msk]);
   });
+
+  it("migrate records where the community lives; members cannot move it; empty cancels", () => {
+    const { b, ana, caio } = setup();
+    const migrate = (signer: string, nodes: string[]) => b.migrate(signer, nodes);
+    migrate(caio.msk, ["https://elsewhere.example"]);
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    migrate(ana.msk, ["ftp://node.example"]);
+    expect(last(b).out).toEqual(rejected("malformed"));
+    migrate(ana.msk, ["https://node-b.example"]);
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.community.nodes).toEqual(["https://node-b.example"]);
+    migrate(ana.msk, []);
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.community.nodes).toBeUndefined();
+  });
 });
 
 describe("events", () => {

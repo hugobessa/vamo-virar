@@ -14,15 +14,19 @@ USAGE:
     community-node [serve] [--config <file.toml>] [--listen <addr>] [--data-dir <dir>]
     community-node health [--url <http://host:port>]
     community-node backup --out <file> [--config <file.toml>] [--data-dir <dir>]
+    community-node tenant-token
     community-node --version
 
 serve (default)  Run the node. Options override the config file; the
                  environment variables VV_LISTEN, VV_DATA_DIR,
-                 VV_PROVISIONING_TOKEN and VV_TRUST_FORWARDED_FOR override both.
+                 VV_PROVISIONING_TOKEN, VV_TRUST_FORWARDED_FOR,
+                 VV_OPERATOR_LISTEN and VV_OPERATOR_TOKEN override both.
 health           Exit 0 if the node at --url (default http://127.0.0.1:8787)
                  answers. For container health checks.
 backup           Write a consistent copy of the node's database to --out,
                  safely while the node is running.
+tenant-token     Managed hosting: print a new tenant provisioning token and
+                 the token_sha256 line for its [[tenants]] entry.
 
 Set RUST_LOG=info (or debug) for logs.";
 
@@ -36,7 +40,7 @@ struct Args {
 fn parse_args() -> Result<Args, String> {
     let mut args = std::env::args().skip(1).peekable();
     let cmd = match args.peek().map(String::as_str) {
-        Some("serve" | "health" | "backup") => args.next().unwrap(),
+        Some("serve" | "health" | "backup" | "tenant-token") => args.next().unwrap(),
         _ => "serve".to_owned(),
     };
     let (mut config_path, mut listen, mut data_dir, mut out) = (None::<PathBuf>, None, None, None);
@@ -84,6 +88,17 @@ fn parse_args() -> Result<Args, String> {
             config.provisioning_token = Some(t);
         }
     }
+    if let Ok(v) = std::env::var("VV_OPERATOR_LISTEN") {
+        if !v.is_empty() {
+            config.operator_listen = Some(v);
+        }
+    }
+    if let Ok(t) = std::env::var("VV_OPERATOR_TOKEN") {
+        if !t.is_empty() {
+            config.operator_token = Some(t);
+        }
+    }
+    config.validate()?;
     Ok(Args {
         cmd,
         config,
@@ -162,6 +177,16 @@ async fn main() {
                 std::process::exit(1);
             }
         },
+        "tenant-token" => {
+            let token = community_node::app::hex(&community_node::app::random::<32>());
+            let digest = <sha2::Sha256 as sha2::Digest>::digest(token.as_bytes());
+            println!("token (give this to the tenant): {token}");
+            println!(
+                "config line:  token_sha256 = \"{}\"",
+                community_node::app::hex(&digest)
+            );
+            return;
+        }
         "backup" => {
             let Some(out) = args.out else {
                 eprintln!("backup needs --out <file>");
@@ -197,7 +222,27 @@ async fn main() {
         );
     }
     let listen = config.listen.clone();
+    let operator_listen = config.operator_listen.clone();
     let app = Arc::new(App::new(config, store).expect("initialise node identity"));
+
+    if let Some(addr) = operator_listen {
+        let listener = tokio::net::TcpListener::bind(&addr)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("cannot listen on {addr} (operator API): {e}");
+                std::process::exit(1);
+            });
+        println!(
+            "operator API listening on {}",
+            listener.local_addr().map(|a| a.to_string()).unwrap_or(addr)
+        );
+        let op = community_node::operator_service(app.clone());
+        tokio::spawn(async move {
+            if let Err(e) = axum::serve(listener, op).await {
+                tracing::error!(error = %e, "operator API stopped");
+            }
+        });
+    }
 
     let hk = app.clone();
     let every = Duration::from_secs(app.config.housekeeping_interval_secs.max(1));

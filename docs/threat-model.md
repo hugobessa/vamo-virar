@@ -60,6 +60,10 @@ community, iOS/Android clients. Section numbers (§) refer to `protocol.md`.
 | Fork attack by node (A1) | Detected only on cross-device comparison; full detection is **[LATER]**. §13 |
 | Malicious snapshot by admin | Detected by members holding the log; not by new members. §17.5 |
 | Supply chain (malicious app update) | Out of protocol scope. Reproducible builds and F-Droid distribution are desirable. |
+| Hosting provider holds a community hostage (A1 as a business) | Suspension stops writes only; reads, `GET /export` and `migrate` keep working, and admins' phones can rebuild the community anywhere without the provider. Quotas also never block `migrate`. [`managed-hosting.md`](managed-hosting.md) |
+| Forged "moved" redirect (A1, A3) | Devices move only on an admin-signed `migrate` entry they verify themselves; a bare `409 moved` just keeps their changes queued. Tested in `tests/offline` ("a node claiming the community moved…"). protocol §11.3 |
+| `migrate` reveals the new node address | The node list is in the cleartext control header (the old node must enforce the freeze and answer with it). The old operator, and removed members who still pull from it, learn where the community went; neither gains access there (no current EAK). Accepted for v0. |
+| Operator API exposure | Separate listener, bearer token, no content or key endpoints; metrics are per tenant, never per community, so monitoring services do not receive a community list. |
 
 ## Explicit non-goals for v0
 

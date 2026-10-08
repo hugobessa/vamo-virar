@@ -160,6 +160,50 @@ impl Fixture {
     }
 }
 
+impl Fixture {
+    /// A `migrate` control op (§11.3) signed by `signer`.
+    pub fn migrate(&mut self, signer: [u8; 32], nodes: &[&str]) -> OpEnvelope {
+        let cur = self.epoch().epoch;
+        let args = Value::map([(
+            "nodes",
+            Value::Array(nodes.iter().map(|n| Value::Text((*n).into())).collect()),
+        )]);
+        self.op_with(
+            cur,
+            signer,
+            "community.migrate",
+            Value::Map(vec![]),
+            Some((signer, "migrate", args)),
+        )
+    }
+}
+
+pub fn node_with(config: Config) -> Arc<App> {
+    Arc::new(App::new(config, Store::open_in_memory().unwrap()).unwrap())
+}
+
+/// A call to the operator API (its own router), returning status and body text.
+pub async fn operator(
+    app: &Arc<App>,
+    method: &str,
+    uri: &str,
+    token: Option<&str>,
+) -> (StatusCode, Vec<u8>) {
+    let mut req = Request::builder().method(method).uri(uri);
+    if let Some(t) = token {
+        req = req.header("authorization", format!("Bearer {t}"));
+    }
+    let res = community_node::operator_service(app.clone())
+        .oneshot(req.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let status = res.status();
+    (
+        status,
+        res.into_body().collect().await.unwrap().to_bytes().to_vec(),
+    )
+}
+
 pub async fn call(
     app: &Arc<App>,
     method: &str,

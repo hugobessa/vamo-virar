@@ -181,6 +181,7 @@ const CONTROL_INNER_TYPE: Record<ControlHeader["kind"], string> = {
   genesis: "community.init",
   rotate: "epoch.rotate",
   "admin.set": "admin.set",
+  migrate: "community.migrate",
 };
 
 function dispatch(s: CommunityState, e: Entry): Outcome {
@@ -238,7 +239,21 @@ function applyControlHeader(s: CommunityState, e: Entry, ctrl: ControlHeader): v
       if (ctrl.args.ik !== undefined) s.ik = ctrl.args.ik;
       return;
     }
+    case "migrate": {
+      if (!s.admin_set.includes(ctrl.signer) && ctrl.signer !== s.community.crk) reject("not_authorized");
+      if (e.epoch !== s.epoch) reject("stale_epoch");
+      const nodes = ctrl.args.nodes;
+      if (!Array.isArray(nodes) || nodes.length > 5 || !nodes.every(isNodeUrl)) reject("malformed");
+      if (nodes.length > 0) s.community.nodes = [...nodes];
+      else delete s.community.nodes;
+      return;
+    }
   }
+}
+
+/** Same rule as the wire decoder (§5): http(s), printable ASCII, ≤ 200 chars. */
+function isNodeUrl(u: unknown): boolean {
+  return typeof u === "string" && u.length <= 200 && /^https?:\/\/[\x21-\x7e]+$/.test(u);
 }
 
 type Handler = (s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry) => void;

@@ -285,7 +285,7 @@ encrypted `SignedOp` with the human-meaningful details.
 
 ```
 ControlHeader {
-  kind:     "genesis" | "rotate" | "admin.set"
+  kind:     "genesis" | "rotate" | "admin.set" | "migrate"
   signer:   bytes(32)      # MSK.public of an admin, or CRK.public for genesis / recovery
   csig:     bytes(64)      # Sign(signer, "vv/ctrl-sig/v1", {cid, op_id, epoch, kind, args})
   args:     map            # kind-specific, below
@@ -297,6 +297,7 @@ ControlHeader {
 | `genesis` | `{suite: "VV1", crk: CRK.public, admins: [MSK.public], eak: EAK_0.public, ik: IK.public}` | `signer == crk`; `SHA-256(ctx‖crk) == cid`; only valid as `seq 1` |
 | `rotate` | `{new_epoch: u32, eak: EAK_new.public}` | `signer ∈ admin_set`; `new_epoch == current_epoch + 1` |
 | `admin.set` | `{admins: [MSK.public], ik: IK.public?}` | `signer ∈ admin_set` **or** `signer == crk`; set non-empty |
+| `migrate` | `{nodes: [text]}`: 0–5 base URLs, each `http(s)://` followed by printable ASCII (0x21–0x7E), ≤ 200 bytes | `signer ∈ admin_set` **or** `signer == crk`; afterwards every write but `migrate` is refused with `moved` (§11.3). An empty list cancels a move |
 
 `rotate` and `admin.set` are encrypted under the **old** epoch key (the one
 in `epoch`), and the node switches `current_epoch` after accepting a `rotate`.
@@ -308,7 +309,9 @@ Devices MUST independently re-verify every control header — the node's
 enforcement is a convenience, not a trust anchor.
 
 The inner `SignedOp.type` of a control op is `community.init` (genesis),
-`epoch.rotate` or `admin.set`, and its `author` MUST equal `ctrl.signer`.
+`epoch.rotate`, `admin.set` or `community.migrate`, and its `author` MUST
+equal `ctrl.signer`. Malformed `migrate` node lists fail envelope decoding
+(`malformed`) on both sides; `tests/vectors/vv1.json` carries cases.
 A control entry's **effect comes from its header alone**, checked with exactly
 the rules in the table above: the node cannot read the body, so any extra
 device-side condition would let devices and the node disagree about the
@@ -846,24 +849,62 @@ plus this endpoint; a shared public directory is **[LATER]**.
 
 ### 11.3 Migrating / replacing a node [MVP]
 
-An admin device holds: the latest snapshot it produced or verified, the log
-entries after it, and the control-plane chain (genesis + every `rotate` and
-`admin.set` entry, which are never compacted — §12.3).
+A community is identified by its CRK, not by a node, so it can move. There
+are two cases.
+
+**Moving while the old node is alive** (e.g. from managed hosting to a
+self-hosted node or back; [`managed-hosting.md`](managed-hosting.md)):
+
+1. An admin submits a `migrate` control op naming the new node(s). The old
+   node accepts it, then refuses every write except another `migrate` with
+   `409 {code: "moved", nodes}` (ops, mailbox posts, intake, invites,
+   intake policy, snapshot uploads). Reads keep working, so the log ends at
+   the `migrate` entry and nothing lands that the new node would not get.
+2. The admin's device, now holding the complete log, restores it on the
+   new node (below), carrying the node-local settings (intake mode,
+   outstanding invite hashes) from the old node's `GET /c/{cid}/export`.
+3. The admin re-posts the current `key_env` for every active member on the
+   new node (mailboxes are not migrated).
+4. If the restore fails, the admin submits `migrate {nodes: []}`, which
+   reopens the old node.
+
+Devices learn the move **only from the signed `migrate` entry** in the log,
+never from a node's `moved` answer: a device that gets `moved` keeps its
+outbox and pulls; when it verifies a `migrate`, it records the list and, at
+the start of every later sync, tries each node in order, switching to the
+first that already hosts the community (authenticating and reading from its
+current seq succeeds). It then pushes its outbox there; op ids are kept, so
+nothing is applied twice. The new node continues the same `seq` numbering
+and hash chain, so the device's verifier simply continues.
+
+A join request answered with `moved` is re-sent to the first listed node;
+it is sealed to `IK`, so following an unsigned hint can lose it but not
+expose it.
+
+**Replacing a node that is gone** (§11.4): an admin device restores the
+community on a new node from what it holds, and members are given the new
+address out of band (e.g. a new invite link).
+
+**Restore.** An admin device holds the latest snapshot it produced or
+verified, the log entries after it, and the control-plane chain (genesis +
+every `rotate`, `admin.set` and `migrate` entry, never compacted — §12.3).
 
 ```
-POST /v1/c/{cid}/restore   (new node, control scope via genesis CRK or admin chain)
-  { control_chain: [LogEntry], snapshot: SnapshotEnvelope, tail: [LogEntry] }
+POST /v1/communities/restore   (provisioning token)
+  { control_chain: [LogEntry], snapshot?: SnapshotEnvelope, tail: [LogEntry],
+    intake_mode?: "open" | "invite_only" | "closed",
+    invites?: [{hash, expires_at, uses_left}] }
 ```
 
 The new node verifies: genesis matches `cid`; each control entry is properly
-signed by the then-admin-set; `tail` hash-chains from `snapshot.head`. It then
-continues the same `seq` numbering. The admin publishes a new
-`DirectoryEntry` with the new node URL and posts it in-band so devices learn
-the address (devices also accept a `node_moved` hint in a final signed op on
-the old node if it is still alive).
+signed by the then-admin-set (a `migrate` also under the then-current
+epoch); `tail` hash-chains from `snapshot.head`. It continues the same
+`seq` numbering. A `migrate` in the restored history does not mark the new
+node as moved: the community lives where it was restored.
 
-Mailbox contents are not migrated (they are ephemeral). Admins re-post current
-`key_env` items for all members on the new node as part of the restore flow.
+`GET /v1/c/{cid}/export` (control scope) returns exactly this body from a
+node's own store, so an admin (or the operator, on request) can take a
+community elsewhere even when the node is suspended.
 
 ### 11.4 Loss scenarios
 
@@ -904,7 +945,7 @@ Exactly the reducer's state, canonicalized:
 
 ```
 CommunityState {
-  community: {crk, name, description, region, policy},
+  community: {crk, name, description, region, policy, nodes?},   # nodes: set by `migrate`
   epoch, eak, admin_set, ik,
   clock: {seq, now},                       # last applied seq; retention clock
   members: [MemberRecord],                 # active + recently removed (for reason display)
@@ -1026,7 +1067,7 @@ CBOR (`application/cbor`); `.well-known` is JSON. Identifiers in paths
 | `POST /auth/challenge` | — | `{community_id}` → `{nonce, node_id, expires_at}` (single use, 60 s) |
 | `POST /auth/session` | — | `{community_id, nonce, scope, public_key, sig}` → `{token, expires_at}` |
 | `POST /communities` | provisioning token (`x-vv-provision-token`) | `{genesis: OpEnvelope}` → `{community_id, seq}` |
-| `POST /communities/restore` | provisioning token | `{control_chain: [LogEntry], snapshot?, tail: [LogEntry]}` → `{community_id, head_seq}` (§11.3) |
+| `POST /communities/restore` | provisioning token | `{control_chain: [LogEntry], snapshot?, tail: [LogEntry], intake_mode?, invites?}` → `{community_id, head_seq}` (§11.3) |
 | `POST /c/{cid}/ops` | community | `{ops: [OpEnvelope]}` (≤ 100) → `{results: [{op_id, seq} \| {op_id, error}], head_seq}` |
 | `GET /c/{cid}/ops?after=&limit=` | community | → `{entries: [LogEntry], head_seq}` or `410 {code: "gone", snapshot_seq}` |
 | `GET /c/{cid}/control` | community | → `{entries}`: every control-plane entry (never compacted) |
@@ -1037,7 +1078,8 @@ CBOR (`application/cbor`); `.well-known` is JSON. Identifiers in paths
 | `DELETE /c/{cid}/mailbox/{mbx}/{id}` | mailbox | ack |
 | `POST /c/{cid}/intake` | — (rate-limited) | `{enc, ct, invite?}` → `{id}`; `invite` is the raw secret, checked against registered hashes in `invite_only` mode |
 | `GET /c/{cid}/intake?after=` / `DELETE …/{id}` | control | admins read/ack sealed join requests |
-| `PUT /c/{cid}/intake-policy` | control | `{mode: "open" \| "invite_only" \| "closed"}` |
+| `GET /c/{cid}/intake-policy` / `PUT` | control | `{mode: "open" \| "invite_only" \| "closed"}` |
+| `GET /c/{cid}/export` | control | the §11.3 restore body for this community; works while moved or suspended |
 | `POST /c/{cid}/invites` | control | `{hash, expires_at, max_uses}` |
 | `GET /c/{cid}/directory` / `PUT` | — / control | opaque signed `DirectoryEntry` (§11.2) |
 | `PUT /c/{cid}/cursor` | community | §6.5 **[LATER]** |
@@ -1060,7 +1102,16 @@ token when its key leaves the admin set.
 Errors: `{code: text, detail: text}` with codes `malformed`, `unauthorized`,
 `forbidden`, `not_hosted`, `not_found`, `epoch_stale`, `epoch_conflict`
 (a `rotate` that lost a race, §7.5), `op_conflict`, `already_exists`,
-`gone`, `stale`, `too_large`, `rate_limited`, `closed`.
+`gone`, `stale`, `too_large`, `rate_limited`, `closed`, and for hosting:
+`moved` (409, with `nodes`; §11.3), `suspended` (403: the operator paused
+writes; reads and export work) and `quota_exceeded` (507; per op in
+`POST /ops` results, or on create/restore). Devices keep ops refused with
+`moved`, `suspended` or `quota_exceeded` in their outbox. A `migrate` is
+accepted in all three states, so a community can always leave.
+
+A node may also expose an operator API on a separate listener
+([`managed-hosting.md`](managed-hosting.md)); it is not part of this
+protocol and devices never use it.
 
 ### Context strings
 

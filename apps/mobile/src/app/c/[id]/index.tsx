@@ -35,7 +35,12 @@ export default function Community() {
     );
   }
 
-  const sync = syncStatusKey({ status: r.status, connectivity: entry.connectivity, pending: r.pending.length });
+  const sync = syncStatusKey({
+    status: r.status,
+    connectivity: entry.connectivity,
+    pending: r.pending.length,
+    blocked: entry.lastReport?.blocked,
+  });
   return (
     <Screen>
       <Stack.Screen options={{ title: state.community.name }} />

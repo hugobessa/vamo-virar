@@ -98,6 +98,45 @@ CREATE TABLE IF NOT EXISTS directory (
 );
 "#;
 
+/// Schema changes after v0, applied in order and tracked in
+/// `PRAGMA user_version`. Never edit an entry once released; append.
+const MIGRATIONS: &[&str] = &[
+    // 1 — managed hosting (Phase 10): tenants, suspension, moves, usage.
+    r#"
+    ALTER TABLE communities ADD COLUMN tenant TEXT;
+    ALTER TABLE communities ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE communities ADD COLUMN moved_to BLOB;
+    ALTER TABLE communities ADD COLUMN log_bytes INTEGER NOT NULL DEFAULT 0;
+    UPDATE communities SET log_bytes =
+      (SELECT COALESCE(SUM(length(entry)), 0) FROM entries e WHERE e.cid = communities.cid);
+    CREATE INDEX IF NOT EXISTS communities_by_tenant ON communities (tenant);
+    "#,
+];
+
+pub const SCHEMA_VERSION: usize = MIGRATIONS.len();
+
+fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(SCHEMA)?;
+    let version: usize = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    if version > SCHEMA_VERSION {
+        return Err(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
+            Some(format!(
+                "database schema version {version} is newer than this binary supports \
+                 ({SCHEMA_VERSION}); run a newer community-node"
+            )),
+        ));
+    }
+    for (i, m) in MIGRATIONS.iter().enumerate().skip(version) {
+        let tx = conn.transaction()?;
+        tx.execute_batch(m)?;
+        tx.pragma_update(None, "user_version", i + 1)?;
+        tx.commit()?;
+        tracing::info!(version = i + 1, "database schema migrated");
+    }
+    Ok(())
+}
+
 /// The node-enforced state of one community (protocol.md §5).
 #[derive(Clone, Debug)]
 pub struct Community {
@@ -111,6 +150,36 @@ pub struct Community {
     pub head_at: u64,
     pub compacted_through: u64,
     pub intake_mode: String,
+    /// Managed hosting: which tenant provisioned it (None: the node's own token).
+    pub tenant: Option<String>,
+    /// Suspended by the operator: reads and export work, writes do not.
+    pub suspended: bool,
+    /// After an accepted `migrate` (§11.3): where the community went.
+    /// Empty when it lives here.
+    pub moved_to: Vec<String>,
+    /// Bytes of log entries currently stored, for quotas and usage.
+    pub log_bytes: u64,
+}
+
+impl Community {
+    pub fn new(cid: Cid, crk: [u8; 32], admin_set: Vec<[u8; 32]>, rotated_at: u64) -> Community {
+        Community {
+            cid,
+            crk,
+            epoch: 0,
+            rotated_at,
+            admin_set,
+            head_seq: 0,
+            head_hash: [0; 32],
+            head_at: 0,
+            compacted_through: 0,
+            intake_mode: "open".into(),
+            tenant: None,
+            suspended: false,
+            moved_to: Vec::new(),
+            log_bytes: 0,
+        }
+    }
 }
 
 pub struct Store {
@@ -129,6 +198,25 @@ pub fn encode_keys(keys: &[[u8; 32]]) -> Vec<u8> {
     ))
 }
 
+fn encode_urls(urls: &[String]) -> Option<Vec<u8>> {
+    if urls.is_empty() {
+        return None;
+    }
+    Some(cbor::encode(&Value::Array(
+        urls.iter().map(|u| Value::Text(u.clone())).collect(),
+    )))
+}
+
+pub fn decode_urls(raw: Option<Vec<u8>>) -> Vec<String> {
+    match raw.as_deref().map(cbor::decode) {
+        Some(Ok(Value::Array(items))) => items
+            .iter()
+            .filter_map(|v| v.as_text().map(str::to_owned))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 fn decode_keys(raw: &[u8]) -> Vec<[u8; 32]> {
     match cbor::decode(raw) {
         Ok(Value::Array(items)) => items
@@ -141,14 +229,14 @@ fn decode_keys(raw: &[u8]) -> Vec<[u8; 32]> {
 
 impl Store {
     pub fn open(path: &Path) -> rusqlite::Result<Store> {
-        let conn = Connection::open(path)?;
-        conn.execute_batch(SCHEMA)?;
+        let mut conn = Connection::open(path)?;
+        migrate(&mut conn)?;
         Ok(Store { conn })
     }
 
     pub fn open_in_memory() -> rusqlite::Result<Store> {
-        let conn = Connection::open_in_memory()?;
-        conn.execute_batch(SCHEMA)?;
+        let mut conn = Connection::open_in_memory()?;
+        migrate(&mut conn)?;
         Ok(Store { conn })
     }
 
@@ -179,7 +267,8 @@ impl Store {
 
 pub fn community(c: &Connection, cid: &Cid) -> rusqlite::Result<Option<Community>> {
     c.query_row(
-        "SELECT crk, epoch, rotated_at, admin_set, head_seq, head_hash, head_at, compacted_through, intake_mode
+        "SELECT crk, epoch, rotated_at, admin_set, head_seq, head_hash, head_at, compacted_through, intake_mode,
+                tenant, suspended, moved_to, log_bytes
          FROM communities WHERE cid = ?1",
         [cid],
         |r| {
@@ -194,6 +283,10 @@ pub fn community(c: &Connection, cid: &Cid) -> rusqlite::Result<Option<Community
                 head_at: r.get(6)?,
                 compacted_through: r.get(7)?,
                 intake_mode: r.get(8)?,
+                tenant: r.get(9)?,
+                suspended: r.get(10)?,
+                moved_to: decode_urls(r.get(11)?),
+                log_bytes: r.get(12)?,
             })
         },
     )
@@ -203,8 +296,9 @@ pub fn community(c: &Connection, cid: &Cid) -> rusqlite::Result<Option<Community
 pub fn insert_community(c: &Connection, cm: &Community, now: u64) -> rusqlite::Result<()> {
     c.execute(
         "INSERT INTO communities
-           (cid, crk, epoch, rotated_at, admin_set, head_seq, head_hash, head_at, compacted_through, intake_mode, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+           (cid, crk, epoch, rotated_at, admin_set, head_seq, head_hash, head_at, compacted_through, intake_mode, created_at,
+            tenant, suspended, moved_to, log_bytes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         params![
             cm.cid,
             cm.crk,
@@ -216,7 +310,11 @@ pub fn insert_community(c: &Connection, cm: &Community, now: u64) -> rusqlite::R
             cm.head_at,
             cm.compacted_through,
             cm.intake_mode,
-            now
+            now,
+            cm.tenant,
+            cm.suspended,
+            encode_urls(&cm.moved_to),
+            cm.log_bytes
         ],
     )?;
     Ok(())
@@ -225,7 +323,8 @@ pub fn insert_community(c: &Connection, cm: &Community, now: u64) -> rusqlite::R
 pub fn update_community(c: &Connection, cm: &Community) -> rusqlite::Result<()> {
     c.execute(
         "UPDATE communities SET epoch = ?2, rotated_at = ?3, admin_set = ?4, head_seq = ?5, head_hash = ?6,
-           head_at = ?7, compacted_through = ?8, intake_mode = ?9
+           head_at = ?7, compacted_through = ?8, intake_mode = ?9, tenant = ?10, suspended = ?11,
+           moved_to = ?12, log_bytes = ?13
          WHERE cid = ?1",
         params![
             cm.cid,
@@ -236,7 +335,11 @@ pub fn update_community(c: &Connection, cm: &Community) -> rusqlite::Result<()> 
             cm.head_hash,
             cm.head_at,
             cm.compacted_through,
-            cm.intake_mode
+            cm.intake_mode,
+            cm.tenant,
+            cm.suspended,
+            encode_urls(&cm.moved_to),
+            cm.log_bytes
         ],
     )?;
     Ok(())
@@ -325,4 +428,29 @@ pub fn communities(c: &Connection) -> rusqlite::Result<Vec<Cid>> {
     let mut st = c.prepare("SELECT cid FROM communities")?;
     let rows = st.query_map([], |r| blob32(r.get(0)?))?;
     rows.collect()
+}
+
+pub fn communities_of_tenant(c: &Connection, tenant: &str) -> rusqlite::Result<u64> {
+    c.query_row(
+        "SELECT COUNT(*) FROM communities WHERE tenant = ?1",
+        [tenant],
+        |r| r.get(0),
+    )
+}
+
+/// Removes every row of a community. Irreversible; the operator API asks for confirmation.
+pub fn delete_community(c: &Connection, cid: &Cid) -> rusqlite::Result<bool> {
+    for table in [
+        "entries",
+        "op_ids",
+        "epochs",
+        "snapshots",
+        "mailbox",
+        "intake",
+        "invites",
+        "directory",
+    ] {
+        c.execute(&format!("DELETE FROM {table} WHERE cid = ?1"), [cid])?;
+    }
+    Ok(c.execute("DELETE FROM communities WHERE cid = ?1", [cid])? > 0)
 }

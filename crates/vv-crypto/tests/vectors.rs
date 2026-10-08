@@ -227,6 +227,36 @@ fn op_envelopes() {
 }
 
 #[test]
+fn malformed_envelopes_do_not_decode() {
+    let v = vectors();
+    let cases = list(&v, "op_envelopes_malformed");
+    assert!(!cases.is_empty());
+    for case in cases {
+        let why = case["why"].as_str().unwrap();
+        assert!(
+            OpEnvelope::decode(&h(&case["envelope_cbor"])).is_err(),
+            "{why} decoded"
+        );
+    }
+}
+
+#[test]
+fn migrate_carries_its_node_list() {
+    use vv_crypto::envelope::ControlArgs;
+    let v = vectors();
+    let case = list(&v, "op_envelopes")
+        .iter()
+        .find(|c| c["why"] == "control migrate")
+        .expect("migrate vector");
+    let env = OpEnvelope::decode(&h(&case["envelope_cbor"])).unwrap();
+    let Some(ControlArgs::Migrate { nodes }) = env.ctrl.map(|c| c.args) else {
+        panic!("not a migrate header")
+    };
+    assert_eq!(nodes[0], "https://node-b.example/");
+    assert_eq!(nodes[2].len(), 200);
+}
+
+#[test]
 fn log_entries_hash_chain() {
     let v = vectors();
     let mut prev = [0u8; 32];

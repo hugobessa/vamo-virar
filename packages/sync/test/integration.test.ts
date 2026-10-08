@@ -3,7 +3,9 @@
 
 import { canonicalJson, type CommunityState } from "@vamo-virar/domain";
 import { toHex } from "@vamo-virar/protocol";
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { NodeClient, NodeError } from "../src/client.js";
 import { parseInvite } from "../src/invite.js";
 import { Replica } from "../src/replica.js";
 import { eventually, HAVE_NODE, startNode, type RunningNode } from "./node-process.js";
@@ -302,5 +304,87 @@ describe.skipIf(!HAVE_NODE)("compaction and node replacement", () => {
     await ana.sync();
     expect(ana.canonical!.events[ev]!.participations[bia.memberId]!.status).toBe("volunteered");
     expect(canon(ana.canonical)).toBe(canon(bia.canonical));
+  }, 30_000);
+});
+
+describe.skipIf(!HAVE_NODE)("moving between managed hosting and a self-hosted node", () => {
+  const TENANT_TOKEN = "tenant-coletivo-token";
+  let managed: RunningNode;
+  let selfHosted: RunningNode;
+  beforeAll(async () => {
+    const sha = createHash("sha256").update(TENANT_TOKEN).digest("hex");
+    managed = await startNode({}, `[[tenants]]\nname = "coletivo"\ntoken_sha256 = "${sha}"\nmax_communities = 3\n`);
+    selfHosted = await startNode();
+  });
+  afterAll(async () => {
+    await managed?.stop();
+    await selfHosted?.stop();
+  });
+
+  it("members follow a signed move, offline ones included; old links still work", async () => {
+    const tenant = new NodeClient(managed.url, { provisioningToken: TENANT_TOKEN });
+    const ana = await Replica.found(tenant, { name: "C11", displayName: "Ana" });
+    const bia = await Replica.join(managed.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia, "organizer");
+    const caio = await Replica.join(managed.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
+    await admit(ana, caio);
+    const oldLink = ana.openInviteLink();
+    const invite = await ana.createInvite({ maxUses: 2 });
+    const ev = toHex(new Uint8Array(16).fill(11));
+    bia.submit("event.create", eventBody(ev, "Antes da mudança"));
+    await syncAll(ana, bia, caio);
+    // Caio goes offline here and stays away for the whole move.
+
+    const head = await ana.migrateTo(selfHosted.client());
+    expect(ana.node).toBe(selfHosted.url);
+    expect(head).toBeGreaterThan(0);
+    expect(ana.canonical!.community.nodes).toEqual([selfHosted.url]);
+
+    // The old node refuses writes and points at the new one.
+    await expect(managed.client().submitJoinRequest(ana.cid, { enc: new Uint8Array(32), ct: new Uint8Array(8) })).rejects.toMatchObject({
+      code: "moved",
+    });
+
+    // Bia changed something before hearing about the move: it waits, then lands on the new node.
+    bia.submit("participation.volunteer", { event_id: ev });
+    const report = await bia.sync();
+    expect(bia.node).toBe(selfHosted.url);
+    expect(bia.pending).toHaveLength(0);
+    expect(report.blocked).toBeUndefined();
+    await ana.sync();
+    expect(ana.canonical!.events[ev]!.participations[bia.memberId]!.status).toBe("volunteered");
+
+    // Caio comes back much later and finds his way.
+    caio.submit("member.profile", { profile: { display_name: "Caio voltou" } });
+    await caio.sync();
+    expect(caio.node).toBe(selfHosted.url);
+    await syncAll(ana, bia, caio);
+    expect(canon(caio.canonical)).toBe(canon(ana.canonical));
+    expect(ana.canonical!.members[caio.memberId]!.profile!.display_name).toBe("Caio voltou");
+
+    // A link shared before the move still works: the request follows to the new node.
+    const dani = await Replica.join(managed.client(), parseInvite(oldLink), { displayName: "Dani" });
+    expect(dani.node).toBe(selfHosted.url);
+    await admit(ana, dani);
+    // Invite-only links carried over too.
+    await ana.setIntakeMode("invite_only");
+    const eva = await Replica.join(managed.client(), parseInvite(invite), { displayName: "Eva" });
+    await admit(ana, eva);
+    expect(eva.node).toBe(selfHosted.url);
+  }, 30_000);
+
+  it("a move to a node that refuses the restore is cancelled", async () => {
+    const tenant = new NodeClient(managed.url, { provisioningToken: TENANT_TOKEN });
+    const ana = await Replica.found(tenant, { name: "C12", displayName: "Ana" });
+    const bia = await Replica.join(managed.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia);
+    // No provisioning token for the target: it refuses the restore.
+    await expect(ana.migrateTo(new NodeClient(selfHosted.url))).rejects.toBeInstanceOf(NodeError);
+    expect(ana.node).toBe(managed.url);
+    expect(ana.canonical!.community.nodes).toBeUndefined();
+    bia.submit("member.profile", { profile: { display_name: "Bia fica" } });
+    await bia.sync();
+    expect(bia.node).toBe(managed.url);
+    expect(bia.pending).toHaveLength(0);
   }, 30_000);
 });

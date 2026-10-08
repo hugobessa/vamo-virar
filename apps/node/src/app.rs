@@ -43,6 +43,69 @@ pub struct Config {
     /// appends. Leave false when clients connect directly, or anyone could
     /// pick their own address.
     pub trust_forwarded_for: bool,
+    /// Managed hosting: address of the operator API (usage, suspension,
+    /// export, metrics). Never expose it publicly. Off when unset.
+    pub operator_listen: Option<String>,
+    /// Bearer token for the operator API. Required with `operator_listen`.
+    pub operator_token: Option<String>,
+    /// Managed hosting: customers who may provision communities with their
+    /// own token, each with optional limits.
+    pub tenants: Vec<Tenant>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Tenant {
+    pub name: String,
+    /// Lowercase hex SHA-256 of the tenant's provisioning token, so the
+    /// config file never holds the token itself (`community-node tenant-token`).
+    pub token_sha256: String,
+    pub max_communities: Option<u64>,
+    /// Bytes of log entries one community may hold. Snapshots let the node
+    /// compact the log, which frees quota.
+    pub max_log_bytes: Option<u64>,
+}
+
+impl Config {
+    /// Rejects settings that would fail later or silently do nothing.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.operator_listen.is_some()
+            && self.operator_token.as_deref().is_none_or(|t| t.len() < 16)
+        {
+            return Err("operator_listen needs operator_token (at least 16 characters)".into());
+        }
+        let mut names = std::collections::HashSet::new();
+        for t in &self.tenants {
+            if t.name.is_empty() || t.name.len() > 64 || !names.insert(t.name.as_str()) {
+                return Err(format!(
+                    "tenant names must be unique and 1-64 characters: {:?}",
+                    t.name
+                ));
+            }
+            if unhex::<32>(&t.token_sha256).is_none() {
+                return Err(format!(
+                    "tenant {}: token_sha256 must be 64 lowercase hex characters",
+                    t.name
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn tenant(&self, name: Option<&str>) -> Option<&Tenant> {
+        let name = name?;
+        self.tenants.iter().find(|t| t.name == name)
+    }
+
+    /// The tenant's quota for a community, if it has one.
+    pub fn max_log_bytes(&self, tenant: Option<&str>) -> Option<u64> {
+        self.tenant(tenant).and_then(|t| t.max_log_bytes)
+    }
+}
+
+/// Constant-time comparison for secrets.
+pub fn same_secret(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 impl Default for Config {
@@ -62,6 +125,9 @@ impl Default for Config {
             intake_per_community_per_hour: 200,
             housekeeping_interval_secs: 60,
             trust_forwarded_for: false,
+            operator_listen: None,
+            operator_token: None,
+            tenants: Vec::new(),
         }
     }
 }
@@ -237,11 +303,17 @@ impl App {
                 continue;
             }
             // Control-plane entries are kept forever (they are tiny and needed for restore).
+            let freed: u64 = tx.query_row(
+                "SELECT COALESCE(SUM(length(entry)), 0) FROM entries WHERE cid = ?1 AND seq <= ?2 AND plane = 'd'",
+                rusqlite::params![cid, seq],
+                |r| r.get(0),
+            )?;
             tx.execute(
                 "DELETE FROM entries WHERE cid = ?1 AND seq <= ?2 AND plane = 'd'",
                 rusqlite::params![cid, seq],
             )?;
             cm.compacted_through = seq;
+            cm.log_bytes = cm.log_bytes.saturating_sub(freed);
             store::update_community(&tx, &cm)?;
             tracing::info!(cid = %hex(&cid), through = seq, "compacted log");
         }

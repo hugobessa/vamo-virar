@@ -33,7 +33,10 @@ Only what it can verify without keys:
 - **hash chain**: each entry carries the previous entry's hash and the node
   receive time `at`;
 - **snapshots**: admin upload only, `head` must be the hash of the entry at
-  `seq`, signed with that epoch's access key.
+  `seq`, signed with that epoch's access key;
+- **moves**: `migrate` only by an admin or the CRK; afterwards the
+  community is read-only here and writes answer `409 moved` with the new
+  address (protocol §11.3).
 
 Domain rules (who may invite whom, capacity, …) are checked by devices.
 
@@ -52,6 +55,14 @@ data-plane log behind a snapshot older than `compaction_grace_secs` is
 deleted. Control-plane entries are kept forever; they are what an admin
 needs to rebuild the community elsewhere (`POST /v1/communities/restore`).
 
+## Managed hosting
+
+The same binary hosts communities for others: `[[tenants]]` with their own
+provisioning tokens and limits, suspension, and an operator API on a
+separate private listener (`operator_listen`). `community-node
+tenant-token` makes a tenant token. See
+[`docs/managed-hosting.md`](../../docs/managed-hosting.md).
+
 ## Tests
 
 ```sh
@@ -61,4 +72,7 @@ cargo test -p community-node
 `tests/api.rs` covers provisioning, sequencing and dedupe, the hash chain,
 auth scopes, rotation and the grace window, CRK recovery, mailboxes,
 intake/invites/rate limits, snapshots and compaction, and restore on a new
-node. `tests/stream.rs` covers WebSocket notifications.
+node. `tests/stream.rs` covers WebSocket notifications. `tests/managed.rs`
+covers moving a community (freeze, export, restore elsewhere, cancel),
+tenants and quotas, suspension, the operator API, and upgrading a v0
+database in place.

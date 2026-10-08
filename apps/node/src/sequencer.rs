@@ -5,7 +5,7 @@
 //! signatures, the admin set and epoch transitions. Domain validity is the
 //! devices' business (§8).
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use vv_crypto::cbor;
 use vv_crypto::envelope::{ControlArgs, LogEntry, OpEnvelope, Plane};
 use vv_crypto::keys::community_id;
@@ -21,6 +21,12 @@ pub enum Reject {
     EpochConflict,
     OpConflict,
     AlreadyExists,
+    /// The community moved to another node (§11.3); only `migrate` is accepted.
+    Moved,
+    /// The operator suspended the community; only `migrate` is accepted.
+    Suspended,
+    /// The tenant's storage quota is used up; only `migrate` is accepted.
+    QuotaExceeded,
 }
 
 impl Reject {
@@ -32,6 +38,9 @@ impl Reject {
             Reject::EpochConflict => "epoch_conflict",
             Reject::OpConflict => "op_conflict",
             Reject::AlreadyExists => "already_exists",
+            Reject::Moved => "moved",
+            Reject::Suspended => "suspended",
+            Reject::QuotaExceeded => "quota_exceeded",
         }
     }
 }
@@ -74,15 +83,17 @@ fn append(c: &Connection, cm: &mut Community, env: OpEnvelope, now: u64) -> Outc
     } else {
         "d"
     };
+    let raw = cbor::encode(&entry.to_value());
     store::insert_entry(
         c,
         &cm.cid,
         entry.seq,
         plane,
-        &cbor::encode(&entry.to_value()),
+        &raw,
         &entry.env.op_id,
         &env_hash(&entry.env),
     )?;
+    cm.log_bytes += raw.len() as u64;
     cm.head_seq = entry.seq;
     cm.head_hash = entry.hash();
     cm.head_at = at;
@@ -91,7 +102,12 @@ fn append(c: &Connection, cm: &mut Community, env: OpEnvelope, now: u64) -> Outc
 }
 
 /// Creates a community from its genesis envelope (seq 1).
-pub fn create(c: &Connection, env: OpEnvelope, now: u64) -> Outcome<(Cid, u64)> {
+pub fn create(
+    c: &Connection,
+    env: OpEnvelope,
+    now: u64,
+    tenant: Option<String>,
+) -> Outcome<(Cid, u64)> {
     let Some(ctrl) = &env.ctrl else {
         return Err(Reject::Unauthorized("not a genesis op").into());
     };
@@ -112,27 +128,33 @@ pub fn create(c: &Connection, env: OpEnvelope, now: u64) -> Outcome<(Cid, u64)> 
     if store::community(c, &env.cid)?.is_some() {
         return Err(Reject::AlreadyExists.into());
     }
-    let mut cm = Community {
-        cid: env.cid,
-        crk: *crk,
-        epoch: 0,
-        rotated_at: now,
-        admin_set: admins.clone(),
-        head_seq: 0,
-        head_hash: [0; 32],
-        head_at: 0,
-        compacted_through: 0,
-        intake_mode: "open".into(),
-    };
+    let mut cm = Community::new(env.cid, *crk, admins.clone(), now);
+    cm.tenant = tenant;
     store::insert_community(c, &cm, now)?;
     store::insert_eak(c, &cm.cid, 0, eak)?;
     let seq = append(c, &mut cm, env, now)?;
     Ok((cm.cid, seq))
 }
 
+pub fn is_migrate(env: &OpEnvelope) -> bool {
+    matches!(
+        env.ctrl.as_ref().map(|c| &c.args),
+        Some(ControlArgs::Migrate { .. })
+    )
+}
+
 /// Validates and sequences one envelope for an existing community.
 /// Idempotent: a known `op_id` with identical bytes returns its seq.
-pub fn submit(c: &Connection, env: OpEnvelope, now: u64, epoch_grace_ms: u64) -> Outcome<u64> {
+///
+/// `max_log_bytes` is the tenant's quota, if any. A moved, suspended or
+/// over-quota community still accepts `migrate`, so it can always leave.
+pub fn submit(
+    c: &Connection,
+    env: OpEnvelope,
+    now: u64,
+    epoch_grace_ms: u64,
+    max_log_bytes: Option<u64>,
+) -> Outcome<u64> {
     let mut cm = store::community(c, &env.cid)?.ok_or(Reject::NotHosted)?;
 
     if let Some((seq, hash)) = store::op_id(c, &cm.cid, &env.op_id)? {
@@ -141,6 +163,18 @@ pub fn submit(c: &Connection, env: OpEnvelope, now: u64, epoch_grace_ms: u64) ->
         } else {
             Err(Reject::OpConflict.into())
         };
+    }
+
+    if !is_migrate(&env) {
+        if !cm.moved_to.is_empty() {
+            return Err(Reject::Moved.into());
+        }
+        if cm.suspended {
+            return Err(Reject::Suspended.into());
+        }
+        if max_log_bytes.is_some_and(|max| cm.log_bytes + env.encode().len() as u64 > max) {
+            return Err(Reject::QuotaExceeded.into());
+        }
     }
 
     let in_grace = now.saturating_sub(cm.rotated_at) < epoch_grace_ms;
@@ -195,6 +229,17 @@ pub fn submit(c: &Connection, env: OpEnvelope, now: u64, epoch_grace_ms: u64) ->
                 }
                 cm.admin_set = admins.clone();
             }
+            ControlArgs::Migrate { nodes } => {
+                if !is_admin && ctrl.signer != cm.crk {
+                    return Err(Reject::Unauthorized(
+                        "migrate must be signed by an admin or the CRK",
+                    )
+                    .into());
+                }
+                // From now on writes are refused with the new location, so
+                // nothing lands here that the new node would not have.
+                cm.moved_to = nodes.clone();
+            }
         }
     }
     append(c, &mut cm, env, now)
@@ -210,6 +255,7 @@ pub fn restore(
     snapshot: Option<vv_crypto::snapshot::SnapshotEnvelope>,
     tail: Vec<LogEntry>,
     now: u64,
+    tenant: Option<String>,
 ) -> Outcome<(Cid, u64)> {
     let bad = |why| SeqError::Reject(Reject::Unauthorized(why));
     let genesis = control_chain.first().ok_or(bad("empty control chain"))?;
@@ -291,6 +337,15 @@ pub fn restore(
                     }
                     admin_set = admins.clone();
                 }
+                // A `migrate` that pointed here (or anywhere) is history on
+                // the restored node: the community lives where it is restored.
+                ControlArgs::Migrate { .. } => {
+                    if (!admin_set.contains(&ctrl.signer) && ctrl.signer != *crk)
+                        || e.env.epoch != epoch
+                    {
+                        return Err(bad("invalid migrate in restore"));
+                    }
+                }
             }
         }
     }
@@ -319,18 +374,13 @@ pub fn restore(
         (None, Some(s)) => (s.seq, s.head, genesis.at),
         (None, None) => (1, genesis.hash(), genesis.at),
     };
-    let cm = Community {
-        cid,
-        crk: *crk,
-        epoch,
-        rotated_at,
-        admin_set,
-        head_seq,
-        head_hash,
-        head_at,
-        compacted_through: if snapshot.is_some() { snap_seq } else { 0 },
-        intake_mode: "open".into(),
-    };
+    let mut cm = Community::new(cid, *crk, admin_set, rotated_at);
+    cm.epoch = epoch;
+    cm.head_seq = head_seq;
+    cm.head_hash = head_hash;
+    cm.head_at = head_at;
+    cm.compacted_through = if snapshot.is_some() { snap_seq } else { 0 };
+    cm.tenant = tenant;
     store::insert_community(c, &cm, now)?;
     for (n, k) in &eaks {
         store::insert_eak(c, &cid, *n, k)?;
@@ -343,16 +393,11 @@ pub fn restore(
         } else {
             "d"
         };
-        store::insert_entry(
-            c,
-            &cid,
-            e.seq,
-            plane,
-            &cbor::encode(&e.to_value()),
-            &e.env.op_id,
-            &env_hash(&e.env),
-        )?;
+        let raw = cbor::encode(&e.to_value());
+        store::insert_entry(c, &cid, e.seq, plane, &raw, &e.env.op_id, &env_hash(&e.env))?;
+        cm.log_bytes += raw.len() as u64;
     }
+    store::update_community(c, &cm)?;
     if let Some(s) = snapshot {
         c.execute(
             "INSERT INTO snapshots (cid, seq, env, stored_at) VALUES (?1, ?2, ?3, ?4)",
@@ -360,4 +405,67 @@ pub fn restore(
         )?;
     }
     Ok((cid, head_seq))
+}
+
+/// The restore payload for a community (§11.3): every control entry, the
+/// latest snapshot if any, and every entry after it, plus the intake mode
+/// and outstanding invites.
+/// Exactly what `POST /communities/restore` takes.
+pub fn export(c: &Connection, cid: &Cid) -> rusqlite::Result<Option<cbor::Value>> {
+    use cbor::Value;
+    let Some(cm) = store::community(c, cid)? else {
+        return Ok(None);
+    };
+    let decode = |raw: Vec<u8>| cbor::decode(&raw).map_err(|_| rusqlite::Error::InvalidQuery);
+    let snapshot: Option<(u64, Vec<u8>)> = c
+        .query_row(
+            "SELECT seq, env FROM snapshots WHERE cid = ?1 ORDER BY seq DESC LIMIT 1",
+            [cid],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    let after = snapshot.as_ref().map(|(seq, _)| *seq).unwrap_or(1);
+    let control = store::control_entries(c, cid)?
+        .into_iter()
+        .map(decode)
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut tail = Vec::new();
+    let mut from = after;
+    loop {
+        let page = store::entries_after(c, cid, from, 1000)?;
+        if page.is_empty() {
+            break;
+        }
+        for raw in page {
+            let v = decode(raw)?;
+            from = v
+                .get("seq")
+                .and_then(Value::as_uint)
+                .ok_or(rusqlite::Error::InvalidQuery)?;
+            tail.push(v);
+        }
+    }
+    // Outstanding invite links keep working after a move: carry their hashes.
+    let mut st = c.prepare(
+        "SELECT hash, expires_at, uses_left FROM invites WHERE cid = ?1 AND uses_left > 0 ORDER BY hash",
+    )?;
+    let invites = st
+        .query_map([cid], |r| {
+            Ok(Value::map([
+                ("hash", Value::Bytes(r.get(0)?)),
+                ("expires_at", Value::Int(r.get(1)?)),
+                ("uses_left", Value::Int(r.get(2)?)),
+            ]))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut fields = vec![
+        ("control_chain", Value::Array(control)),
+        ("tail", Value::Array(tail)),
+        ("intake_mode", Value::Text(cm.intake_mode)),
+        ("invites", Value::Array(invites)),
+    ];
+    if let Some((_, env)) = snapshot {
+        fields.push(("snapshot", decode(env)?));
+    }
+    Ok(Some(Value::map(fields)))
 }

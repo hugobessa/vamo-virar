@@ -584,6 +584,11 @@ graph LR
 
 A community can migrate between them.
 
+> Implemented in Phase 10: tenants, quotas and an operator API on the same
+> binary, and a signed `migrate` control op that freezes the old node and
+> that members' devices verify and follow. See
+> [`managed-hosting.md`](managed-hosting.md) and protocol §11.3.
+
 ## 42. Cost Model
 
 The node mostly performs: store, retrieve, route, sync, verify. Devices perform: calendar matching, location matching, privacy-sensitive computation, encryption/decryption, state reconstruction. Adding users does not proportionally increase server-side computation.

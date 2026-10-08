@@ -51,7 +51,7 @@ import {
   type SnapshotEnvelope,
 } from "@vamo-virar/crypto";
 import { decode, encode, fromHex, toHex, type CborValue } from "@vamo-virar/protocol";
-import { NodeClient, NodeError } from "./client.js";
+import { movedTo, NodeClient, NodeError, type RestoreInput } from "./client.js";
 import { inviteHash, inviteLink, openMail, sealMail, type Invite, type ProbeAnswer } from "./invite.js";
 
 export type Status =
@@ -96,6 +96,11 @@ export interface ReplicaData {
   incomingProbes?: IncomingProbe[];
   /** Probes this person sent, with the answers received so far. */
   sentProbes?: SentProbe[];
+  /**
+   * Set when we verified an admin-signed `migrate` (§11.3) and have not yet
+   * reached the new node. Only signed log entries set it, never a node's say-so.
+   */
+  pendingMove?: string[];
 }
 
 export interface IncomingProbe {
@@ -120,7 +125,15 @@ export interface SyncReport {
   status: Status;
   /** Our own ops the community rejected during this sync. */
   rejected: { opId: string; type: string; reason: string }[];
+  /**
+   * Why changes are waiting in the outbox, if the node refused writes: the
+   * community moved and the new node is not reachable yet, the hosting
+   * operator suspended it, or its storage quota is used up.
+   */
+  blocked?: "moved" | "suspended" | "quota_exceeded";
 }
+
+const sameNode = (a: string, b: string) => a.replace(/\/+$/, "") === b.replace(/\/+$/, "");
 
 export interface PendingJoin {
   intakeId: number;
@@ -135,6 +148,7 @@ export class Replica {
   private viewCache: CommunityState | null = null;
   private readonly listeners = new Set<() => void>();
   private syncing: Promise<SyncReport> | null = null;
+  private watcher: { onError?: (e: unknown) => void; stream: { close(): void } | null; stopped: boolean } | null = null;
 
   private constructor(
     public client: NodeClient,
@@ -211,7 +225,16 @@ export class Replica {
       { cid: invite.cid, profile, ...(input.message ? { message: input.message } : {}), ...(invite.secret ? { invite_code: invite.secret } : {}) },
       { rng },
     );
-    await client.submitJoinRequest(invite.cid, sealed, invite.secret);
+    try {
+      await client.submitJoinRequest(invite.cid, sealed, invite.secret);
+    } catch (e) {
+      // The link predates a move. The request is sealed to the intake key, so
+      // following the old node's hint can at worst lose it, never expose it.
+      const nodes = movedTo(e);
+      if (!nodes?.length) throw e;
+      client = client.elsewhere(nodes[0]!);
+      await client.submitJoinRequest(invite.cid, sealed, invite.secret);
+    }
     return new Replica(client, Replica.blank(invite.cid, client.baseUrl, keys, "joining"), rng);
   }
 
@@ -368,6 +391,8 @@ export class Replica {
 
   private async syncOnce(): Promise<SyncReport> {
     const report: SyncReport = { pushed: 0, pulled: 0, status: this.data.status, rejected: [] };
+    // A move we already verified comes first: the old node may be gone by now.
+    if (this.data.pendingMove) await this.followMove();
     await this.checkMail();
     if (
       this.data.status === "rejected" ||
@@ -378,8 +403,13 @@ export class Replica {
       return report;
     }
     if (!this.data.state) await this.bootstrap();
-    report.pushed = await this.push();
+    report.pushed = await this.push(report);
     report.pulled = await this.pull(report);
+    if (this.data.pendingMove && (await this.followMove())) {
+      delete report.blocked;
+      report.pushed += await this.push(report);
+      report.pulled += await this.pull(report);
+    }
     this.updateStatus();
     report.status = this.data.status;
     this.changed();
@@ -503,7 +533,7 @@ export class Replica {
   }
 
   /** Sends the outbox. Envelopes are re-sealed each time under the latest epoch, keeping op_ids (§7.4). */
-  private async push(): Promise<number> {
+  private async push(report: SyncReport): Promise<number> {
     if (this.data.outbox.length === 0 || !this.keyring.latest()) return 0;
     const batch = this.data.outbox.slice(0, 100);
     let results;
@@ -513,6 +543,11 @@ export class Replica {
       if (e instanceof NodeError && e.status === 401) {
         // Our access key is no longer current: a rotation we have no key for yet.
         if (this.data.status === "active") this.data.status = "waiting_for_key";
+        return 0;
+      }
+      // Keep everything; the pull that follows finds the signed `migrate`.
+      if (e instanceof NodeError && (e.code === "moved" || e.code === "suspended")) {
+        report.blocked = e.code;
         return 0;
       }
       throw e;
@@ -528,6 +563,9 @@ export class Replica {
         accepted++;
       } else if (r.error === "epoch_stale" || r.error === "unauthorized") {
         keep.push(item); // retry once we hold the new epoch key
+      } else if (r.error === "quota_exceeded" || r.error === "moved" || r.error === "suspended") {
+        report.blocked = r.error;
+        keep.push(item); // not about the op: retry later or on the new node
       } else {
         this.recordOwn(item.opId, item.type, { status: "rejected", reason: "malformed" });
       }
@@ -586,6 +624,7 @@ export class Replica {
 
   private checkpoint() {
     return {
+      pendingMove: this.data.pendingMove,
       state: this.data.state ? clone(this.data.state) : null,
       verifier: this.verifier.checkpoint(),
       log: this.data.log.length,
@@ -596,6 +635,8 @@ export class Replica {
   }
 
   private rollback(c: ReturnType<Replica["checkpoint"]>): void {
+    if (c.pendingMove) this.data.pendingMove = c.pendingMove;
+    else delete this.data.pendingMove;
     this.data.state = c.state;
     this.verifier = new LogVerifier(this.data.cid, this.keyring, c.verifier);
     this.data.log.length = c.log;
@@ -614,6 +655,11 @@ export class Replica {
     }
     this.data.log.push(e);
     if (e.env.ctrl && !this.data.control.some((c) => c.seq === e.seq)) this.data.control.push(e);
+    if (e.env.ctrl?.kind === "migrate" && outcome.status !== "rejected") {
+      const nodes = e.env.ctrl.args.nodes;
+      if (nodes.length && !nodes.some((n) => sameNode(n, this.data.node))) this.data.pendingMove = [...nodes];
+      else delete this.data.pendingMove;
+    }
     if (entry.op && entry.op.author === toHex(this.data.keys.signing.pk)) {
       this.recordOwn(entry.opId, entry.op.type, outcome);
       if (outcome.status === "rejected") report.rejected.push({ opId: entry.opId, type: entry.op.type, reason: outcome.reason });
@@ -625,12 +671,51 @@ export class Replica {
     if (this.data.ownOutcomes.length > OWN_OUTCOMES_MAX) this.data.ownOutcomes.shift();
   }
 
-  /** Opens the node's notification stream and syncs whenever it says something changed. */
+  /**
+   * Opens the node's notification stream and syncs whenever it says
+   * something changed. Follows the community when it moves to another node.
+   */
   async watch(onError?: (e: unknown) => void): Promise<() => void> {
+    this.watcher?.stream?.close();
+    const w: NonNullable<Replica["watcher"]> = { stream: null, stopped: false, ...(onError ? { onError } : {}) };
+    this.watcher = w;
+    await this.openStream(w);
+    return () => {
+      w.stopped = true;
+      w.stream?.close();
+      if (this.watcher === w) this.watcher = null;
+    };
+  }
+
+  private async openStream(w: NonNullable<Replica["watcher"]>): Promise<void> {
     const s = await this.client.stream(this.data.cid, this.currentAccess(), this.data.keys.signing, () => {
-      this.sync().catch((e) => onError?.(e));
+      this.sync().catch((e) => w.onError?.(e));
     });
-    return () => s.close();
+    if (w.stopped) s.close();
+    else w.stream = s;
+  }
+
+  /**
+   * After a verified `migrate`: switch to the first listed node that already
+   * hosts the community. Until one does (the admin is still restoring it),
+   * stay on the old node, which keeps serving reads.
+   */
+  private async followMove(): Promise<boolean> {
+    for (const url of this.data.pendingMove ?? []) {
+      if (sameNode(url, this.data.node)) {
+        delete this.data.pendingMove;
+        return false;
+      }
+      const target = this.client.elsewhere(url);
+      try {
+        await target.entries(this.data.cid, this.currentAccess(), this.verifier.seq, 1);
+      } catch {
+        continue; // not restored yet, or unreachable: try the next one later
+      }
+      this.moveTo(target);
+      return true;
+    }
+    return false;
   }
 
   // -------------------------------------------------------------------------
@@ -933,9 +1018,10 @@ export class Replica {
 
   /**
    * Rebuilds this community on another node from what this device holds
-   * (§11.3), then switches to it. Other devices switch with `moveTo`.
+   * (§11.3), then switches to it. For when the old node is gone; while it is
+   * alive, `migrateTo` also tells every member where to go.
    */
-  async restoreTo(target: NodeClient): Promise<number> {
+  async restoreTo(target: NodeClient, carry: Pick<RestoreInput, "intakeMode" | "invites"> = {}): Promise<number> {
     this.requireAdmin();
     const snap = this.data.snapshot;
     const genesisPresent = this.data.control.some((c) => c.seq === 1);
@@ -945,14 +1031,75 @@ export class Replica {
       controlChain: [...this.data.control].sort((a, b) => a.seq - b.seq),
       ...(snap ? { snapshot: snap } : {}),
       tail,
+      ...carry,
     });
     this.moveTo(target);
     return head;
+  }
+
+  /**
+   * Moves the community to another node, e.g. from managed hosting to a
+   * self-hosted node or back (§11.3):
+   *
+   * 1. a signed `migrate` on the current node freezes writes there;
+   * 2. this device, now holding the complete log, restores it on `target`;
+   * 3. the current epoch key is re-delivered (mailboxes do not move).
+   *
+   * Members follow on their next sync, verifying the `migrate` signature
+   * themselves. If the restore fails, the move is cancelled.
+   */
+  async migrateTo(target: NodeClient): Promise<number> {
+    this.requireAdmin();
+    if (sameNode(target.baseUrl, this.data.node)) throw new Error("the community is already on that node");
+    await target.wellKnown(); // reachable and speaks the protocol, before freezing anything
+    await this.sync();
+    const nodes = [target.baseUrl];
+    await this.submitControl("community.migrate", { kind: "migrate", args: { nodes } }, { nodes });
+    // The log comes from what this device verified; from the node's export
+    // only the node-local settings: intake mode and outstanding invites.
+    const { intakeMode, invites } = await this.client.exportCommunity(this.data.cid, this.data.keys.signing);
+    let head: number;
+    try {
+      head = await this.restoreTo(target, { ...(intakeMode ? { intakeMode } : {}), ...(invites ? { invites } : {}) });
+    } catch (e) {
+      if (!(e instanceof NodeError && e.code === "already_exists")) {
+        await this.submitControl("community.migrate", { kind: "migrate", args: { nodes: [] } }, { nodes: [], cancelled: true });
+        throw e;
+      }
+      this.moveTo(target); // an earlier attempt got this far
+      head = this.verifier.seq;
+    }
+    await this.redeliverEpochKey();
+    await this.sync();
+    return head;
+  }
+
+  /** Posts the current epoch key to every other active member's mailbox on this node. */
+  private async redeliverEpochKey(): Promise<void> {
+    const state = this.requireAdmin();
+    const epoch = this.keyring.latest()!;
+    for (const m of Object.values(state.members)) {
+      if (m.status !== "active" || m.member_id === this.memberId) continue;
+      const env = sealKeyEnvelope(this.data.cid, epoch.epoch, epoch.key, fromHex(m.mek), { rng: this.rng });
+      await this.client.postMailbox(this.data.cid, epoch.access, mailboxId(this.data.cid, fromHex(m.msk)), "key_env", encodeKeyEnvelope(env));
+    }
+  }
+
+  /** Where the community says it lives now, if it moved (§11.3). */
+  get movedTo(): string[] | undefined {
+    return this.data.pendingMove;
   }
 
   /** Points this replica at a different node hosting the same community. */
   moveTo(target: NodeClient): void {
     this.client = target;
     this.data.node = target.baseUrl;
+    if (this.data.pendingMove?.some((n) => sameNode(n, target.baseUrl))) delete this.data.pendingMove;
+    const w = this.watcher;
+    if (w && !w.stopped) {
+      w.stream?.close();
+      w.stream = null;
+      this.openStream(w).catch((e) => w.onError?.(e));
+    }
   }
 }

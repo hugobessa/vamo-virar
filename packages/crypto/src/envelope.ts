@@ -30,7 +30,9 @@ export type ControlArgs =
       args: { suite: "VV1"; crk: Uint8Array; admins: Uint8Array[]; eak: Uint8Array; ik: Uint8Array };
     }
   | { kind: "rotate"; args: { new_epoch: number; eak: Uint8Array } }
-  | { kind: "admin.set"; args: { admins: Uint8Array[]; ik?: Uint8Array } };
+  | { kind: "admin.set"; args: { admins: Uint8Array[]; ik?: Uint8Array } }
+  /** Where the community lives from now on (§11.3). Empty cancels a move. */
+  | { kind: "migrate"; args: { nodes: string[] } };
 
 export type ControlHeader = ControlArgs & { signer: Uint8Array; csig: Uint8Array };
 
@@ -79,6 +81,8 @@ function argsToCbor(c: ControlArgs): CborValue {
       return { ...c.args };
     case "admin.set":
       return { admins: [...c.args.admins], ik: c.args.ik };
+    case "migrate":
+      return { nodes: [...c.args.nodes] };
   }
 }
 
@@ -107,6 +111,18 @@ function keyList(v: CborValue | undefined): Uint8Array[] {
   return list;
 }
 
+export const MAX_NODES = 5;
+export const MAX_NODE_URL = 200;
+
+/** `migrate` targets: up to five http(s) base URLs of printable ASCII. */
+export function nodeList(v: CborValue | undefined): string[] {
+  return asArray(v, MAX_NODES).map((n) => {
+    const url = asText(n, MAX_NODE_URL);
+    if (!/^https?:\/\/[\x21-\x7e]+$/.test(url)) throw new WireError("bad node url");
+    return url;
+  });
+}
+
 function controlFromCbor(v: CborValue): ControlHeader {
   const m = asMap(v, ["kind", "signer", "csig", "args"]);
   const signer = asBytes(m.signer, 32);
@@ -131,6 +147,10 @@ function controlFromCbor(v: CborValue): ControlHeader {
       const a = asMap(m.args, ["admins", "ik"]);
       const ik = optional(a.ik, (x) => asBytes(x, 32));
       return { kind, signer, csig, args: ik ? { admins: keyList(a.admins), ik } : { admins: keyList(a.admins) } };
+    }
+    case "migrate": {
+      const a = asMap(m.args, ["nodes"]);
+      return { kind, signer, csig, args: { nodes: nodeList(a.nodes) } };
     }
     default:
       throw new WireError(`unknown control kind ${kind}`);
@@ -325,6 +345,8 @@ function controlToDomain(c: ControlHeader): DomainControl {
       if (c.args.ik) args.ik = toHex(c.args.ik);
       return { kind: "admin.set", signer, args };
     }
+    case "migrate":
+      return { kind: "migrate", signer, args: { nodes: [...c.args.nodes] } };
   }
 }
 

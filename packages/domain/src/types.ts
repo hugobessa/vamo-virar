@@ -13,7 +13,7 @@ export type OpId = Hex; // 16 random bytes
 // Log entries (input to the reducer)
 // ---------------------------------------------------------------------------
 
-export type ControlKind = "genesis" | "rotate" | "admin.set";
+export type ControlKind = "genesis" | "rotate" | "admin.set" | "migrate";
 
 export interface GenesisArgs {
   suite: "VV1";
@@ -33,10 +33,16 @@ export interface AdminSetArgs {
   ik?: Hex;
 }
 
+export interface MigrateArgs {
+  /** Base URLs of the node(s) now hosting the community; empty cancels a move. */
+  nodes: string[];
+}
+
 export type ControlHeader =
   | { kind: "genesis"; signer: Hex; args: GenesisArgs }
   | { kind: "rotate"; signer: Hex; args: RotateArgs }
-  | { kind: "admin.set"; signer: Hex; args: AdminSetArgs };
+  | { kind: "admin.set"; signer: Hex; args: AdminSetArgs }
+  | { kind: "migrate"; signer: Hex; args: MigrateArgs };
 
 /** The decrypted, signature-verified inner operation (SignedOp minus crypto fields). */
 export interface DecodedOp {
@@ -195,6 +201,8 @@ export interface CommunityState {
     description: string;
     region?: string;
     policy: Policy;
+    /** Set by `migrate` (§11.3): where the community lives now. */
+    nodes?: string[];
   };
   epoch: number;
   eak: Hex;

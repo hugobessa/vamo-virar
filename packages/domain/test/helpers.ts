@@ -125,6 +125,17 @@ export class LogBuilder {
     );
   }
 
+  migrate(signer: Person | string, nodes: string[], opts?: OpOpts): Entry {
+    const msk = typeof signer === "string" ? signer : signer.msk;
+    return this.push(
+      {
+        control: { kind: "migrate", signer: msk, args: { nodes } },
+        op: { author: msk, base: 0, ts: 0, type: "community.migrate", body: {} },
+      },
+      opts,
+    );
+  }
+
   // Convenience domain ops ------------------------------------------------
 
   add(admin: Person, p: Person, role: "member" | "organizer" = "member"): Entry {

@@ -35,28 +35,35 @@ if (!existsSync(join(dist, "index.html"))) fail("dist-web missing; run expo expo
 if (!existsSync(nodeBin)) fail(`community-node binary missing at ${nodeBin}`);
 mkdirSync(shots, { recursive: true });
 
-// --- community node ---------------------------------------------------------
-const dataDir = mkdtempSync(join(tmpdir(), "vv-e2e-"));
-writeFileSync(join(dataDir, "c.toml"), `provisioning_token = "${TOKEN}"\n`);
-const node = spawn(nodeBin, ["--config", join(dataDir, "c.toml"), "--listen", "127.0.0.1:0", "--data-dir", dataDir], { stdio: ["ignore", "pipe", "inherit"] });
-const nodeUrl = await new Promise((resolve, reject) => {
-  let out = "";
-  node.stdout.on("data", (d) => {
-    out += d;
-    const m = /listening on (\S+)/.exec(out);
-    if (m) resolve(`http://${m[1]}`);
+// --- community nodes: the first one, and a second to move to -----------------
+async function startNode() {
+  const dataDir = mkdtempSync(join(tmpdir(), "vv-e2e-"));
+  writeFileSync(join(dataDir, "c.toml"), `provisioning_token = "${TOKEN}"\n`);
+  const child = spawn(nodeBin, ["--config", join(dataDir, "c.toml"), "--listen", "127.0.0.1:0", "--data-dir", dataDir], { stdio: ["ignore", "pipe", "inherit"] });
+  const url = await new Promise((resolve, reject) => {
+    let out = "";
+    child.stdout.on("data", (d) => {
+      out += d;
+      const m = /listening on (\S+)/.exec(out);
+      if (m) resolve(`http://${m[1]}`);
+    });
+    child.on("exit", () => reject(new Error("node exited")));
   });
-  node.on("exit", () => reject(new Error("node exited")));
-});
+  return { child, url };
+}
+const node = await startNode();
+const node2 = await startNode();
+const upstreams = { "/node/": node.url, "/node2/": node2.url };
 
 // --- static app + same-origin proxy to the node -----------------------------
 const types = { ".html": "text/html", ".js": "text/javascript", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".ttf": "font/ttf" };
 const server = createServer(async (req, res) => {
   try {
-    if (req.url.startsWith("/node/")) {
+    const prefix = Object.keys(upstreams).find((p) => req.url.startsWith(p));
+    if (prefix) {
       const chunks = [];
       for await (const c of req) chunks.push(c);
-      const upstream = await fetch(nodeUrl + req.url.slice(5), {
+      const upstream = await fetch(upstreams[prefix] + req.url.slice(prefix.length - 1), {
         method: req.method,
         headers: Object.fromEntries(Object.entries(req.headers).filter(([k]) => ["authorization", "content-type", "x-vv-provision-token"].includes(k))),
         body: chunks.length ? Buffer.concat(chunks) : undefined,
@@ -78,6 +85,7 @@ const server = createServer(async (req, res) => {
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const appUrl = `http://127.0.0.1:${server.address().port}`;
 const apiUrl = `${appUrl}/node`;
+const api2Url = `${appUrl}/node2`;
 
 // --- browsers -----------------------------------------------------------------
 const browser = await chromium.launch({ executablePath: chromePath });
@@ -241,6 +249,32 @@ try {
     await shot(ana, "17-probe-results");
   });
 
+  await step("Ana moves the community to another server", async () => {
+    await ana.goto(appUrl);
+    await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
+    await ana.getByRole("tab", { name: "Me" }).last().click();
+    await byId(ana, "move-address").last().fill(api2Url);
+    await byId(ana, "move-setup-code").last().fill(TOKEN);
+    await shot(ana, "18-move");
+    await byId(ana, "move-button").last().click();
+    await ana.getByText("Done: the community is on the new server.").last().waitFor({ timeout: 20000 });
+    await ana.getByText(`Current server: ${api2Url}`).last().waitFor();
+  });
+
+  await step("Bia follows on her own and keeps working", async () => {
+    await bia.goto(appUrl);
+    await bia.getByText("Coletivo Recife").first().click({ timeout: 15000 });
+    await bia.getByRole("tab", { name: "Me" }).last().click();
+    await byId(bia, "my-name").last().fill("Bia Moved");
+    await bia.getByText("Save", { exact: true }).last().click();
+    await bia.getByText("Up to date").last().waitFor({ timeout: 20000 });
+    await ana.reload();
+    await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
+    await ana.getByRole("tab", { name: "People" }).last().click();
+    await ana.getByText("Bia Moved").last().waitFor({ timeout: 20000 });
+    await shot(ana, "19-after-move");
+  });
+
   if (errors.length) throw new Error(`page errors:\n${errors.join("\n")}`);
   console.log(`\nE2E PASSED. Screenshots in ${shots}`);
 } catch (e) {
@@ -250,6 +284,7 @@ try {
 } finally {
   await browser.close();
   server.close();
-  node.kill("SIGINT");
+  node.child.kill("SIGINT");
+  node2.child.kill("SIGINT");
 }
 process.exit(exitCode);

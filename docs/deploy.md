@@ -75,6 +75,13 @@ Everything has a default. Precedence: environment > flags > config file.
 | `compaction_grace_secs` | | 30 days | how long log entries behind a snapshot are kept |
 | `max_mailbox_ttl_secs` | | 30 days | |
 | `intake_per_ip_per_hour` / `intake_per_community_per_hour` | | 20 / 200 | join request limits |
+| `operator_listen` | `VV_OPERATOR_LISTEN` | off | managed hosting: private address for the operator API |
+| `operator_token` | `VV_OPERATOR_TOKEN` | none | required with `operator_listen` (≥ 16 characters) |
+| `[[tenants]]` | | none | managed hosting: customers with their own provisioning token and limits |
+
+Running a node for other people's communities (tenants, quotas, the
+operator API, moving communities in and out) is described in
+[`managed-hosting.md`](managed-hosting.md).
 
 See [`apps/node/config.example.toml`](../apps/node/config.example.toml).
 
@@ -100,11 +107,16 @@ node with no backup can be replaced.
 - **Logs:** `RUST_LOG=info`. The node never logs request bodies or tokens;
   the bundled Caddyfile also drops request URIs and auth headers.
 - **Upgrades:** take a backup, stop, replace the binary or image, start.
-  v0 creates its tables on start but has no schema migrations yet, so read
-  the release notes before upgrading across versions.
+  Schema changes are applied on start, in order, and recorded in SQLite's
+  `user_version`; each runs in its own transaction. An older binary refuses
+  to open a database a newer one has upgraded, so keep the backup if you
+  might roll back.
 - **Moving to another machine:** copy `node.sqlite` (from a backup) and
   point the DNS name at the new machine, or let an admin rebuild from their
   phone.
+- **Moving a community to another node** (another address, another
+  operator): the admin does it from the app, and members follow on their
+  own; see [`managed-hosting.md`](managed-hosting.md#moving-a-community-in-or-out-protocolmd-113).
 
 ## What you, as an operator, can and cannot see
 

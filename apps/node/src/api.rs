@@ -9,7 +9,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, Path, Query, Request, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post, put};
+use axum::routing::{delete, get, post};
 use axum::Router;
 use rusqlite::{params, OptionalExtension};
 use serde::Deserialize;
@@ -20,7 +20,7 @@ use vv_crypto::keys::mailbox_id;
 use vv_crypto::primitives::{hash_ctx, verify};
 use vv_crypto::snapshot::SnapshotEnvelope;
 
-use crate::app::{hex, random, unhex, App, Notice, Scope, Session};
+use crate::app::{hex, random, same_secret, unhex, App, Notice, Scope, Session};
 use crate::sequencer::{self, Reject, SeqError};
 use crate::store::{self, Cid};
 
@@ -51,7 +51,11 @@ pub fn router(app: Shared) -> Router {
         .route("/v1/c/{cid}/mailbox/{mbx}/{id}", delete(delete_mailbox))
         .route("/v1/c/{cid}/intake", post(post_intake).get(get_intake))
         .route("/v1/c/{cid}/intake/{id}", delete(delete_intake))
-        .route("/v1/c/{cid}/intake-policy", put(put_intake_policy))
+        .route(
+            "/v1/c/{cid}/intake-policy",
+            get(get_intake_policy).put(put_intake_policy),
+        )
+        .route("/v1/c/{cid}/export", get(get_export))
         .route("/v1/c/{cid}/invites", post(post_invite))
         .route(
             "/v1/c/{cid}/directory",
@@ -107,9 +111,45 @@ impl ApiError {
             "community not hosted here",
         )
     }
-    fn not_found() -> Self {
+    pub(crate) fn not_found() -> Self {
         Self::new(StatusCode::NOT_FOUND, "not_found", "no such item")
     }
+    /// 409 with the community's new location (§11.3).
+    fn moved(nodes: &[String]) -> Self {
+        let mut e = Self::new(
+            StatusCode::CONFLICT,
+            "moved",
+            "this community moved to another node",
+        );
+        e.extra.push((
+            "nodes",
+            Value::Array(nodes.iter().map(|n| Value::Text(n.clone())).collect()),
+        ));
+        e
+    }
+    fn suspended() -> Self {
+        Self::new(
+            StatusCode::FORBIDDEN,
+            "suspended",
+            "suspended by the node operator; reading and export still work",
+        )
+    }
+}
+
+/// Writes other than `migrate` stop once a community moved or was suspended.
+/// Reads keep working so members can catch up and admins can export.
+fn require_writable(cm: &store::Community) -> Result<(), ApiError> {
+    if !cm.moved_to.is_empty() {
+        return Err(ApiError::moved(&cm.moved_to));
+    }
+    if cm.suspended {
+        return Err(ApiError::suspended());
+    }
+    Ok(())
+}
+
+fn hosted(app: &App, cid: &Cid) -> Result<store::Community, ApiError> {
+    store::community(app.store.lock().unwrap().conn(), cid)?.ok_or_else(ApiError::not_hosted)
 }
 
 impl From<rusqlite::Error> for ApiError {
@@ -127,9 +167,13 @@ fn reject_status(r: &Reject) -> StatusCode {
     match r {
         Reject::NotHosted => StatusCode::NOT_FOUND,
         Reject::Unauthorized(_) => StatusCode::UNAUTHORIZED,
-        Reject::EpochStale | Reject::EpochConflict | Reject::OpConflict | Reject::AlreadyExists => {
-            StatusCode::CONFLICT
-        }
+        Reject::EpochStale
+        | Reject::EpochConflict
+        | Reject::OpConflict
+        | Reject::AlreadyExists
+        | Reject::Moved => StatusCode::CONFLICT,
+        Reject::Suspended => StatusCode::FORBIDDEN,
+        Reject::QuotaExceeded => StatusCode::INSUFFICIENT_STORAGE,
     }
 }
 
@@ -277,36 +321,62 @@ fn current_or_grace_eak(
     Ok(false)
 }
 
-fn provisioning_allowed(app: &App, headers: &HeaderMap) -> Result<(), ApiError> {
-    match &app.config.provisioning_token {
-        Some(expected) => {
-            let got = headers
-                .get("x-vv-provision-token")
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("");
-            let same = got.len() == expected.len()
-                && got
-                    .bytes()
-                    .zip(expected.bytes())
-                    .fold(0u8, |acc, (a, b)| acc | (a ^ b))
-                    == 0;
-            if same {
-                Ok(())
-            } else {
-                Err(ApiError::new(
-                    StatusCode::FORBIDDEN,
-                    "forbidden",
-                    "provisioning token required",
-                ))
-            }
+/// Who may create or restore a community: the node's own token (or open
+/// provisioning) → `None`; a tenant's token → `Some(tenant)`.
+fn provisioning_allowed(app: &App, headers: &HeaderMap) -> Result<Option<String>, ApiError> {
+    let got = headers
+        .get("x-vv-provision-token")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if let Some(expected) = &app.config.provisioning_token {
+        if same_secret(got.as_bytes(), expected.as_bytes()) {
+            return Ok(None);
         }
-        None if app.config.open_provisioning => Ok(()),
-        None => Err(ApiError::new(
-            StatusCode::FORBIDDEN,
-            "forbidden",
-            "provisioning is closed on this node",
-        )),
     }
+    if !got.is_empty() {
+        let digest = hex(&<sha2::Sha256 as sha2::Digest>::digest(got.as_bytes()));
+        if let Some(t) = app
+            .config
+            .tenants
+            .iter()
+            .find(|t| same_secret(t.token_sha256.as_bytes(), digest.as_bytes()))
+        {
+            return Ok(Some(t.name.clone()));
+        }
+    }
+    if app.config.provisioning_token.is_none() && app.config.open_provisioning {
+        return Ok(None);
+    }
+    Err(ApiError::new(
+        StatusCode::FORBIDDEN,
+        "forbidden",
+        if app.config.provisioning_token.is_none() && app.config.tenants.is_empty() {
+            "provisioning is closed on this node"
+        } else {
+            "provisioning token required"
+        },
+    ))
+}
+
+/// A tenant may hold at most `max_communities`.
+fn tenant_has_room(
+    app: &App,
+    c: &rusqlite::Connection,
+    tenant: &Option<String>,
+) -> Result<(), ApiError> {
+    let Some(t) = app.config.tenant(tenant.as_deref()) else {
+        return Ok(());
+    };
+    if let Some(max) = t.max_communities {
+        if store::communities_of_tenant(c, &t.name)? >= max {
+            return Err(ApiError::new(
+                StatusCode::INSUFFICIENT_STORAGE,
+                "quota_exceeded",
+                "this hosting plan has no room for another community",
+            ));
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -408,14 +478,15 @@ async fn create_community(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, ApiError> {
-    provisioning_allowed(&app, &headers)?;
+    let tenant = provisioning_allowed(&app, &headers)?;
     let v = parse(&body)?;
     let env =
         OpEnvelope::from_value(field(&v, "genesis")?).map_err(|e| ApiError::bad(e.to_string()))?;
     let now = app.clock.now();
     let mut st = app.store.lock().unwrap();
     let tx = st.tx()?;
-    let (cid, seq) = sequencer::create(&tx, env, now)?;
+    tenant_has_room(&app, &tx, &tenant)?;
+    let (cid, seq) = sequencer::create(&tx, env, now, tenant)?;
     tx.commit()?;
     tracing::info!(cid = %hex(&cid), "community created");
     ok(Value::map([("community_id", b(&cid)), ("seq", int(seq))]))
@@ -438,7 +509,7 @@ async fn restore_community(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, ApiError> {
-    provisioning_allowed(&app, &headers)?;
+    let tenant = provisioning_allowed(&app, &headers)?;
     let v = parse(&body)?;
     let chain = entries_field(&v, "control_chain")?;
     let tail = entries_field(&v, "tail")?;
@@ -446,10 +517,40 @@ async fn restore_community(
         .get("snapshot")
         .map(|s| SnapshotEnvelope::from_value(s).map_err(|e| ApiError::bad(e.to_string())))
         .transpose()?;
+    let intake_mode = match v.get("intake_mode") {
+        None => None,
+        Some(m) => Some(intake_mode_value(m)?),
+    };
+    let invites = match v.get("invites") {
+        None => Vec::new(),
+        Some(Value::Array(items)) if items.len() <= 10_000 => items
+            .iter()
+            .map(|i| {
+                Ok((
+                    bytes_field::<32>(i, "hash")?,
+                    uint_field(i, "expires_at")?,
+                    uint_field(i, "uses_left")?.min(10_000),
+                ))
+            })
+            .collect::<Result<Vec<_>, ApiError>>()?,
+        Some(_) => return Err(ApiError::bad("invites must be an array of at most 10000")),
+    };
     let now = app.clock.now();
     let mut st = app.store.lock().unwrap();
     let tx = st.tx()?;
-    let (cid, head) = sequencer::restore(&tx, chain, snapshot, tail, now)?;
+    tenant_has_room(&app, &tx, &tenant)?;
+    let (cid, head) = sequencer::restore(&tx, chain, snapshot, tail, now, tenant)?;
+    if let Some(mode) = intake_mode {
+        let mut cm = store::community(&tx, &cid)?.ok_or_else(ApiError::not_hosted)?;
+        cm.intake_mode = mode.into();
+        store::update_community(&tx, &cm)?;
+    }
+    for (hash, expires_at, uses_left) in invites {
+        tx.execute(
+            "INSERT OR REPLACE INTO invites (cid, hash, expires_at, uses_left) VALUES (?1, ?2, ?3, ?4)",
+            params![cid, hash, expires_at, uses_left],
+        )?;
+    }
     tx.commit()?;
     tracing::info!(cid = %hex(&cid), head, "community restored");
     ok(Value::map([
@@ -481,6 +582,17 @@ async fn post_ops(
         )));
     }
 
+    // A moved or suspended community takes only `migrate` (to move, or to
+    // correct a move); answer for the whole batch so clients keep their outbox.
+    let cm = hosted(&app, &cid)?;
+    let only_migrate = ops
+        .iter()
+        .all(|op| OpEnvelope::from_value(op).is_ok_and(|env| sequencer::is_migrate(&env)));
+    if !only_migrate {
+        require_writable(&cm)?;
+    }
+    let max_log_bytes = app.config.max_log_bytes(cm.tenant.as_deref());
+
     let now = app.clock.now();
     let grace = app.epoch_grace_ms();
     let mut results = Vec::with_capacity(ops.len());
@@ -501,7 +613,7 @@ async fn post_ops(
                 ]),
                 Ok(env) => {
                     let op_id = env.op_id;
-                    match sequencer::submit(&tx, env, now, grace) {
+                    match sequencer::submit(&tx, env, now, grace, max_log_bytes) {
                         Ok(seq) => Value::map([("op_id", b(&op_id)), ("seq", int(seq))]),
                         Err(SeqError::Reject(r)) => Value::map([
                             ("op_id", b(&op_id)),
@@ -622,6 +734,11 @@ async fn put_snapshot(
     let mut st = app.store.lock().unwrap();
     let tx = st.tx()?;
     let cm = store::community(&tx, &cid)?.ok_or_else(ApiError::not_hosted)?;
+    // Snapshots are allowed while suspended or over quota: they let the
+    // node compact the log, which is how a community gets back under quota.
+    if !cm.moved_to.is_empty() {
+        return Err(ApiError::moved(&cm.moved_to));
+    }
     if snap.seq > cm.head_seq || snap.epoch > cm.epoch {
         return Err(ApiError::bad("snapshot is ahead of the log"));
     }
@@ -688,6 +805,7 @@ async fn post_mailbox(
     let cid = cid_param(&cid)?;
     let mbx = mbx_param(&mbx)?;
     authorize(&app, &headers, &cid, Scope::Community)?;
+    require_writable(&hosted(&app, &cid)?)?;
     let v = parse(&body)?;
     let kind = field(&v, "kind")?
         .as_text()
@@ -863,6 +981,7 @@ async fn post_intake(
     let mut st = app.store.lock().unwrap();
     let tx = st.tx()?;
     let cm = store::community(&tx, &cid)?.ok_or_else(ApiError::not_hosted)?;
+    require_writable(&cm)?;
     match cm.intake_mode.as_str() {
         "open" => {}
         "invite_only" => {
@@ -957,19 +1076,50 @@ async fn put_intake_policy(
     let cid = cid_param(&cid)?;
     authorize(&app, &headers, &cid, Scope::Control)?;
     let v = parse(&body)?;
-    let mode = field(&v, "mode")?
-        .as_text()
-        .ok_or_else(|| ApiError::bad("mode"))?;
-    if !matches!(mode, "open" | "invite_only" | "closed") {
-        return Err(ApiError::bad("mode must be open, invite_only or closed"));
-    }
+    let mode = intake_mode_value(field(&v, "mode")?)?;
     let mut st = app.store.lock().unwrap();
     let tx = st.tx()?;
     let mut cm = store::community(&tx, &cid)?.ok_or_else(ApiError::not_hosted)?;
+    require_writable(&cm)?;
     cm.intake_mode = mode.into();
     store::update_community(&tx, &cm)?;
     tx.commit()?;
     ok(Value::map([("mode", Value::Text(mode.into()))]))
+}
+
+fn intake_mode_value(v: &Value) -> Result<&'static str, ApiError> {
+    match v.as_text() {
+        Some("open") => Ok("open"),
+        Some("invite_only") => Ok("invite_only"),
+        Some("closed") => Ok("closed"),
+        _ => Err(ApiError::bad("mode must be open, invite_only or closed")),
+    }
+}
+
+async fn get_intake_policy(
+    State(app): State<Shared>,
+    Path(cid): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let cid = cid_param(&cid)?;
+    authorize(&app, &headers, &cid, Scope::Control)?;
+    let cm = hosted(&app, &cid)?;
+    ok(Value::map([("mode", Value::Text(cm.intake_mode))]))
+}
+
+/// Everything needed to restore this community elsewhere (§11.3), as a
+/// ready `POST /communities/restore` body. Works while moved or suspended:
+/// a node never holds a community hostage.
+async fn get_export(
+    State(app): State<Shared>,
+    Path(cid): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let cid = cid_param(&cid)?;
+    authorize(&app, &headers, &cid, Scope::Control)?;
+    let st = app.store.lock().unwrap();
+    let payload = sequencer::export(st.conn(), &cid)?.ok_or_else(ApiError::not_hosted)?;
+    ok(payload)
 }
 
 async fn post_invite(
@@ -980,6 +1130,7 @@ async fn post_invite(
 ) -> Result<Response, ApiError> {
     let cid = cid_param(&cid)?;
     authorize(&app, &headers, &cid, Scope::Control)?;
+    require_writable(&hosted(&app, &cid)?)?;
     let v = parse(&body)?;
     let hash: [u8; 32] = bytes_field(&v, "hash")?;
     let expires_at = uint_field(&v, "expires_at")?;

@@ -1,4 +1,5 @@
 // Phase 8 (architecture.md §52): real-world offline and failure scenarios,
+// plus Phase 10's move between nodes,
 // against the real community-node binary (built with `test-clock` so days
 // can pass in seconds) behind a fault-injecting proxy.
 //
@@ -332,5 +333,63 @@ describe.skipIf(!HAVE_NODE)("offline scenarios", () => {
       expect(new Set(ids).size).toBe(ids.length); // each op sequenced once
     }
     expect(ana.canonical!.members[caio.memberId]!.profile!.display_name).toBe("Caio 9");
+  });
+
+  it("moving to a new node that is briefly unreachable: members wait on the old one, then follow", async () => {
+    const { proxy: oldNode } = await setup();
+    const { proxy: newNode } = await setup();
+    const { ana, bia, caio } = await community(oldNode);
+    const ev = id(20);
+    ana.submit("event.create", eventBody(ev, "Antes da mudança"));
+    await settle(ana, bia, caio);
+
+    await ana.migrateTo(newNode.client());
+    expect(ana.node).toBe(newNode.url);
+
+    // The new node drops off the network right after the move; the old one is flaky.
+    newNode.fault = { mode: "down" };
+    oldNode.fault = { mode: "flaky", before: 0.3, after: 0.3, rng: prng(7) };
+    bia.submit("participation.volunteer", { event_id: ev });
+    const report = await retry(() => bia.sync());
+    expect(bia.node).toBe(oldNode.url); // knows about the move, cannot reach the new node yet
+    expect(report.blocked).toBe("moved");
+    expect(bia.pending).toHaveLength(1); // nothing lost, nothing written to the frozen node
+
+    newNode.fault = { mode: "up" };
+    oldNode.fault = { mode: "down" }; // and now the old node is gone for good
+    await bia.sync();
+    expect(bia.node).toBe(newNode.url);
+    expect(bia.pending).toHaveLength(0);
+    // Caio slept through all of it, and the old node is gone: he cannot learn
+    // the new address from the log anymore. Re-pointing him by hand works.
+    await expect(caio.sync()).rejects.toThrow();
+    caio.moveTo(newNode.client());
+    await settle(ana, bia, caio);
+    for (const r of [bia, caio]) expect(canon(r.canonical)).toBe(canon(ana.canonical));
+    expect(ana.canonical!.events[ev]!.participations[bia.memberId]!.status).toBe("volunteered");
+  });
+
+  it("a node claiming the community moved, without a signed migrate, is not followed", async () => {
+    const { proxy } = await setup();
+    const { ana, bia } = await community(proxy);
+    const evil = await setup();
+    // The node (or anyone on the path) answers writes with a forged redirect.
+    proxy.fault = {
+      mode: "impersonate",
+      match: (method, url) => method === "POST" && url.endsWith("/ops"),
+      status: 409,
+      body: { code: "moved", detail: "this community moved", nodes: [evil.proxy.url] },
+    };
+    bia.submit("member.profile", { profile: { display_name: "Bia" } });
+    const report = await bia.sync();
+    expect(report.blocked).toBe("moved");
+    expect(bia.node).toBe(proxy.url);
+    expect(bia.pending).toHaveLength(1);
+    expect(evil.proxy.stats.forwarded).toBe(0); // never even contacted
+
+    proxy.fault = { mode: "up" };
+    await settle(bia, ana);
+    expect(bia.pending).toHaveLength(0);
+    expect(canon(bia.canonical)).toBe(canon(ana.canonical));
   });
 });

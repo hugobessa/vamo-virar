@@ -88,7 +88,9 @@ export type Fault =
   /** Fails before forwarding with probability `before`, or forwards and then drops the response with `after`. */
   | { mode: "flaky"; before: number; after: number; rng: () => number }
   /** Rewrites successful log responses. */
-  | { mode: "tamper"; edit: (body: CborValue) => CborValue };
+  | { mode: "tamper"; edit: (body: CborValue) => CborValue }
+  /** Answers matching requests itself, without asking the node; forwards the rest. */
+  | { mode: "impersonate"; match: (method: string, url: string) => boolean; status: number; body: CborValue };
 
 /** An HTTP proxy in front of a node. Clients only ever see the proxy's URL. */
 export class FaultProxy {
@@ -110,6 +112,11 @@ export class FaultProxy {
       }
       const chunks: Buffer[] = [];
       for await (const c of req) chunks.push(c as Buffer);
+      if (f.mode === "impersonate" && f.match(req.method!, req.url!)) {
+        res.writeHead(f.status, { "content-type": "application/cbor" });
+        res.end(Buffer.from(encode(f.body)));
+        return;
+      }
       try {
         const upstream = await fetch(p.target + req.url, {
           method: req.method!,
