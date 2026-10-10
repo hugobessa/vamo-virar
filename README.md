@@ -104,6 +104,21 @@ npx expo run:ios              # development build no simulador ou num iPhone (s�
   configurados em `apps/mobile/app.json`; o passo a passo está em
   [`docs/calendars.md`](docs/calendars.md).
 
+### Design system e landing page (Storybook)
+
+As cores, a tipografia, os componentes e a landing page (em pt-BR) ficam em
+`apps/mobile/src/ui` e podem ser vistos no Storybook, que renderiza os
+componentes React Native no navegador:
+
+```sh
+npm run storybook -w @vamo-virar/mobile        # http://localhost:6006
+npm run build-storybook -w @vamo-virar/mobile  # versão estática em apps/mobile/dist-storybook
+```
+
+A identidade segue a campanha: vermelho como cor da marca, com as cores da
+bandeira como detalhe. Como o vermelho também significa "perigo", ele nunca é
+o fundo de um botão de ação: a ação principal é azul, a de destaque é amarela.
+
 ### Compilar na nuvem com EAS
 
 Sem Android Studio nem Xcode, o [EAS Build](https://docs.expo.dev/build/introduction/)

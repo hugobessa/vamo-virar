@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { radius, space, touch, useTheme } from "./theme";
+import { fonts, radius, space, touch, type, useTheme } from "./theme";
 
 export function Screen({ children, scroll = true }: { children: ReactNode; scroll?: boolean }) {
   const c = useTheme();
@@ -18,7 +18,7 @@ export function Screen({ children, scroll = true }: { children: ReactNode; scrol
 export function Title({ children }: { children: ReactNode }) {
   const c = useTheme();
   return (
-    <Text accessibilityRole="header" style={{ color: c.text, fontSize: 24, fontWeight: "700" }}>
+    <Text accessibilityRole="header" style={{ color: c.text, fontFamily: fonts.condensed, fontSize: 34, lineHeight: 36, fontWeight: "900", textTransform: "uppercase" }}>
       {children}
     </Text>
   );
@@ -27,7 +27,7 @@ export function Title({ children }: { children: ReactNode }) {
 export function Heading({ children }: { children: ReactNode }) {
   const c = useTheme();
   return (
-    <Text accessibilityRole="header" style={{ color: c.text, fontSize: 18, fontWeight: "600", marginTop: space.s }}>
+    <Text accessibilityRole="header" style={{ color: c.text, fontFamily: fonts.text, ...type.h3, marginTop: space.s }}>
       {children}
     </Text>
   );
@@ -35,10 +35,15 @@ export function Heading({ children }: { children: ReactNode }) {
 
 export function Body({ children, muted }: { children: ReactNode; muted?: boolean }) {
   const c = useTheme();
-  return <Text style={{ color: muted ? c.muted : c.text, fontSize: 16, lineHeight: 22 }}>{children}</Text>;
+  return <Text style={{ color: muted ? c.muted : c.text, fontFamily: fonts.text, ...type.body }}>{children}</Text>;
 }
 
-type Kind = "primary" | "secondary" | "danger";
+/**
+ * Button kinds. There is deliberately no brand-red kind: red reads as "danger",
+ * so calls to action are blue (`primary`) or yellow (`accent`, for brand-coloured
+ * and dark surfaces). `danger` is outlined dark red, for destructive actions only.
+ */
+export type ButtonKind = "primary" | "accent" | "secondary" | "danger";
 
 export function Button({
   label,
@@ -50,14 +55,15 @@ export function Button({
 }: {
   label: string;
   onPress: () => void;
-  kind?: Kind;
+  kind?: ButtonKind;
   busy?: boolean;
   disabled?: boolean;
   testID?: string;
 }) {
   const c = useTheme();
-  const bg = kind === "primary" ? c.primary : "transparent";
-  const fg = kind === "primary" ? c.primaryText : kind === "danger" ? c.danger : c.text;
+  const bg = kind === "primary" ? c.primary : kind === "accent" ? c.accent : "transparent";
+  const fg = kind === "primary" ? c.primaryText : kind === "accent" ? c.accentText : kind === "danger" ? c.danger : c.text;
+  const edge = kind === "primary" || kind === "accent" ? bg : kind === "danger" ? c.danger : c.border;
   const off = disabled || busy;
   return (
     <Pressable
@@ -69,10 +75,10 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
-        { backgroundColor: bg, borderColor: kind === "primary" ? bg : c.border, opacity: off ? 0.5 : pressed ? 0.8 : 1 },
+        { backgroundColor: bg, borderColor: edge, opacity: off ? 0.5 : pressed ? 0.8 : 1 },
       ]}
     >
-      {busy ? <ActivityIndicator color={fg} /> : <Text style={{ color: fg, fontSize: 17, fontWeight: "600" }}>{label}</Text>}
+      {busy ? <ActivityIndicator color={fg} /> : <Text style={{ color: fg, fontFamily: fonts.text, fontSize: 17, fontWeight: "700" }}>{label}</Text>}
     </Pressable>
   );
 }
