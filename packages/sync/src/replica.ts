@@ -7,6 +7,7 @@ import {
   canModerate,
   clone,
   DEFAULT_POLICY,
+  DISABLED_RETENTION_MS,
   genesis as genesisState,
   isAdmin,
   isModerator,
@@ -156,9 +157,10 @@ export interface SyncReport {
   /**
    * Why changes are waiting in the outbox, if the node refused writes: the
    * community moved and the new node is not reachable yet, the hosting
-   * operator suspended it, or its storage quota is used up.
+   * operator suspended it, its storage quota is used up, or an admin
+   * disabled it (§11.5).
    */
-  blocked?: "moved" | "suspended" | "quota_exceeded";
+  blocked?: "moved" | "suspended" | "quota_exceeded" | "disabled";
 }
 
 const sameNode = (a: string, b: string) => a.replace(/\/+$/, "") === b.replace(/\/+$/, "");
@@ -375,6 +377,12 @@ export class Replica {
     return this.data.ownOutcomes;
   }
 
+  /** Set while an admin has the community marked for deletion (§11.5): nothing can change. */
+  get disabled(): { by: string; at: number; deleteAt: number } | undefined {
+    const d = this.data.state?.community.disabled;
+    return d ? { ...d, deleteAt: d.at + DISABLED_RETENTION_MS } : undefined;
+  }
+
   get epoch(): number {
     return this.keyring.latest()?.epoch ?? -1;
   }
@@ -414,6 +422,7 @@ export class Replica {
 
   /** Queues a domain op (§9). It shows in `view` at once and is sent on the next sync. */
   submit(type: string, body: CborValue): string {
+    if (this.disabled) throw new Error("the community is disabled");
     const opId = toHex(this.rng(16));
     this.data.outbox.push({ opId, type, body, ts: Date.now() });
     this.changed();
@@ -592,7 +601,7 @@ export class Replica {
         return 0;
       }
       // Keep everything; the pull that follows finds the signed `migrate`.
-      if (e instanceof NodeError && (e.code === "moved" || e.code === "suspended")) {
+      if (e instanceof NodeError && (e.code === "moved" || e.code === "suspended" || e.code === "disabled")) {
         report.blocked = e.code;
         return 0;
       }
@@ -609,7 +618,7 @@ export class Replica {
         accepted++;
       } else if (r.error === "epoch_stale" || r.error === "unauthorized") {
         keep.push(item); // retry once we hold the new epoch key
-      } else if (r.error === "quota_exceeded" || r.error === "moved" || r.error === "suspended") {
+      } else if (r.error === "quota_exceeded" || r.error === "moved" || r.error === "suspended" || r.error === "disabled") {
         report.blocked = r.error;
         keep.push(item); // not about the op: retry later or on the new node
       } else {
@@ -1171,6 +1180,26 @@ export class Replica {
     const r = results[0]!;
     if (!("seq" in r)) throw new NodeError(409, r.error, "recovery refused");
     await this.sync();
+  }
+
+  /**
+   * Admin: marks the community for deletion (§11.5). Writes stop for
+   * everyone at once; the node deletes it 30 days later unless another
+   * admin re-enables it.
+   */
+  async disableCommunity(): Promise<void> {
+    this.requireAdmin();
+    if (this.disabled) throw new Error("the community is disabled");
+    await this.submitControl("community.disable", { kind: "disable", args: {} }, {});
+  }
+
+  /** Another admin: cancels the deletion. The admin who disabled it cannot. */
+  async enableCommunity(): Promise<void> {
+    this.requireAdmin();
+    const d = this.disabled;
+    if (!d) throw new Error("the community is not disabled");
+    if (d.by === toHex(this.data.keys.signing.pk)) throw new Error("another admin must re-enable the community");
+    await this.submitControl("community.enable", { kind: "enable", args: {} }, {});
   }
 
   /** Replaces the intake key (e.g. after recovery, when no device holds the old one). */

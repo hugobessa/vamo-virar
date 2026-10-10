@@ -5,6 +5,7 @@ export {
   applyInPlace,
   canModerate,
   DATA_OP_TYPES,
+  DISABLED_RETENTION_MS,
   fold,
   genesis,
   GenesisError,

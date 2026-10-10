@@ -183,7 +183,15 @@ const CONTROL_INNER_TYPE: Record<ControlHeader["kind"], string> = {
   "admin.set": "admin.set",
   migrate: "community.migrate",
   "mod.set": "mod.set",
+  disable: "community.disable",
+  enable: "community.enable",
 };
+
+/** What a disabled community still takes (§11.5), as the node enforces it. */
+const ALLOWED_WHILE_DISABLED = new Set<ControlHeader["kind"]>(["enable", "admin.set"]);
+
+/** How long the node keeps a disabled community before deleting it (§11.5). */
+export const DISABLED_RETENTION_MS = 30 * DAY_MS;
 
 function dispatch(s: CommunityState, e: Entry): Outcome {
   if (e.control) return applyControl(s, e, e.control);
@@ -191,6 +199,7 @@ function dispatch(s: CommunityState, e: Entry): Outcome {
   // Data plane. Ops under the previous epoch are accepted during the node's
   // grace window (§7.4); anything older or newer is stale.
   if (e.epoch !== s.epoch && e.epoch !== s.epoch - 1) reject("stale_epoch");
+  if (s.community.disabled) reject("disabled");
   const op = e.op;
   if (!op) return { status: "opaque" };
   if (Object.values(CONTROL_INNER_TYPE).includes(op.type)) reject("malformed");
@@ -211,6 +220,7 @@ function dispatch(s: CommunityState, e: Entry): Outcome {
  */
 function applyControl(s: CommunityState, e: Entry, ctrl: ControlHeader): Outcome {
   if (ctrl.kind === "genesis") reject("illegal_transition");
+  if (s.community.disabled && !ALLOWED_WHILE_DISABLED.has(ctrl.kind)) reject("disabled");
   applyControlHeader(s, e, ctrl);
   const bodyMatches = e.op?.type === CONTROL_INNER_TYPE[ctrl.kind] && e.op.author === ctrl.signer;
   return bodyMatches ? { status: "applied" } : { status: "opaque" };
@@ -247,6 +257,20 @@ function applyControlHeader(s: CommunityState, e: Entry, ctrl: ControlHeader): v
       if (!Array.isArray(nodes) || nodes.length > 5 || !nodes.every(isNodeUrl)) reject("malformed");
       if (nodes.length > 0) s.community.nodes = [...nodes];
       else delete s.community.nodes;
+      return;
+    }
+    case "disable": {
+      if (!s.admin_set.includes(ctrl.signer)) reject("not_authorized");
+      if (e.epoch !== s.epoch) reject("stale_epoch");
+      s.community.disabled = { by: ctrl.signer, at: e.at };
+      return;
+    }
+    case "enable": {
+      const d = s.community.disabled;
+      if (!d) reject("illegal_transition");
+      if (!s.admin_set.includes(ctrl.signer) || ctrl.signer === d.by) reject("not_authorized");
+      if (e.epoch !== s.epoch) reject("stale_epoch");
+      delete s.community.disabled;
       return;
     }
     case "mod.set": {

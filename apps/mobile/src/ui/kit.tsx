@@ -1,10 +1,17 @@
 // Small UI kit: large touch targets, high contrast, readable type.
 
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { FlagStripe } from "./brand";
 import { fonts, radius, space, touch, type, useTheme } from "./theme";
+
+/**
+ * True inside a community that an admin disabled (marked for deletion):
+ * buttons and fields turn off, except buttons marked `allowReadOnly`
+ * (navigation, showing and hiding things, re-enabling).
+ */
+export const ReadOnly = createContext(false);
 
 export function Screen({ children, scroll = true }: { children: ReactNode; scroll?: boolean }) {
   const c = useTheme();
@@ -52,8 +59,9 @@ export function Button({
   onPress,
   kind = "primary",
   busy,
-  disabled,
+  disabled: disabledProp,
   testID,
+  allowReadOnly,
 }: {
   label: string;
   onPress: () => void;
@@ -61,8 +69,12 @@ export function Button({
   busy?: boolean;
   disabled?: boolean;
   testID?: string;
+  /** Stays on in a read-only (disabled) community. */
+  allowReadOnly?: boolean;
 }) {
   const c = useTheme();
+  const readOnly = useContext(ReadOnly) && !allowReadOnly;
+  const disabled = disabledProp || readOnly;
   const off = disabled || busy;
   // A disabled filled button turns flat grey: clearer than a faded blue.
   const flat = disabled && (kind === "primary" || kind === "accent");
@@ -102,6 +114,7 @@ export function ButtonFace({ label, kind = "primary" }: { label: string; kind?: 
 
 export function Field({ label, help, error, onFocus, onBlur, ...props }: TextInputProps & { label: string; help?: string; error?: string }) {
   const c = useTheme();
+  const readOnly = useContext(ReadOnly);
   const [focused, setFocused] = useState(false);
   return (
     <View style={{ gap: space.xs }}>
@@ -110,6 +123,7 @@ export function Field({ label, help, error, onFocus, onBlur, ...props }: TextInp
         accessibilityLabel={label}
         placeholderTextColor={c.muted}
         {...props}
+        editable={!readOnly && props.editable !== false}
         onFocus={(e) => {
           setFocused(true);
           onFocus?.(e);

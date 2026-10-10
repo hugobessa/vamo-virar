@@ -336,6 +336,41 @@ describe("moderators", () => {
   });
 });
 
+describe("disabling a community", () => {
+  it("an admin disables it; everything but enable and admin.set is refused", () => {
+    const { b, ana, bia, caio } = setup();
+    b.toggle("disable", bia); // an organizer
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    const e = b.toggle("disable", ana);
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.community.disabled).toEqual({ by: ana.msk, at: e.at });
+    b.op(caio, "member.profile", { profile: { display_name: "Caio 2" } });
+    expect(last(b).out).toEqual(rejected("disabled"));
+    b.rotate(ana);
+    expect(last(b).out).toEqual(rejected("disabled"));
+    b.modSet(ana, [caio]);
+    expect(last(b).out).toEqual(rejected("disabled"));
+    b.toggle("disable", ana);
+    expect(last(b).out).toEqual(rejected("disabled"));
+  });
+
+  it("only another admin re-enables it; the CRK can name that admin", () => {
+    const { b, ana, bia } = setup();
+    b.toggle("disable", ana);
+    b.toggle("enable", ana);
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.adminSet(key(1), [ana, bia]); // CRK recovery still works while disabled
+    expect(last(b).out).toEqual(applied);
+    b.toggle("enable", bia);
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.community.disabled).toBeUndefined();
+    b.op(ana, "member.profile", { profile: { display_name: "Ana de volta" } });
+    expect(last(b).out).toEqual(applied);
+    b.toggle("enable", bia);
+    expect(last(b).out).toEqual(rejected("illegal_transition"));
+  });
+});
+
 describe("control plane", () => {
   it("rotates epochs, signed by an admin only", () => {
     const { b, ana, caio } = setup();

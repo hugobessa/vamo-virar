@@ -53,6 +53,7 @@ export default function Home() {
                 {status === "joining" ? <Chip label={t("waitingTitle")} tone="warn" /> : null}
                 {status === "rejected" ? <Chip label={t("rejectedTitle")} tone="danger" /> : null}
                 {status === "removed" ? <Chip label={t("syncRemoved")} tone="danger" /> : null}
+                {e.replica.disabled ? <Chip label={t("disabledChip")} tone="danger" /> : null}
               </Card>
             );
           })}

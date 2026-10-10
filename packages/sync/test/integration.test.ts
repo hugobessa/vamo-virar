@@ -47,7 +47,7 @@ async function syncAll(...rs: Replica[]) {
 describe.skipIf(!HAVE_NODE)("against a real node", () => {
   let node: RunningNode;
   beforeAll(async () => {
-    node = await startNode({ epoch_grace_secs: 0 });
+    node = await startNode({ epoch_grace_secs: 0, intake_per_ip_per_hour: 1000 }); // every join here comes from one address
   });
   afterAll(() => node?.stop());
 
@@ -350,6 +350,39 @@ describe.skipIf(!HAVE_NODE)("against a real node", () => {
     expect(await ana.tidyModerators()).toBe(true);
     expect(ana.canonical!.mod_set).toBeUndefined();
     expect(await ana.tidyModerators()).toBe(false);
+  }, 30_000);
+
+  it("an admin disables the community: everyone sees it, writes stop, only another admin re-enables", async () => {
+    const ana = await Replica.found(node.client(), { name: "C15", displayName: "Ana" });
+    const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia);
+    const caio = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
+    await admit(ana, caio);
+    await ana.makeAdmin(bia.memberId);
+    await syncAll(ana, bia, caio);
+
+    await expect(caio.disableCommunity()).rejects.toThrow(/only admins/);
+    await ana.disableCommunity();
+    await syncAll(bia, caio);
+    const d = caio.disabled!;
+    expect(d.by).toBe(toHex(ana.keys.signing.pk));
+    expect(d.deleteAt - d.at).toBe(30 * 86_400_000);
+    expect(() => caio.submit("member.profile", { profile: { display_name: "Caio 2" } })).toThrow(/disabled/);
+
+    // Writes the node refuses: a join request, a report.
+    const dani = Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Dani" });
+    await expect(dani).rejects.toMatchObject({ code: "disabled" });
+    await expect(caio.reportMember(ana.memberId, "spam")).rejects.toMatchObject({ code: "disabled" });
+
+    await expect(ana.enableCommunity()).rejects.toThrow(/another admin/);
+    await bia.enableCommunity();
+    await syncAll(ana, caio);
+    expect(caio.disabled).toBeUndefined();
+    caio.submit("member.profile", { profile: { display_name: "Caio de volta" } });
+    await caio.sync();
+    await ana.sync();
+    expect(ana.canonical!.members[caio.memberId]!.profile!.display_name).toBe("Caio de volta");
+    expect(canon(caio.canonical)).toBe(canon(ana.canonical));
   }, 30_000);
 
   it("watch() syncs when the node announces new entries", async () => {

@@ -17,4 +17,5 @@ export const OrganizacaoVendoRespostas: Story = event("e1", { me: "ana", probeRe
 export const Lotado: Story = event("e3", { me: "duda" });
 export const Cancelado: Story = event("e4", { me: "ana" });
 export const ConcluidoRegistrandoPresenca: Story = event("e5", { me: "ana" });
+export const EventoEmComunidadeMarcada: Story = event("e1", { me: "caio", disabledBy: "ana" });
 export const ResumoDeEventoAntigo: Story = event("old1", { me: "ana" });

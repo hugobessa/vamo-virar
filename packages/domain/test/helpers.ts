@@ -136,6 +136,18 @@ export class LogBuilder {
     );
   }
 
+  /** `disable` or `enable` (§11.5). */
+  toggle(kind: "disable" | "enable", signer: Person | string, opts?: OpOpts): Entry {
+    const msk = typeof signer === "string" ? signer : signer.msk;
+    return this.push(
+      {
+        control: { kind, signer: msk, args: {} },
+        op: { author: msk, base: 0, ts: 0, type: `community.${kind}`, body: {} },
+      },
+      opts,
+    );
+  }
+
   migrate(signer: Person | string, nodes: string[], opts?: OpOpts): Entry {
     const msk = typeof signer === "string" ? signer : signer.msk;
     return this.push(

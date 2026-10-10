@@ -127,6 +127,14 @@ impl ApiError {
         ));
         e
     }
+    fn disabled() -> Self {
+        Self::new(
+            StatusCode::FORBIDDEN,
+            "disabled",
+            "an admin disabled this community; reading and export still work until it is deleted",
+        )
+    }
+
     fn suspended() -> Self {
         Self::new(
             StatusCode::FORBIDDEN,
@@ -139,6 +147,15 @@ impl ApiError {
 /// Writes other than `migrate` stop once a community moved or was suspended.
 /// Reads keep working so members can catch up and admins can export.
 fn require_writable(cm: &store::Community) -> Result<(), ApiError> {
+    if cm.disabled.is_some() {
+        return Err(ApiError::disabled());
+    }
+    require_open(cm)
+}
+
+/// Moved or suspended: the checks that also apply to a disabled community's
+/// few allowed ops (§11.5).
+fn require_open(cm: &store::Community) -> Result<(), ApiError> {
     if !cm.moved_to.is_empty() {
         return Err(ApiError::moved(&cm.moved_to));
     }
@@ -172,7 +189,7 @@ fn reject_status(r: &Reject) -> StatusCode {
         | Reject::OpConflict
         | Reject::AlreadyExists
         | Reject::Moved => StatusCode::CONFLICT,
-        Reject::Suspended => StatusCode::FORBIDDEN,
+        Reject::Suspended | Reject::Disabled => StatusCode::FORBIDDEN,
         Reject::QuotaExceeded => StatusCode::INSUFFICIENT_STORAGE,
     }
 }
@@ -591,11 +608,16 @@ async fn post_ops(
     // A moved or suspended community takes only `migrate` (to move, or to
     // correct a move); answer for the whole batch so clients keep their outbox.
     let cm = hosted(&app, &cid)?;
-    let only_migrate = ops
-        .iter()
-        .all(|op| OpEnvelope::from_value(op).is_ok_and(|env| sequencer::is_migrate(&env)));
+    let decoded_all = |f: fn(&OpEnvelope) -> bool| {
+        ops.iter()
+            .all(|op| OpEnvelope::from_value(op).is_ok_and(|env| f(&env)))
+    };
+    let only_migrate = decoded_all(sequencer::is_migrate);
+    if cm.disabled.is_some() && !decoded_all(sequencer::allowed_while_disabled) {
+        return Err(ApiError::disabled());
+    }
     if !only_migrate {
-        require_writable(&cm)?;
+        require_open(&cm)?;
     }
     let max_log_bytes = app.config.max_log_bytes(cm.tenant.as_deref());
 
@@ -732,6 +754,7 @@ async fn put_snapshot(
     // Admins only: a snapshot lets the node compact the log behind it, so a
     // member holding just the epoch access key must not be able to plant one.
     authorize(&app, &headers, &cid, Scope::Moderate)?;
+    require_writable(&hosted(&app, &cid)?)?;
     let snap = SnapshotEnvelope::decode(&body).map_err(|e| ApiError::bad(e.to_string()))?;
     if snap.cid != cid {
         return Err(ApiError::bad("snapshot for another community"));

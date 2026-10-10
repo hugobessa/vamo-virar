@@ -18,6 +18,7 @@ import {
 import { formatWhen } from "../../../../model/time";
 import { AvailabilityChip } from "../../../../ui/AvailabilityChip";
 import { ProbeQuestion, ProbeResults } from "../../../../ui/ProbeSections";
+import { DisabledScope } from "../../../../ui/community/Disabled";
 import { Body, Button, Card, Chip, Heading, Screen, Title } from "../../../../ui/kit";
 import { space } from "../../../../ui/theme";
 
@@ -57,7 +58,7 @@ export default function EventScreen() {
             <Body muted>
               {summary.attended_count} / {summary.confirmed_count} {t("people")}
             </Body>
-            {removeButton(summary.event_id)}
+            {entry ? <DisabledScope entry={entry}>{removeButton(summary.event_id)}</DisabledScope> : null}
           </>
         ) : (
           <Body muted>{t("why_unknown_target")}</Body>
@@ -100,74 +101,76 @@ export default function EventScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: ev.title }} />
-      <Title>{ev.title}</Title>
-      <Body>{formatWhen(ev.starts_at, ev.ends_at, locale, ev.tz)}</Body>
-      <Body muted>{ev.location.label}</Body>
-      {ev.description ? <Body>{ev.description}</Body> : null}
-      {ev.status !== "scheduled" ? <Chip label={t(ev.status === "cancelled" ? "cancelled" : "completed")} tone={ev.status === "cancelled" ? "danger" : "neutral"} /> : null}
-      {mine !== "none" ? <Chip label={t(STATUS_TEXT[mine])} tone={mine === "confirmed" ? "ok" : "warn"} /> : null}
-      {ev.status === "scheduled" ? <AvailabilityChip ev={ev} /> : null}
+      <DisabledScope entry={entry}>
+        <Title>{ev.title}</Title>
+        <Body>{formatWhen(ev.starts_at, ev.ends_at, locale, ev.tz)}</Body>
+        <Body muted>{ev.location.label}</Body>
+        {ev.description ? <Body>{ev.description}</Body> : null}
+        {ev.status !== "scheduled" ? <Chip label={t(ev.status === "cancelled" ? "cancelled" : "completed")} tone={ev.status === "cancelled" ? "danger" : "neutral"} /> : null}
+        {mine !== "none" ? <Chip label={t(STATUS_TEXT[mine])} tone={mine === "confirmed" ? "ok" : "warn"} /> : null}
+        {ev.status === "scheduled" ? <AvailabilityChip ev={ev} /> : null}
 
-      <ProbeQuestion entry={entry} ev={ev} />
-      {selfActions(state, ev, me).map((a, i) => (
-        <Button key={a} testID={`self-${a}`} kind={i === 0 ? "primary" : "secondary"} label={t(ACTION_TEXT[a])} onPress={() => submit(`participation.${a}`, {})} />
-      ))}
+        <ProbeQuestion entry={entry} ev={ev} />
+        {selfActions(state, ev, me).map((a, i) => (
+          <Button key={a} testID={`self-${a}`} kind={i === 0 ? "primary" : "secondary"} label={t(ACTION_TEXT[a])} onPress={() => submit(`participation.${a}`, {})} />
+        ))}
 
-      {list("confirmedList", byStatus(state, ev, ["confirmed", "reconfirm"]), [])}
-      {list("volunteersList", byStatus(state, ev, ["volunteered"]), ["approve", "reject"])}
-      {list("invitedList", byStatus(state, ev, ["invited"]), ["revoke"])}
+        {list("confirmedList", byStatus(state, ev, ["confirmed", "reconfirm"]), [])}
+        {list("volunteersList", byStatus(state, ev, ["volunteered"]), ["approve", "reject"])}
+        {list("invitedList", byStatus(state, ev, ["invited"]), ["revoke"])}
 
-      {manage && ev.status === "scheduled" ? (
-        <>
-          <ProbeResults entry={entry} ev={ev} />
-          <Button testID="toggle-invite" kind="secondary" label={t("inviteSomeone")} onPress={() => setInviting(!inviting)} />
-          {inviting
-            ? invitable(state, ev).map((m) => (
-                <Card key={m.member_id}>
-                  <Body>{m.profile?.display_name ?? "?"}</Body>
-                  {orgButtons(m.member_id, ["invite"])}
-                </Card>
-              ))
-            : null}
-          <Button testID="complete-event" kind="secondary" label={t("completeEvent")} onPress={() => submit("event.complete", {})} />
-          <Button
-            kind="danger"
-            label={t("cancelEvent")}
-            onPress={async () => {
-              if (await confirm(t("cancelEvent"), t("yes"), t("no"))) submit("event.cancel", {});
-            }}
-          />
-        </>
-      ) : null}
+        {manage && ev.status === "scheduled" ? (
+          <>
+            <ProbeResults entry={entry} ev={ev} />
+            <Button testID="toggle-invite" kind="secondary" label={t("inviteSomeone")} onPress={() => setInviting(!inviting)} />
+            {inviting
+              ? invitable(state, ev).map((m) => (
+                  <Card key={m.member_id}>
+                    <Body>{m.profile?.display_name ?? "?"}</Body>
+                    {orgButtons(m.member_id, ["invite"])}
+                  </Card>
+                ))
+              : null}
+            <Button testID="complete-event" kind="secondary" label={t("completeEvent")} onPress={() => submit("event.complete", {})} />
+            <Button
+              kind="danger"
+              label={t("cancelEvent")}
+              onPress={async () => {
+                if (await confirm(t("cancelEvent"), t("yes"), t("no"))) submit("event.cancel", {});
+              }}
+            />
+          </>
+        ) : null}
 
-      {manage && ev.status === "completed" ? (
-        <>
-          <Heading>{t("recordAttendance")}</Heading>
-          {byStatus(state, ev, ["confirmed"]).map((m) => {
-            const attended = attendedEdit ?? new Set(ev.attended ?? []);
-            const on = attended.has(m.member_id);
-            return (
-              <Button
-                key={m.member_id}
-                kind={on ? "primary" : "secondary"}
-                label={`${on ? "✓ " : ""}${m.profile?.display_name ?? "?"}`}
-                onPress={() => {
-                  const next = new Set(attended);
-                  if (next.has(m.member_id)) next.delete(m.member_id);
-                  else next.add(m.member_id);
-                  setAttended(next);
-                }}
-              />
-            );
-          })}
-          <Button
-            label={t("save")}
-            disabled={attendedEdit === null}
-            onPress={() => submit("event.attendance", { attended: [...(attendedEdit ?? [])] })}
-          />
-        </>
-      ) : null}
-      {removeButton(ev.event_id)}
+        {manage && ev.status === "completed" ? (
+          <>
+            <Heading>{t("recordAttendance")}</Heading>
+            {byStatus(state, ev, ["confirmed"]).map((m) => {
+              const attended = attendedEdit ?? new Set(ev.attended ?? []);
+              const on = attended.has(m.member_id);
+              return (
+                <Button
+                  key={m.member_id}
+                  kind={on ? "primary" : "secondary"}
+                  label={`${on ? "✓ " : ""}${m.profile?.display_name ?? "?"}`}
+                  onPress={() => {
+                    const next = new Set(attended);
+                    if (next.has(m.member_id)) next.delete(m.member_id);
+                    else next.add(m.member_id);
+                    setAttended(next);
+                  }}
+                />
+              );
+            })}
+            <Button
+              label={t("save")}
+              disabled={attendedEdit === null}
+              onPress={() => submit("event.attendance", { attended: [...(attendedEdit ?? [])] })}
+            />
+          </>
+        ) : null}
+        {removeButton(ev.event_id)}
+      </DisabledScope>
     </Screen>
   );
 }

@@ -302,7 +302,7 @@ para humanos.
 
 ```
 ControlHeader {
-  kind:     "genesis" | "rotate" | "admin.set" | "migrate" | "mod.set"
+  kind:     "genesis" | "rotate" | "admin.set" | "migrate" | "mod.set" | "disable" | "enable"
   signer:   bytes(32)      # MSK.public de um admin, ou CRK.public para gênese / recuperação
   csig:     bytes(64)      # Sign(signer, "vv/ctrl-sig/v1", {cid, op_id, epoch, kind, args})
   args:     map            # específico do kind, abaixo
@@ -315,6 +315,8 @@ ControlHeader {
 | `rotate` | `{new_epoch: u32, eak: EAK_new.public}` | `signer ∈ admin_set ∪ mod_set`; `new_epoch == current_epoch + 1` |
 | `admin.set` | `{admins: [MSK.public], ik: IK.public?}` | `signer ∈ admin_set` **ou** `signer == crk`; conjunto não vazio |
 | `migrate` | `{nodes: [text]}`: 0–5 URLs base, cada uma `http(s)://` seguida de ASCII imprimível (0x21–0x7E), ≤ 200 bytes | `signer ∈ admin_set` **ou** `signer == crk`; depois disso, toda escrita exceto `migrate` é recusada com `moved` (§11.3). Uma lista vazia cancela uma mudança |
+| `disable` | `{}` | `signer ∈ admin_set`; marca a comunidade para exclusão (§11.5) |
+| `enable` | `{}` | a comunidade está desativada; `signer ∈ admin_set` **e** `signer ≠` quem desativou (§11.5) |
 | `mod.set` | `{moderators: [MSK.public]}` (0–64 chaves) | `signer ∈ admin_set` **ou** `signer == crk`; substitui `mod_set`. Uma lista vazia remove todos os moderadores |
 
 `rotate` e `admin.set` são cifradas sob a chave da época **antiga** (a que
@@ -329,7 +331,8 @@ cabeçalho de controle — a imposição pelo nó é uma conveniência, não uma
 de confiança.
 
 O `SignedOp.type` interno de uma operação de controle é `community.init`
-(gênese), `epoch.rotate`, `admin.set`, `community.migrate` ou `mod.set`, e seu `author`
+(gênese), `epoch.rotate`, `admin.set`, `community.migrate`, `mod.set`,
+`community.disable` ou `community.enable`, e seu `author`
 MUST ser igual a `ctrl.signer`. Listas de nós de `migrate` malformadas falham
 na decodificação do envelope (`malformed`) em ambos os lados;
 `tests/vectors/vv1.json` traz casos.
@@ -1001,6 +1004,31 @@ suspenso.
 
 ---
 
+### 11.5 Desativar e apagar uma comunidade
+
+Um admin pode marcar a comunidade para exclusão com a operação de controle
+`disable` (§5). A partir dela:
+
+- O nó recusa toda escrita com `disabled` (403): operações (exceto `enable` e
+  `admin.set`), caixas postais, pedidos de entrada, convites, política de
+  entrada e snapshots. Leitura e exportação continuam funcionando.
+- O reducer guarda `community.disabled = {by: MSK, at}` (`at` é o horário de
+  recebimento do nó) e rejeita com `disabled` qualquer entrada que não seja
+  `enable` ou `admin.set`, igual ao nó.
+- Os clientes mostram a todos os membros um aviso de que a comunidade foi
+  marcada para exclusão por um admin, com a data, e desligam toda ação de
+  escrita.
+- Só **outro** admin pode cancelar, com `enable` (`signer ≠ disabled.by`).
+  `admin.set` continua aceito para que, se o único admin for quem desativou,
+  quem detém a CRK possa nomear um segundo admin (§11.4).
+- 30 dias depois de `at` (`disabled_retention_secs` na configuração do nó,
+  só para testes), o nó apaga a comunidade inteira: log, snapshots, épocas,
+  caixas postais, entrada, convites e diretório. Depois disso ela responde
+  `not_hosted`, e os dispositivos que já passaram da data esquecem a cópia
+  local.
+- Uma restauração (§11.3) refaz a desativação a partir do log de controle; o
+  prazo continua contando do `disable` original.
+
 ## 12. Snapshots e compactação [MVP]
 
 ### 12.1 Formato do snapshot
@@ -1203,9 +1231,11 @@ Erros: `{code: text, detail: text}` com os códigos `malformed`,
 para hospedagem: `moved` (409, com `nodes`; §11.3), `suspended` (403: o
 operador pausou as escritas; leituras e exportação funcionam) e
 `quota_exceeded` (507; por operação nos resultados de `POST /ops`, ou na
-criação/restauração). Os dispositivos mantêm na fila de saída as operações
-recusadas com `moved`, `suspended` ou `quota_exceeded`. Um `migrate` é aceito
-nos três estados, então uma comunidade sempre pode ir embora.
+criação/restauração) e `disabled` (403; a comunidade foi marcada para
+exclusão, §11.5). Os dispositivos mantêm na fila de saída as operações
+recusadas com `moved`, `suspended`, `quota_exceeded` ou `disabled`. Um `migrate` é aceito
+nos três primeiros estados, então uma comunidade sempre pode ir embora; uma
+comunidade desativada (§11.5) precisa ser reativada antes.
 
 Um nó também pode expor uma API de operador em um listener separado
 ([`managed-hosting.md`](managed-hosting.md)); ela não faz parte deste

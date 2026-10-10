@@ -27,6 +27,9 @@ pub enum Reject {
     Suspended,
     /// The tenant's storage quota is used up; only `migrate` is accepted.
     QuotaExceeded,
+    /// An admin disabled the community (§11.5); only `enable` and
+    /// `admin.set` are accepted until it is deleted.
+    Disabled,
 }
 
 impl Reject {
@@ -41,6 +44,7 @@ impl Reject {
             Reject::Moved => "moved",
             Reject::Suspended => "suspended",
             Reject::QuotaExceeded => "quota_exceeded",
+            Reject::Disabled => "disabled",
         }
     }
 }
@@ -136,6 +140,16 @@ pub fn create(
     Ok((cm.cid, seq))
 }
 
+/// What a disabled community still takes (§11.5): re-enabling, and
+/// `admin.set`, so the CRK can name a second admin when the only admin is
+/// the one who disabled it.
+pub fn allowed_while_disabled(env: &OpEnvelope) -> bool {
+    matches!(
+        env.ctrl.as_ref().map(|c| &c.args),
+        Some(ControlArgs::Enable | ControlArgs::AdminSet { .. })
+    )
+}
+
 pub fn is_migrate(env: &OpEnvelope) -> bool {
     matches!(
         env.ctrl.as_ref().map(|c| &c.args),
@@ -165,6 +179,9 @@ pub fn submit(
         };
     }
 
+    if cm.disabled.is_some() && !allowed_while_disabled(&env) {
+        return Err(Reject::Disabled.into());
+    }
     if !is_migrate(&env) {
         if !cm.moved_to.is_empty() {
             return Err(Reject::Moved.into());
@@ -253,6 +270,24 @@ pub fn submit(
                 }
                 cm.mod_set = moderators.clone();
             }
+            ControlArgs::Disable => {
+                if !is_admin {
+                    return Err(Reject::Unauthorized("disable must be signed by an admin").into());
+                }
+                cm.disabled = Some((now, ctrl.signer));
+            }
+            ControlArgs::Enable => {
+                let Some((_, by)) = cm.disabled else {
+                    return Err(Reject::Unauthorized("the community is not disabled").into());
+                };
+                if !is_admin || ctrl.signer == by {
+                    return Err(Reject::Unauthorized(
+                        "enable must be signed by an admin other than the one who disabled",
+                    )
+                    .into());
+                }
+                cm.disabled = None;
+            }
         }
     }
     append(c, &mut cm, env, now)
@@ -307,6 +342,7 @@ pub fn restore(
     let mut epoch = 0u32;
     let mut admin_set = admins.clone();
     let mut mod_set: Vec<[u8; 32]> = Vec::new();
+    let mut disabled: Option<(u64, [u8; 32])> = None;
     let mut eaks = vec![(0u32, *eak)];
     let mut rotated_at = genesis.at;
     let eak_of =
@@ -357,6 +393,21 @@ pub fn restore(
                     }
                     mod_set = moderators.clone();
                 }
+                // The deletion clock keeps running from the original `disable`.
+                ControlArgs::Disable => {
+                    if !admin_set.contains(&ctrl.signer) || disabled.is_some() {
+                        return Err(bad("invalid disable in restore"));
+                    }
+                    disabled = Some((e.at, ctrl.signer));
+                }
+                ControlArgs::Enable => {
+                    if !admin_set.contains(&ctrl.signer)
+                        || disabled.is_none_or(|(_, by)| by == ctrl.signer)
+                    {
+                        return Err(bad("invalid enable in restore"));
+                    }
+                    disabled = None;
+                }
                 // A `migrate` that pointed here (or anywhere) is history on
                 // the restored node: the community lives where it is restored.
                 ControlArgs::Migrate { .. } => {
@@ -396,6 +447,7 @@ pub fn restore(
     };
     let mut cm = Community::new(cid, *crk, admin_set, rotated_at);
     cm.mod_set = mod_set;
+    cm.disabled = disabled;
     cm.epoch = epoch;
     cm.head_seq = head_seq;
     cm.head_hash = head_hash;
