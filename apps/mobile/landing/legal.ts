@@ -17,6 +17,8 @@ interface Page {
   /** Short label for the header navigation. */
   nav: string;
   description: string;
+  /** Optional same-origin script from landing/public (the CSP allows only 'self'). */
+  script?: string;
 }
 
 const pages: Page[] = [
@@ -32,7 +34,8 @@ const pages: Page[] = [
     slug: "servidor",
     file: "hosting-guide.md",
     nav: "Montar servidor",
-    description: "Passo a passo para montar o servidor da sua comunidade num computador seu ou numa VPS barata, de graça ou por poucos dólares por mês.",
+    description: "Passo a passo para montar o servidor da sua comunidade: na nuvem, só com cliques, ou de graça num computador seu.",
+    script: "/codigo.js",
   },
 ];
 
@@ -129,6 +132,19 @@ const css = `
   h1 { font:900 clamp(40px, 9vw, 72px)/.95 "Barlow Condensed", "Arial Narrow", Impact, sans-serif; text-transform:uppercase; letter-spacing:-.5px; color:var(--brand); margin:0 0 20px; text-wrap:balance; }
   h2 { font:900 clamp(21px, 2.6vw, 24px)/1.25 "Archivo", "Arial Black", sans-serif; letter-spacing:-.3px; margin:48px 0 10px; text-wrap:balance; }
   h3 { font:700 1.06em/1.35 "Montserrat", sans-serif; margin:32px 0 6px; }
+  h4 { font:700 1em/1.4 "Montserrat", sans-serif; margin:24px 0 4px; color:var(--muted); }
+  details:not(.toc) { margin:0 0 20px; padding:0 16px; border:1px solid var(--border); border-radius:8px; }
+  details:not(.toc) > summary { cursor:pointer; padding:12px 0; font-weight:700; min-height:48px; }
+  details:not(.toc)[open] > summary { border-bottom:1px solid var(--border); margin-bottom:12px; }
+  button { font:700 15px/1 "Montserrat", system-ui, sans-serif; color:#fff; background:var(--link); border:0; border-radius:8px; padding:12px 18px; min-height:44px; cursor:pointer; }
+  button:hover { filter:brightness(1.1); }
+  @media (prefers-color-scheme: dark) { button { color:#0e0e12; } }
+  .codegen { margin:0 0 20px; padding:16px; background:var(--surface); border-radius:12px; }
+  .codegen p { margin:0; } .codegen p + p { margin-top:12px; }
+  .codegen-out { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+  .codegen-out code { font-size:16px; padding:8px 10px; background:var(--bg); border:1px solid var(--border); overflow-wrap:anywhere; user-select:all; }
+  .codegen-out span { color:var(--muted); font-size:14px; }
+  [hidden] { display:none !important; }
   p, ul, ol { margin:0 0 16px; }
   main ul, main ol { padding-left:1.4em; }
   li { margin:4px 0; } li::marker { color:var(--muted); }
@@ -197,6 +213,7 @@ export function renderPage(page: Page): string {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@900&family=Barlow+Condensed:wght@900&family=Montserrat:wght@400;700&display=swap" rel="stylesheet" />
 <style>${css}</style>
+${page.script ? `<script src="${page.script}" defer></script>` : ""}
 </head>
 <body>
 <a class="skip" href="#conteudo">Pular para o conteúdo</a>
