@@ -29,6 +29,11 @@ const BY_MESSAGE: [RegExp, string][] = [
   [/^(not synced yet|no epoch key yet)/, "Este celular ainda está atualizando. Tente de novo em instantes."],
   [/^no such (member|active member)/, "Essa pessoa não está mais na comunidade."],
   [/^no such (question|upcoming event)/, "Isso não está mais disponível."],
+  [/^only members can report/, "Só quem faz parte da comunidade pode denunciar."],
+  [/^you cannot report yourself/, "Você não pode denunciar a si mesma(o)."],
+  [/^there is no admin to report to/, "Não há outra pessoa na coordenação para receber essa denúncia."],
+  [/^report details are too long/, "O texto da denúncia está longo demais."],
+  [/^member\.(block|unblock) /, "Não foi possível fazer isso. Talvez outra pessoa da coordenação já tenha feito."],
   [/^this device does not hold the intake key/, "Este celular não consegue ler os pedidos de entrada. Peça a outra pessoa da coordenação."],
 ];
 

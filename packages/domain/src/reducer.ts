@@ -263,6 +263,8 @@ const HANDLERS: Record<string, Handler> = {
   "policy.update": policyUpdate,
   "member.add": memberAdd,
   "member.remove": memberRemove,
+  "member.block": memberBlock,
+  "member.unblock": memberUnblock,
   "member.leave": memberLeave,
   "member.role": memberRole,
   "member.profile": memberProfile,
@@ -364,6 +366,7 @@ function memberAdd(s: CommunityState, op: DecodedOp, author: MemberRecord, e: En
   }
   const id = memberIdOf(b.msk);
   if (s.members[id]?.status === "active") reject("already_exists");
+  if (s.members[id]?.blocked) reject("not_authorized");
   s.members[id] = {
     member_id: id,
     msk: b.msk,
@@ -391,6 +394,35 @@ function memberRemove(s: CommunityState, op: DecodedOp, author: MemberRecord): v
   }
   if (isAdmin(s, target) && activeAdminCount(s) <= 1) reject("last_admin");
   endMembership(s, target, "removed");
+}
+
+/**
+ * Blocks a member: removes them if still active and bars `member.add` for
+ * their key until `member.unblock`. Admins only. Former members can be
+ * blocked too, so someone who left cannot simply be let back in.
+ */
+function memberBlock(s: CommunityState, op: DecodedOp, author: MemberRecord): void {
+  requireAdmin(s, author);
+  const b = body(op);
+  if (!isHex(b.member_id, 32)) reject("malformed");
+  if (b.reason !== undefined && !isText(b.reason, 500)) reject("malformed");
+  const target = s.members[b.member_id];
+  if (!target) reject("unknown_target");
+  if (target.blocked) reject("illegal_transition");
+  if (target.member_id === author.member_id) reject("illegal_transition");
+  if (isAdmin(s, target) && activeAdminCount(s) <= 1) reject("last_admin");
+  if (target.status === "active") endMembership(s, target, "removed");
+  target.blocked = true;
+}
+
+function memberUnblock(s: CommunityState, op: DecodedOp, author: MemberRecord): void {
+  requireAdmin(s, author);
+  const b = body(op);
+  if (!isHex(b.member_id, 32)) reject("malformed");
+  const target = s.members[b.member_id];
+  if (!target) reject("unknown_target");
+  if (!target.blocked) reject("illegal_transition");
+  delete target.blocked;
 }
 
 function memberLeave(s: CommunityState, _op: DecodedOp, author: MemberRecord): void {

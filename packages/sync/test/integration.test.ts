@@ -235,6 +235,51 @@ describe.skipIf(!HAVE_NODE)("against a real node", () => {
     expect(ana.probeResults(ev)!.replies).toEqual({ [bia.memberId]: "eligible" });
   }, 30_000);
 
+  it("members report to the admins only; admins block from a report and blocked people cannot be re-added", async () => {
+    const ana = await Replica.found(node.client(), { name: "C12", displayName: "Ana" });
+    const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia);
+    const caio = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
+    await admit(ana, caio);
+    await syncAll(ana, bia, caio);
+
+    await expect(bia.reportMember(bia.memberId, "spam")).rejects.toThrow(/yourself/);
+    await bia.reportMember(caio.memberId, "harassment", "  mensagens ofensivas no grupo  ");
+    await caio.sync();
+    expect(caio.reports).toHaveLength(0); // only admins receive reports
+    await ana.sync();
+    expect(ana.reports).toHaveLength(1);
+    expect(ana.reports[0]).toMatchObject({ reporter: bia.memberId, memberId: caio.memberId, reason: "harassment", details: "mensagens ofensivas no grupo" });
+
+    // A forged report (Caio claiming to be Bia) is dropped.
+    const { sealMail } = await import("../src/invite.js");
+    const { sign, mailboxId } = await import("@vamo-virar/crypto");
+    const forgedBody = { report_id: new Uint8Array(16).fill(9), reporter: bia.memberId, member_id: ana.memberId, reason: "spam" as const };
+    const forgedSig = sign(caio.keys.signing.sk, "vv/report/v1", { cid: caio.cid, ...forgedBody });
+    const access = (caio as unknown as { currentAccess(): Parameters<typeof caio.client.postMailbox>[1] }).currentAccess();
+    await caio.client.postMailbox(caio.cid, access, mailboxId(ana.cid, ana.keys.signing.pk), "report", sealMail(caio.cid, ana.keys.encryption.pk, { kind: "report", ...forgedBody, sig: forgedSig }), 3600);
+    await ana.sync();
+    expect(ana.reports).toHaveLength(1);
+
+    await expect(bia.blockMember(caio.memberId)).rejects.toThrow(/only admins/);
+    await ana.blockMember(caio.memberId, "assédio");
+    expect(ana.reports).toHaveLength(0);
+    expect(ana.canonical!.members[caio.memberId]).toMatchObject({ status: "removed", blocked: true });
+    expect(ana.epoch).toBe(1);
+    await caio.sync();
+    expect(caio.status).toBe("removed");
+    await bia.sync();
+    expect(bia.epoch).toBe(1);
+    expect(canon(bia.canonical)).toBe(canon(ana.canonical));
+
+    // Re-adding the same keys is refused until an admin unblocks.
+    ana.submit("member.add", { msk: toHex(caio.keys.signing.pk), mek: toHex(caio.keys.encryption.pk), profile: { display_name: "Caio" } });
+    const report = await ana.sync();
+    expect(report.rejected.map((r) => r.reason)).toEqual(["not_authorized"]);
+    await ana.unblockMember(caio.memberId);
+    expect(ana.canonical!.members[caio.memberId]!.blocked).toBeUndefined();
+  }, 30_000);
+
   it("watch() syncs when the node announces new entries", async () => {
     const ana = await Replica.found(node.client(), { name: "C8", displayName: "Ana" });
     const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
