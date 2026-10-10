@@ -2,11 +2,8 @@
 
 **Última atualização:** 10 de outubro de 2026
 
-> **Rascunho.** Os trechos entre [colchetes] precisam ser preenchidos, e o texto
-> deve ser revisado por um(a) advogado(a) antes da publicação.
-
 Estes Termos de Uso ("Termos") regem o uso do aplicativo **Vamo Virar** ("o
-app"), desenvolvido por **[Nome / razão social]** ([CNPJ/CPF]) ("nós"). Ao
+app"), desenvolvido por **Hugo Rafael Bessa de Andrade** (CPF 090.885.294-00) ("nós"). Ao
 instalar ou usar o app, você concorda com estes Termos e com a
 [Política de Privacidade](privacy-policy.md). Se não concordar, não use o app.
 
@@ -21,7 +18,7 @@ agenda e nos seus lugares, que ficam no seu celular.
 
 ## 2. Elegibilidade e conta
 
-- Você precisa ter pelo menos **[18]** anos, ou a idade mínima legal para
+- Você precisa ter pelo menos **18** anos, ou a idade mínima legal para
   aceitar estes Termos no seu país, com autorização de responsável quando
   necessária.
 - Não há cadastro tradicional. Sua identidade é formada por **chaves
@@ -94,7 +91,7 @@ qualquer encontro presencial. **O app não é um serviço de emergência.**
 
 O código do Vamo Virar é distribuído sob a licença **MIT**, disponível no
 repositório do projeto (`LICENSE`). O nome "Vamo Virar", o ícone e a identidade
-visual pertencem a **[titular]**, e a licença do código não autoriza o uso deles
+visual pertencem a **Hugo Rafael Bessa de Andrade**, e a licença do código não autoriza o uso deles
 de forma que sugira vínculo ou endosso oficial.
 
 ## 9. Disponibilidade, mudanças e encerramento
@@ -108,8 +105,6 @@ de forma que sugira vínculo ou endosso oficial.
   suspender o acesso de quem violar estes Termos, na medida em que isso esteja
   ao nosso alcance técnico. Na prática, quem controla o acesso a uma comunidade
   são seus administradores e o operador do nó.
-- [Se houver cobrança: planos, preços, renovação, cancelamento e reembolso.
-  Atualmente o app é gratuito.]
 
 ## 10. Isenção de garantias
 
@@ -126,8 +121,6 @@ lucros cessantes, perda de dados, perda de acesso a comunidades, atos de outros
 membros, administradores ou operadores de nós, nem por eventos organizados na
 plataforma. Nada nestes Termos exclui direitos que a lei não permita limitar,
 inclusive os previstos no **Código de Defesa do Consumidor**, quando aplicável.
-[Opcional: nosso limite total de responsabilidade, quando permitido, será de
-R$ [valor].]
 
 ## 12. Indenização
 
@@ -145,9 +138,9 @@ concordar, deve parar de usá-lo.
 ## 14. Lei aplicável e foro
 
 Estes Termos são regidos pelas leis da República Federativa do Brasil. Fica
-eleito o foro de **[comarca/cidade]** para dirimir controvérsias, ressalvado o
+eleito o foro de **Recife/PE** para dirimir controvérsias, ressalvado o
 direito do consumidor de propor ação no foro de seu domicílio.
 
 ## 15. Contato
 
-Dúvidas sobre estes Termos: **[e-mail de contato]**.
+Dúvidas sobre estes Termos: **[vamovirar@bessa.me](mailto:vamovirar@bessa.me)**.
