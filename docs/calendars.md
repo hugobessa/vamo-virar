@@ -51,7 +51,7 @@ Os provedores só aparecem no app quando um client ID está configurado em
 ```
 
 - **Google Cloud Console**: crie client IDs OAuth do tipo iOS e Android
-  para o bundle/pacote `org.vamovirar.app`; ative a Google Calendar API;
+  para o bundle/pacote `me.bessa.vamovirar`; ative a Google Calendar API;
   adicione apenas o escopo `calendar.freebusy` à tela de consentimento.
 - **Microsoft Entra ID**: registre um app de cliente público (mobile), permita
   contas pessoais e corporativas (`common`), adicione o redirect URI

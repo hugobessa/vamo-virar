@@ -8,7 +8,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "org.vamovirar.app",
+      "bundleIdentifier": "me.bessa.vamovirar",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -21,7 +21,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "org.vamovirar.app",
+      "package": "me.bessa.vamovirar",
       "permissions": [
         "READ_CALENDAR",
         "ACCESS_COARSE_LOCATION"
