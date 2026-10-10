@@ -9,7 +9,7 @@ export interface LandingLinks {
   playStore: string;
   source: string;
   docs: string;
-  /** How to run a community server. */
+  /** How to run a community server, built from docs/hosting-guide.md. */
   serverDocs: string;
   /** Built from docs/privacy-policy.md by the landing build. */
   privacy: string;
@@ -24,7 +24,7 @@ export const defaultLinks: LandingLinks = {
   playStore: "https://play.google.com/store/apps/details?id=me.bessa.vamovirar",
   source: REPO,
   docs: `${REPO}/tree/main/docs`,
-  serverDocs: `${REPO}/blob/main/docs/deploy.md`,
+  serverDocs: "/servidor/",
   privacy: "/privacidade/",
   terms: "/termos/",
   childSafety: "/seguranca-infantil/",
