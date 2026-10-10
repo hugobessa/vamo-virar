@@ -2,13 +2,13 @@
 // "epoch" or "key" jargon in the main flow (see model/i18n.ts).
 
 export const copy = {
-  nav: { how: "Como funciona", privacy: "Privacidade", faq: "Perguntas", create: "Criar uma comunidade" },
+  nav: { how: "Como funciona", privacy: "Privacidade", faq: "Perguntas", create: "Baixar o app" },
   hero: {
     tag: "Agenda, eventos e gente",
     title: "Organize a sua comunidade.",
     body: "Crie eventos, convide pessoas e veja quem pode ir. Sua agenda e sua localização ficam só no seu celular.",
-    create: "Criar uma comunidade",
-    join: "Entrar com um convite",
+    create: "Baixar o app",
+    join: "Recebi um convite",
     trust: ["Código aberto", "Cifrado de ponta a ponta", "Agenda só no seu celular"],
   },
   mock: {
@@ -46,6 +46,7 @@ export const copy = {
       "O código é aberto: qualquer pessoa pode conferir como tudo funciona.",
     ],
     cta: "Ler o código",
+    policy: "Política de Privacidade completa",
   },
   organizers: {
     eyebrow: "Para quem cuida da comunidade",
@@ -64,6 +65,11 @@ export const copy = {
       { q: "Minha agenda vai para algum lugar?", a: "Não. O app lê só os horários em que você está ocupada(o), no próprio celular, para mostrar se você pode ir a um evento." },
     ],
   },
-  cta: { title: "Bora juntar a galera?", body: "Crie a sua comunidade em poucos minutos.", create: "Criar uma comunidade", join: "Entrar com um convite" },
-  footer: { open: "Código aberto, licença MIT.", source: "Código", docs: "Documentação" },
+  cta: {
+    title: "Bora juntar a galera?",
+    body: "Baixe o app e crie a sua comunidade em poucos minutos. Recebeu um link de convite? Instale o app e abra o link.",
+    appStore: "Baixar na App Store",
+    playStore: "Baixar no Google Play",
+  },
+  footer: { open: "Código aberto, licença MIT.", source: "Código", docs: "Documentação", privacy: "Política de Privacidade", terms: "Termos de Uso" },
 } as const;

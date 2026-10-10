@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vamo Virar — Organize a sua comunidade</title>
+    <meta
+      name="description"
+      content="Crie eventos, convide pessoas e veja quem pode ir. Sua agenda e sua localização ficam só no seu celular. Código aberto."
+    />
+    <meta name="theme-color" content="#fd0000" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:title" content="Vamo Virar — Organize a sua comunidade" />
+    <meta property="og:description" content="Eventos de comunidade com a agenda e a localização só no seu celular. Cifrado de ponta a ponta e de código aberto." />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Open stand-ins for the brand's Transducer (display) and Gotham (text) -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;700;800;900&family=Barlow+Condensed:wght@700;800;900&family=Montserrat:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      html { scroll-behavior: smooth; }
+      html, body { margin: 0; background: #fff; }
+      @media (prefers-color-scheme: dark) { html, body { background: #0e0e12; } }
+      @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+      #root { display: flex; flex-direction: column; min-height: 100vh; font-family: "Montserrat", system-ui, sans-serif; }
+      /* Anchored sections stop below the page top, not under it */
+      [id] { scroll-margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <p style="font-family: system-ui, sans-serif; padding: 24px">
+        <strong>Vamo Virar</strong> — organize a sua comunidade. Ative o JavaScript para ver esta página.
+        <a href="/privacidade/">Política de Privacidade</a> · <a href="/termos/">Termos de Uso</a> ·
+        <a href="https://github.com/hugobessa/vamo-virar">Código</a>
+      </p>
+    </noscript>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

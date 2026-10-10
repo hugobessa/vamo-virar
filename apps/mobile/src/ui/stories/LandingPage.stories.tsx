@@ -5,7 +5,6 @@ const meta: Meta<typeof LandingPage> = {
   title: "Páginas/Landing",
   component: LandingPage,
   parameters: { layout: "fullscreen" },
-  argTypes: { onCreate: { action: "criar" }, onJoin: { action: "entrar" }, onOpenSource: { action: "código" }, onOpenDocs: { action: "documentação" } },
 };
 export default meta;
 type Story = StoryObj<typeof LandingPage>;

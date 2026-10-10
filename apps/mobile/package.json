@@ -35,6 +35,9 @@
     "@storybook/addon-docs": "^10.6.1",
     "@storybook/react-native-web-vite": "^10.6.1",
     "@types/react": "~19.2.2",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^5.2.0",
+    "marked": "^18.1.0",
     "playwright-core": "1.56.1",
     "storybook": "^10.6.1",
     "typescript": "~6.0.3",
@@ -52,7 +55,10 @@
     "e2e:web": "node e2e/web.e2e.mjs",
     "eas-build-post-install": "cd ../.. && npm run build",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build -o dist-storybook"
+    "build-storybook": "storybook build -o dist-storybook",
+    "landing": "vite --config landing/vite.config.ts",
+    "build:landing": "vite build --config landing/vite.config.ts",
+    "preview:landing": "vite preview --config landing/vite.config.ts --outDir ../dist-landing"
   },
   "private": true
 }

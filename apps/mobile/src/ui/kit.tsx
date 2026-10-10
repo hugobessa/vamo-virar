@@ -87,6 +87,19 @@ export function Button({
   );
 }
 
+/** The look of a button without press handling, for links that must be real anchors. */
+export function ButtonFace({ label, kind = "primary" }: { label: string; kind?: ButtonKind }) {
+  const c = useTheme();
+  const bg = kind === "primary" ? c.primary : kind === "accent" ? c.accent : "transparent";
+  const fg = kind === "primary" ? c.primaryText : kind === "accent" ? c.accentText : kind === "danger" ? c.danger : c.text;
+  const edge = kind === "primary" || kind === "accent" ? bg : kind === "danger" ? c.danger : c.border;
+  return (
+    <View style={[styles.button, { backgroundColor: bg, borderColor: edge }]}>
+      <Text style={{ color: fg, fontFamily: fonts.text, fontSize: 17, fontWeight: "700" }}>{label}</Text>
+    </View>
+  );
+}
+
 export function Field({ label, help, error, onFocus, onBlur, ...props }: TextInputProps & { label: string; help?: string; error?: string }) {
   const c = useTheme();
   const [focused, setFocused] = useState(false);
