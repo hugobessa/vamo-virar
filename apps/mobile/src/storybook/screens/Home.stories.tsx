@@ -12,6 +12,10 @@ export const ComComunidades: Story = screen(Home, "Vamo Virar", {
   entries: [entryNamed("Horta da Vila", { id: "c1" }), entryNamed("Coletivo Recife", { id: "c2" })],
 });
 
+export const ComunidadeMarcadaParaExclusao: Story = screen(Home, "Vamo Virar", {
+  entries: [entryNamed("Horta da Vila", { id: "c1" }), entryNamed("Coletivo Recife", { id: "c2", disabledBy: "ana" })],
+});
+
 export const PedidoEnviadoERecusado: Story = screen(Home, "Vamo Virar", {
   entries: [entryNamed("Horta da Vila", { id: "c1" }), makeEntry({ id: "c2", status: "joining" }), makeEntry({ id: "c3", status: "rejected" })],
 });

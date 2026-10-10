@@ -139,12 +139,19 @@ export interface EntryOptions {
   reports?: boolean;
   /** Duda is a moderator. */
   moderator?: boolean;
+  /** Bia is an admin too (Coordenação), not only an organizer. */
+  secondAdmin?: boolean;
+  /** An admin marked the community for deletion three days ago. */
+  disabledBy?: Me;
   state?: CommunityState;
 }
 
 export function makeEntry(o: EntryOptions = {}) {
   const state = o.state ?? communityState();
   if (o.moderator) state.mod_set = ["msk-duda"];
+  if (o.secondAdmin) state.admin_set = ["msk-ana", "msk-bia"];
+  if (o.disabledBy) state.community.disabled = { by: `msk-${o.disabledBy}`, at: NOW - 3 * D };
+  const disabled = state.community.disabled;
   if (o.reports) state.members.gil = { ...member("gil", "Gil Prado", "member", "removed"), blocked: true };
   const me = o.me ?? "ana";
   const active = (o.status ?? "active") === "active";
@@ -159,7 +166,10 @@ export function makeEntry(o: EntryOptions = {}) {
     canonical: state,
     status: o.status ?? "active",
     memberId: me,
-    isAdmin: me === "ana",
+    isAdmin: me === "ana" || (!!o.secondAdmin && me === "bia"),
+    disabled: disabled ? { ...disabled, deleteAt: disabled.at + 30 * D } : undefined,
+    disableCommunity: async () => action("replica.disableCommunity")(),
+    enableCommunity: async () => action("replica.enableCommunity")(),
     isModerator: !!o.moderator && me === "duda",
     canModerate: me === "ana" || (!!o.moderator && me === "duda"),
     node: "https://horta.example.org",

@@ -5,6 +5,7 @@ import { reasonKey } from "../../../model/i18n";
 import { syncStatusKey } from "../../../model/sync-status";
 import { EventsTab } from "../../../ui/community/EventsTab";
 import { MeTab } from "../../../ui/community/MeTab";
+import { DisabledScope } from "../../../ui/community/Disabled";
 import { PeopleTab } from "../../../ui/community/PeopleTab";
 import { Banner, Body, Screen, Segmented, Title } from "../../../ui/kit";
 
@@ -60,7 +61,9 @@ export default function Community() {
           { value: "me", label: t("tabMe") },
         ]}
       />
-      {tab === "events" ? <EventsTab entry={entry} /> : tab === "people" ? <PeopleTab entry={entry} /> : <MeTab entry={entry} />}
+      <DisabledScope entry={entry}>
+        {tab === "events" ? <EventsTab entry={entry} /> : tab === "people" ? <PeopleTab entry={entry} /> : <MeTab entry={entry} />}
+      </DisabledScope>
     </Screen>
   );
 }

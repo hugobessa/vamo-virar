@@ -13,7 +13,7 @@ export type OpId = Hex; // 16 random bytes
 // Log entries (input to the reducer)
 // ---------------------------------------------------------------------------
 
-export type ControlKind = "genesis" | "rotate" | "admin.set" | "migrate" | "mod.set";
+export type ControlKind = "genesis" | "rotate" | "admin.set" | "migrate" | "mod.set" | "disable" | "enable";
 
 export interface GenesisArgs {
   suite: "VV1";
@@ -48,7 +48,9 @@ export type ControlHeader =
   | { kind: "rotate"; signer: Hex; args: RotateArgs }
   | { kind: "admin.set"; signer: Hex; args: AdminSetArgs }
   | { kind: "migrate"; signer: Hex; args: MigrateArgs }
-  | { kind: "mod.set"; signer: Hex; args: ModSetArgs };
+  | { kind: "mod.set"; signer: Hex; args: ModSetArgs }
+  | { kind: "disable"; signer: Hex; args: Record<string, never> }
+  | { kind: "enable"; signer: Hex; args: Record<string, never> };
 
 /** The decrypted, signature-verified inner operation (SignedOp minus crypto fields). */
 export interface DecodedOp {
@@ -188,6 +190,7 @@ export type RejectReason =
   | "epoch_conflict"
   | "last_admin"
   | "already_exists"
+  | "disabled"
   | "unsupported";
 
 export interface RejectedOp {
@@ -214,6 +217,12 @@ export interface CommunityState {
     policy: Policy;
     /** Set by `migrate` (§11.3): where the community lives now. */
     nodes?: string[];
+    /**
+     * Set by `disable` (§11.5): who (MSK) and when (node time). Writes stop;
+     * the node deletes the community 30 days later unless another admin
+     * sends `enable`.
+     */
+    disabled?: { by: Hex; at: number };
   };
   epoch: number;
   eak: Hex;

@@ -32,6 +32,13 @@ export const DenunciarComoMembro: Story = community(
 );
 export const EuComoAdmin: Story = community({}, { play: openTab("Eu") });
 export const EuComoMembro: Story = community({ me: "caio" }, { play: openTab("Eu") });
+/** An admin marked the community for deletion: banner for everyone, nothing can change. */
+export const MarcadaParaExclusao: Story = community({ me: "caio", disabledBy: "ana" });
+export const MarcadaParaExclusaoPessoas: Story = community({ me: "caio", disabledBy: "ana" }, { play: openTab("Pessoas") });
+/** Ana (admin) can disable it from the "Eu" tab: see EuComoAdmin. Another admin sees "Reativar". */
+export const ReativarComoOutraAdmin: Story = community({ me: "ana", secondAdmin: true, disabledBy: "bia" }, { play: openTab("Eu") });
+/** The admin who disabled it cannot re-enable it. */
+export const DesativadaPorMim: Story = community({ me: "ana", secondAdmin: true, disabledBy: "ana" }, { play: openTab("Eu") });
 export const SemConexao: Story = community({ connectivity: "offline", pending: 3 });
 export const MudancaRecusada: Story = community({ rejections: [{ type: "participation.accept", reason: "capacity_full" }] });
 export const AguardandoAprovacao: Story = community({ status: "joining" });

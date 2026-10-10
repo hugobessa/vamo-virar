@@ -110,7 +110,7 @@ export class AppStore {
   /** Queues a change and syncs soon. The change is visible immediately. */
   submit(id: string, type: string, body: Parameters<Replica["submit"]>[1]): void {
     const e = this.entries.get(id);
-    if (!e) return;
+    if (!e || e.replica.disabled) return; // marked for deletion: nothing changes
     e.replica.submit(type, body);
     void this.persist(e);
     void this.syncOne(id);
@@ -130,6 +130,12 @@ export class AppStore {
       if (this.autoAnswer && e.replica.incomingProbes.length) await this.autoAnswer(e).catch(() => undefined);
       await this.persist(e);
     } catch (err) {
+      // Marked for deletion and past the date: the server deleted it, so this phone forgets it too.
+      const d = e.replica.disabled;
+      if (d && Date.now() >= d.deleteAt && err instanceof NodeError && err.code === "not_hosted") {
+        await this.forget(id);
+        return;
+      }
       e.connectivity = isOffline(err) ? "offline" : e.connectivity;
       if (!isOffline(err)) console.warn("sync failed", err);
     }

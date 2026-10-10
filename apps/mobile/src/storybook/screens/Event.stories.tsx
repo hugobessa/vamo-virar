@@ -19,4 +19,5 @@ export const Cancelado: Story = event("e4", { me: "ana" });
 export const ConcluidoRegistrandoPresenca: Story = event("e5", { me: "ana" });
 /** Admins and moderators can delete any event ("Apagar evento"). */
 export const ApagarComoModeracao: Story = event("e2", { me: "duda", moderator: true });
+export const EventoEmComunidadeMarcada: Story = event("e1", { me: "caio", disabledBy: "ana" });
 export const ResumoDeEventoAntigo: Story = event("old1", { me: "ana" });

@@ -122,6 +122,11 @@ pub enum ControlArgs {
     ModSet {
         moderators: Vec<[u8; 32]>,
     },
+    /// An admin marks the community for deletion (§11.5): writes stop, and
+    /// the node deletes it 30 days later unless another admin re-enables it.
+    Disable,
+    /// Another admin cancels the deletion (§11.5).
+    Enable,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -180,6 +185,14 @@ impl ControlHeader {
                 ControlArgs::ModSet {
                     moderators: key_list_or_empty(a.get("moderators"))?,
                 }
+            }
+            "disable" => {
+                map_fields(a, &[], "disable args")?;
+                ControlArgs::Disable
+            }
+            "enable" => {
+                map_fields(a, &[], "enable args")?;
+                ControlArgs::Enable
             }
             _ => return Err(WireError::Malformed("ctrl kind")),
         };
