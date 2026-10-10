@@ -296,6 +296,33 @@ describe("moderators", () => {
     expect(last(b).out).toEqual(applied);
   });
 
+  it("admins and moderators delete any event; organizers and members cannot", () => {
+    const { b, ana, bia, caio, davi } = setup();
+    b.modSet(ana, [davi]);
+    const ev1 = b.createEvent(bia, 1);
+    b.part(caio, "volunteer", ev1);
+    b.op(bia, "event.remove", { event_id: ev1 }); // its own organizer
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(caio, "event.remove", { event_id: ev1 });
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(davi, "event.remove", { event_id: ev1, reason: "conteúdo ofensivo" });
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.events[ev1]).toBeUndefined();
+    b.part(caio, "withdraw", ev1);
+    expect(last(b).out).toEqual(rejected("unknown_target"));
+    b.op(ana, "event.remove", { event_id: ev1 });
+    expect(last(b).out).toEqual(rejected("unknown_target"));
+
+    // A cancelled event that has already been summarised can go too.
+    const ev2 = b.createEvent(bia, 2);
+    b.op(bia, "event.cancel", { event_id: ev2 });
+    b.op(ana, "member.profile", { profile: { display_name: "Ana" } }, { at: b.at + 400 * DAY });
+    expect(last(b).state.event_summaries[ev2]).toBeDefined();
+    b.op(ana, "event.remove", { event_id: ev2 });
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.event_summaries[ev2]).toBeUndefined();
+  });
+
   it("a removed moderator loses moderator powers at once", () => {
     const { b, ana, caio, davi } = setup();
     b.modSet(ana, [caio]);

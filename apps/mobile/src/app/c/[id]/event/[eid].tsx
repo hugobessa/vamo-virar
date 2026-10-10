@@ -1,4 +1,5 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { canModerate } from "@vamo-virar/domain";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
 import { confirm } from "../../../../lib/confirm";
@@ -29,6 +30,22 @@ export default function EventScreen() {
   const [attendedEdit, setAttended] = useState<Set<string> | null>(null);
   const state = entry?.replica.view;
   const ev = state?.events[eid ?? ""];
+  const meRec = entry && state ? state.members[entry.replica.memberId] : undefined;
+  const moderate = !!state && !!meRec && canModerate(state, meRec);
+  // Moderation: deletes the event for everyone, details and history included.
+  const removeButton = (eventId: string) =>
+    moderate && entry ? (
+      <Button
+        testID="remove-event"
+        kind="danger"
+        label={t("removeEvent")}
+        onPress={async () => {
+          if (!(await confirm(t("removeEventConfirm"), t("yes"), t("no")))) return;
+          store.submit(entry.id, "event.remove", { event_id: eventId });
+          router.back();
+        }}
+      />
+    ) : null;
   if (!entry || !state || !ev) {
     const summary = state?.event_summaries[eid ?? ""];
     return (
@@ -40,6 +57,7 @@ export default function EventScreen() {
             <Body muted>
               {summary.attended_count} / {summary.confirmed_count} {t("people")}
             </Body>
+            {removeButton(summary.event_id)}
           </>
         ) : (
           <Body muted>{t("why_unknown_target")}</Body>
@@ -149,6 +167,7 @@ export default function EventScreen() {
           />
         </>
       ) : null}
+      {removeButton(ev.event_id)}
     </Screen>
   );
 }

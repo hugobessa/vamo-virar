@@ -283,6 +283,7 @@ const HANDLERS: Record<string, Handler> = {
   "event.cancel": eventClose("cancelled"),
   "event.complete": eventClose("completed"),
   "event.attendance": eventAttendance,
+  "event.remove": eventRemove,
   "participation.invite": participation("invite"),
   "participation.volunteer": participation("volunteer"),
   "participation.accept": participation("accept"),
@@ -582,6 +583,21 @@ function eventAttendance(s: CommunityState, op: DecodedOp, author: MemberRecord)
     attended.add(id);
   }
   ev.attended = [...attended].sort();
+}
+
+/**
+ * Moderation: deletes an event outright, whatever its status, for content
+ * that should not stay up. Unlike `event.cancel`, nothing remains: no
+ * details, no participations, no summary. Admins and moderators only.
+ */
+function eventRemove(s: CommunityState, op: DecodedOp, author: MemberRecord): void {
+  requireModerator(s, author);
+  const b = body(op);
+  if (!isHex(b.event_id, 16)) reject("malformed");
+  if (b.reason !== undefined && !isText(b.reason, 500)) reject("malformed");
+  if (!s.events[b.event_id] && !s.event_summaries[b.event_id]) reject("unknown_target");
+  delete s.events[b.event_id];
+  delete s.event_summaries[b.event_id];
 }
 
 function scheduledEvent(s: CommunityState, eventId: unknown): Event {

@@ -92,6 +92,8 @@ const pt = {
   cancelEvent: "Cancelar evento",
   completeEvent: "Marcar como realizado",
   recordAttendance: "Quem compareceu",
+  removeEvent: "Apagar evento",
+  removeEventConfirm: "Apagar este evento para todo mundo? Somem os detalhes e quem ia participar. Não dá para desfazer. Para só avisar que não vai acontecer, use Cancelar evento.",
   // People
   joinRequests: "Pedidos para entrar",
   noRequests: "Nenhum pedido agora.",

@@ -691,6 +691,7 @@ Event {
 | `event.cancel` | `{event_id, reason?}` | organizador do evento ou admin | `scheduled` |
 | `event.complete` | `{event_id}` | organizador do evento ou admin | `scheduled` |
 | `event.attendance` | `{event_id, attended: [member_id]}` | organizador do evento ou admin | `completed`; cada id tem participação `confirmed` |
+| `event.remove` | `{event_id, reason?}` | admin ou moderador (moderação) | o evento existe, em qualquer estado, ou tem resumo. Apaga tudo: detalhes, participações e resumo; operações posteriores sobre ele dão `unknown_target` |
 
 Um `event.update` que altera `starts_at`, `ends_at` ou `location.area`
 redefine todo participante `confirmed` para `reconfirm` (ver §9.4), porque a
