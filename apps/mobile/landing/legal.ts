@@ -1,5 +1,5 @@
-// Builds /privacidade/, /termos/ and /seguranca-infantil/ from docs/*.md so the
-// legal text has one source.
+// Builds /privacidade/, /termos/, /seguranca-infantil/ and /servidor/ from
+// docs/*.md so each text has one source.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -27,6 +27,12 @@ const pages: Page[] = [
     file: "child-safety.md",
     nav: "Segurança infantil",
     description: "Padrões do Vamo Virar contra o abuso e a exploração sexual infantil (CSAE): o que é proibido, como denunciar e o que fazemos.",
+  },
+  {
+    slug: "servidor",
+    file: "hosting-guide.md",
+    nav: "Montar servidor",
+    description: "Passo a passo para montar o servidor da sua comunidade num computador seu ou numa VPS barata, de graça ou por poucos dólares por mês.",
   },
 ];
 
@@ -127,6 +133,9 @@ const css = `
   main ul, main ol { padding-left:1.4em; }
   li { margin:4px 0; } li::marker { color:var(--muted); }
   code { font-size:.9em; background:#8881; padding:1px 5px; border-radius:4px; }
+  pre { margin:0 0 20px; padding:14px 16px; background:var(--surface); border:1px solid var(--border); border-radius:8px; overflow-x:auto; -webkit-overflow-scrolling:touch; font-size:14px; line-height:1.55; }
+  pre code { background:none; padding:0; font-size:inherit; white-space:pre-wrap; overflow-wrap:anywhere; }
+  li > pre { margin-top:8px; }
   strong { font-weight:700; }
   blockquote { margin:24px 0; padding:16px 20px; background:var(--note); border-left:6px solid var(--note-edge); border-radius:0 8px 8px 0; }
   blockquote p:last-child { margin:0; }
@@ -206,7 +215,7 @@ ${rest.join("")}
 `;
 }
 
-/** Serves the legal pages in dev and emits them on build. */
+/** Serves the doc pages in dev and emits them on build. */
 export function legalPages(): Plugin {
   return {
     name: "vv-legal-pages",

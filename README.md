@@ -133,9 +133,10 @@ A landing page em pt-BR é um site estático separado, feito com os mesmos
 componentes do app (`apps/mobile/landing`). A política de privacidade
 (`/privacidade/`), os termos de uso (`/termos/`) e os padrões de segurança
 infantil contra abuso e exploração sexual infantil (`/seguranca-infantil/`, a
-URL pedida pelo Google Play) são gerados a partir de `docs/privacy-policy.md`,
-`docs/terms-of-service.md` e `docs/child-safety.md`, então o texto jurídico
-tem uma fonte só. Os links da página (lojas, código, documentação) ficam em
+URL pedida pelo Google Play) e o guia para montar o servidor (`/servidor/`) são
+gerados a partir de `docs/privacy-policy.md`, `docs/terms-of-service.md`,
+`docs/child-safety.md` e `docs/hosting-guide.md`, então cada texto tem uma
+fonte só. Os links da página (lojas, código, documentação) ficam em
 `apps/mobile/src/ui/landing/links.ts`.
 
 ```sh

@@ -1,5 +1,10 @@
 # Rodando um nó da comunidade
 
+> Primeira vez? O [guia passo a passo](hosting-guide.md) (também em
+> `/servidor/` na landing page) monta um servidor num computador seu ou numa
+> VPS barata com Docker e Tailscale, sem domínio nem portas abertas. Esta
+> página é a referência completa.
+
 Um nó é **um binário e um arquivo SQLite**. Ele não precisa de servidor de banco de dados,
 fila nem cache, e nunca guarda chaves capazes de ler o conteúdo da comunidade
 (veja [threat-model.md](threat-model.md)): se a máquina for perdida ou apreendida,
