@@ -1,5 +1,6 @@
 import type { Preview } from "@storybook/react-native-web-vite";
 import { View } from "react-native";
+import { PhoneFrame } from "../src/storybook/Phone";
 import { SchemeOverride, themes } from "../src/ui/theme";
 
 const preview: Preview = {
@@ -16,8 +17,20 @@ const preview: Preview = {
         dynamicTitle: true,
       },
     },
+    frame: {
+      description: "Moldura das telas",
+      toolbar: {
+        title: "Moldura",
+        icon: "mobile",
+        items: [
+          { value: "phone", title: "Celular" },
+          { value: "bare", title: "Tela cheia (lojas)" },
+        ],
+        dynamicTitle: true,
+      },
+    },
   },
-  initialGlobals: { scheme: "light" },
+  initialGlobals: { scheme: "light", frame: "phone" },
   parameters: {
     layout: "fullscreen",
     controls: { expanded: true },
@@ -26,12 +39,15 @@ const preview: Preview = {
   decorators: [
     (Story, ctx) => {
       const scheme = ctx.globals["scheme"] === "dark" ? "dark" : "light";
+      const frame = ctx.globals["frame"] === "bare" ? "bare" : "phone";
       return (
-        <SchemeOverride.Provider value={scheme}>
-          <View style={{ minHeight: "100vh" as unknown as number, backgroundColor: themes[scheme].bg }}>
-            <Story />
-          </View>
-        </SchemeOverride.Provider>
+        <PhoneFrame.Provider value={frame}>
+          <SchemeOverride.Provider value={scheme}>
+            <View style={{ minHeight: "100vh" as unknown as number, backgroundColor: themes[scheme].bg }}>
+              <Story />
+            </View>
+          </SchemeOverride.Provider>
+        </PhoneFrame.Provider>
       );
     },
   ],
