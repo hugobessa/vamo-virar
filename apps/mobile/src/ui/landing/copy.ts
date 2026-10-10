@@ -63,6 +63,12 @@ export const copy = {
       { q: "O servidor da comunidade lê as minhas informações?", a: "Não. O que a comunidade compartilha é cifrado de ponta a ponta: o servidor só guarda e repassa dados cifrados." },
       { q: "E se o servidor cair ou mudar de lugar?", a: "A comunidade é identificada por chaves, e não pelo servidor. Dá para trocar de servidor sem perder a comunidade." },
       { q: "Minha agenda vai para algum lugar?", a: "Não. O app lê só os horários em que você está ocupada(o), no próprio celular, para mostrar se você pode ir a um evento." },
+      {
+        q: "Como o app protege crianças e adolescentes?",
+        a: "O app é só para maiores de 18 anos e não tem envio de fotos nem conversas privadas. Abuso e exploração sexual infantil são proibidos: denuncie no app, escreva para a gente e procure as autoridades.",
+        link: "childSafety",
+        more: "Ler os Padrões de Segurança Infantil",
+      },
     ],
   },
   cta: {
@@ -71,5 +77,5 @@ export const copy = {
     appStore: "Baixar na App Store",
     playStore: "Baixar no Google Play",
   },
-  footer: { open: "Código aberto, licença MIT.", source: "Código", docs: "Documentação", privacy: "Política de Privacidade", terms: "Termos de Uso" },
+  footer: { open: "Código aberto, licença MIT.", source: "Código", docs: "Documentação", privacy: "Política de Privacidade", terms: "Termos de Uso", childSafety: "Segurança Infantil" },
 } as const;

@@ -47,15 +47,20 @@ Você concorda em **não** usar o app para:
 1. violar a lei ou direitos de terceiros;
 2. assediar, ameaçar, discriminar ou incitar violência contra pessoas ou grupos;
 3. organizar ou promover atividades ilegais;
-4. enviar spam, abusar de convites ou sobrecarregar servidores, inclusive contornando limites de taxa;
-5. tentar acessar comunidades, chaves, dados ou sistemas sem autorização,
+4. abusar, explorar, aliciar ou sexualizar crianças ou adolescentes, ou
+   produzir, compartilhar ou pedir material de abuso sexual infantil (veja os
+   [Padrões de Segurança Infantil](child-safety.md));
+5. enviar spam, abusar de convites ou sobrecarregar servidores, inclusive contornando limites de taxa;
+6. tentar acessar comunidades, chaves, dados ou sistemas sem autorização,
    ou comprometer a segurança do app ou dos servidores das comunidades (para relatar uma vulnerabilidade,
    veja [`security.md`](security.md));
-6. fazer engenharia reversa do app além do que a licença de código aberto
+7. fazer engenharia reversa do app além do que a licença de código aberto
    permite;
-7. se passar por outra pessoa ou falsificar informações.
+8. se passar por outra pessoa ou falsificar informações.
 
 Administradores podem remover quem violar essas regras de suas comunidades.
+Casos de abuso ou exploração infantil são levados às autoridades, como
+descrito nos [Padrões de Segurança Infantil](child-safety.md).
 
 ## 5. Seu conteúdo
 

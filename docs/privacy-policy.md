@@ -189,7 +189,8 @@ conseguimos atender, e por quê. Você também pode reclamar à
 
 O app não é direcionado a menores de **18** anos, e não coletamos
 intencionalmente dados deles. Se você acredita que um menor usa o app, entre em
-contato.
+contato. Nossos [Padrões de Segurança Infantil](child-safety.md) explicam como
+combatemos o abuso e a exploração sexual infantil e como denunciar.
 
 ## 11. Transferência internacional
 
