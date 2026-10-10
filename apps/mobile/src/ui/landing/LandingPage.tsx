@@ -1,18 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
 import { BrandBox, Display, Eyebrow, Flag, FlagStripe, Star, Wordmark, type BoxTone } from "../brand";
-import { Body, Button, Card, Chip, Heading } from "../kit";
+import { Body, Card, Chip, Heading } from "../kit";
 import { fonts, palette, space, type, useTheme } from "../theme";
+import { Anchor, LinkButton, TextLink } from "./Anchor";
 import { copy } from "./copy";
-
-export type LandingActions = {
-  onCreate?: () => void;
-  onJoin?: () => void;
-  onOpenSource?: () => void;
-  onOpenDocs?: () => void;
-};
-
-const noop = () => {};
+import { defaultLinks, type LandingLinks } from "./links";
 
 /** Wide layout from this width up (two columns, inline nav links). */
 const WIDE = 880;
@@ -33,23 +26,24 @@ function Section({ bg, children, id, pad = space.huge }: { bg: string; children:
   );
 }
 
-function Header({ onCreate }: { onCreate: () => void }) {
+function Header() {
   const c = useTheme();
   const wide = useWide();
-  const link = { color: c.text, fontFamily: fonts.text, fontSize: 15, fontWeight: "600" as const };
   return (
     <View style={{ backgroundColor: c.bg, borderBottomWidth: 1, borderBottomColor: c.border }}>
       <View style={{ width: "100%", maxWidth: 1120, alignSelf: "center", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: wide ? space.xxl : space.l, paddingVertical: space.s, gap: space.l }}>
-        <Wordmark size="sm" />
+        <Anchor href="#topo" label="Vamo Virar, início">
+          <Wordmark size="sm" />
+        </Anchor>
         {wide ? (
-          <View accessibilityRole="menu" style={{ flexDirection: "row", gap: space.xl }}>
-            <Text accessibilityRole="link" style={link}>{copy.nav.how}</Text>
-            <Text accessibilityRole="link" style={link}>{copy.nav.privacy}</Text>
-            <Text accessibilityRole="link" style={link}>{copy.nav.faq}</Text>
+          <View style={{ flexDirection: "row", gap: space.xl }}>
+            <TextLink href="#como-funciona" underline={false}>{copy.nav.how}</TextLink>
+            <TextLink href="#privacidade" underline={false}>{copy.nav.privacy}</TextLink>
+            <TextLink href="#perguntas" underline={false}>{copy.nav.faq}</TextLink>
           </View>
         ) : null}
-        <View style={{ minWidth: wide ? 220 : 150 }}>
-          <Button label={wide ? copy.nav.create : "Criar"} onPress={onCreate} />
+        <View style={{ minWidth: wide ? 180 : 130 }}>
+          <LinkButton href="#baixar" label={wide ? copy.nav.create : "Baixar"} />
         </View>
       </View>
       <FlagStripe height={4} />
@@ -80,7 +74,7 @@ function PhoneMock() {
   );
 }
 
-function Hero({ onCreate, onJoin }: { onCreate: () => void; onJoin: () => void }) {
+function Hero() {
   const wide = useWide();
   const c = useTheme();
   return (
@@ -94,10 +88,10 @@ function Hero({ onCreate, onJoin }: { onCreate: () => void; onJoin: () => void }
           <Text style={{ color: c.text, fontFamily: fonts.text, fontSize: wide ? 20 : 17, lineHeight: wide ? 30 : 26, maxWidth: 520 }}>{copy.hero.body}</Text>
           <View style={{ flexDirection: wide ? "row" : "column", gap: space.m, maxWidth: wide ? undefined : 420 }}>
             <View style={{ minWidth: 220 }}>
-              <Button label={copy.hero.create} onPress={onCreate} />
+              <LinkButton href="#baixar" label={copy.hero.create} />
             </View>
             <View style={{ minWidth: 220 }}>
-              <Button kind="secondary" label={copy.hero.join} onPress={onJoin} />
+              <LinkButton href="#baixar" kind="secondary" label={copy.hero.join} />
             </View>
           </View>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.s }}>
@@ -162,7 +156,7 @@ function How() {
   );
 }
 
-function Privacy({ onOpenSource }: { onOpenSource: () => void }) {
+function Privacy({ links }: { links: LandingLinks }) {
   const wide = useWide();
   const c = useTheme();
   return (
@@ -181,15 +175,16 @@ function Privacy({ onOpenSource }: { onOpenSource: () => void }) {
             </View>
           ))}
           <View style={{ alignSelf: "flex-start", minWidth: 220 }}>
-            <Button kind="accent" label={copy.privacy.cta} onPress={onOpenSource} />
+            <LinkButton href={links.source} kind="accent" label={copy.privacy.cta} />
           </View>
+          <TextLink href={links.privacy} color={palette.white}>{copy.privacy.policy}</TextLink>
         </View>
       </View>
     </Section>
   );
 }
 
-function Organizers({ onOpenDocs }: { onOpenDocs: () => void }) {
+function Organizers({ links }: { links: LandingLinks }) {
   const c = useTheme();
   const wide = useWide();
   return (
@@ -200,7 +195,7 @@ function Organizers({ onOpenDocs }: { onOpenDocs: () => void }) {
           <Display size="h1">{copy.organizers.title}</Display>
           <Body muted>{copy.organizers.body}</Body>
           <View style={{ alignSelf: "flex-start", minWidth: 240 }}>
-            <Button kind="secondary" label={copy.organizers.cta} onPress={onOpenDocs} />
+            <LinkButton href={links.serverDocs} kind="secondary" label={copy.organizers.cta} />
           </View>
         </View>
         <View style={{ flex: 1, gap: space.l, alignItems: "flex-start" }}>
@@ -251,39 +246,38 @@ function Faq() {
   );
 }
 
-function FinalCta({ onCreate, onJoin }: { onCreate: () => void; onJoin: () => void }) {
+function Download({ links }: { links: LandingLinks }) {
   const wide = useWide();
   const c = useTheme();
   return (
-    <Section bg={c.bandBlue}>
+    <Section bg={c.bandBlue} id="baixar">
       <View style={{ flexDirection: wide ? "row" : "column", alignItems: wide ? "center" : "stretch", justifyContent: "space-between", gap: space.xl }}>
         <View style={{ gap: space.s, flex: 1 }}>
           <Display size="display" tone="onBrand">{copy.cta.title}</Display>
-          <Text style={{ color: palette.white, fontFamily: fonts.text, fontSize: 19, lineHeight: 28 }}>{copy.cta.body}</Text>
+          <Text style={{ color: palette.white, fontFamily: fonts.text, fontSize: 19, lineHeight: 28, maxWidth: 560 }}>{copy.cta.body}</Text>
         </View>
-        <View style={{ gap: space.m, minWidth: 260 }}>
-          <Button kind="accent" label={copy.cta.create} onPress={onCreate} />
-          <Pressable accessibilityRole="link" onPress={onJoin} style={{ minHeight: 44, justifyContent: "center", alignItems: "center" }}>
-            <Text style={{ color: palette.white, fontFamily: fonts.text, fontSize: 16, fontWeight: "700", textDecorationLine: "underline" }}>{copy.cta.join}</Text>
-          </Pressable>
+        <View style={{ gap: space.m, minWidth: 280 }}>
+          <LinkButton href={links.appStore} kind="accent" label={copy.cta.appStore} />
+          <LinkButton href={links.playStore} kind="accent" label={copy.cta.playStore} />
         </View>
       </View>
     </Section>
   );
 }
 
-function Footer({ onOpenSource, onOpenDocs }: { onOpenSource: () => void; onOpenDocs: () => void }) {
+function Footer({ links }: { links: LandingLinks }) {
   const c = useTheme();
-  const link = { color: c.text, fontFamily: fonts.text, fontSize: 15, fontWeight: "600" as const, textDecorationLine: "underline" as const };
   return (
     <View style={{ backgroundColor: c.bg }}>
       <FlagStripe height={8} />
       <View style={{ width: "100%", maxWidth: 1120, alignSelf: "center", paddingHorizontal: space.l, paddingVertical: space.xl, flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: space.l }}>
         <Wordmark size="sm" />
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.l, flexWrap: "wrap" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", columnGap: space.l, flexWrap: "wrap" }}>
           <Flag width={28} />
-          <Text accessibilityRole="link" onPress={onOpenSource} style={link}>{copy.footer.source}</Text>
-          <Text accessibilityRole="link" onPress={onOpenDocs} style={link}>{copy.footer.docs}</Text>
+          <TextLink href={links.source}>{copy.footer.source}</TextLink>
+          <TextLink href={links.docs}>{copy.footer.docs}</TextLink>
+          <TextLink href={links.privacy}>{copy.footer.privacy}</TextLink>
+          <TextLink href={links.terms}>{copy.footer.terms}</TextLink>
           <Text style={{ color: c.muted, fontFamily: fonts.text, ...type.small }}>{copy.footer.open}</Text>
         </View>
       </View>
@@ -291,18 +285,18 @@ function Footer({ onOpenSource, onOpenDocs }: { onOpenSource: () => void; onOpen
   );
 }
 
-export function LandingPage({ onCreate = noop, onJoin = noop, onOpenSource = noop, onOpenDocs = noop }: LandingActions) {
+export function LandingPage({ links = defaultLinks }: { links?: LandingLinks }) {
   return (
-    <ScrollView>
-      <Header onCreate={onCreate} />
-      <Hero onCreate={onCreate} onJoin={onJoin} />
+    <View nativeID="topo">
+      <Header />
+      <Hero />
       <Pillars />
       <How />
-      <Privacy onOpenSource={onOpenSource} />
-      <Organizers onOpenDocs={onOpenDocs} />
+      <Privacy links={links} />
+      <Organizers links={links} />
       <Faq />
-      <FinalCta onCreate={onCreate} onJoin={onJoin} />
-      <Footer onOpenSource={onOpenSource} onOpenDocs={onOpenDocs} />
-    </ScrollView>
+      <Download links={links} />
+      <Footer links={links} />
+    </View>
   );
 }

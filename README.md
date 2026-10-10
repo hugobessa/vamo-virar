@@ -127,6 +127,26 @@ A identidade segue a campanha: vermelho como cor da marca, com as cores da
 bandeira como detalhe. Como o vermelho também significa "perigo", ele nunca é
 o fundo de um botão de ação: a ação principal é azul, a de destaque é amarela.
 
+### Landing page (Cloudflare Pages)
+
+A landing page em pt-BR é um site estático separado, feito com os mesmos
+componentes do app (`apps/mobile/landing`). A política de privacidade
+(`/privacidade/`) e os termos de uso (`/termos/`) são gerados a partir de
+`docs/privacy-policy.md` e `docs/terms-of-service.md`, então o texto jurídico
+tem uma fonte só. Os links da página (lojas, código, documentação) ficam em
+`apps/mobile/src/ui/landing/links.ts`.
+
+```sh
+npm run landing -w @vamo-virar/mobile          # desenvolvimento, http://localhost:5173
+npm run build:landing -w @vamo-virar/mobile    # gera apps/mobile/dist-landing
+npm run preview:landing -w @vamo-virar/mobile  # serve o build, http://localhost:4173
+```
+
+No Cloudflare Pages: diretório raiz vazio, comando de build
+`npm ci && npm run build:landing -w @vamo-virar/mobile`, diretório de saída
+`apps/mobile/dist-landing` e a variável `NODE_VERSION=22`. Os cabeçalhos de
+segurança estão em `apps/mobile/landing/public/_headers`.
+
 ### Compilar na nuvem com EAS
 
 Sem Android Studio nem Xcode, o [EAS Build](https://docs.expo.dev/build/introduction/)

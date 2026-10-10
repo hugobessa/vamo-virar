@@ -1,0 +1,31 @@
+// Where the landing page points. Relative paths are pages of the same site.
+
+const REPO = "https://github.com/hugobessa/vamo-virar";
+
+export interface LandingLinks {
+  /** App Store page (ascAppId in eas.json). */
+  appStore: string;
+  /** Google Play page (android.package in app.json). */
+  playStore: string;
+  source: string;
+  docs: string;
+  /** How to run a community server. */
+  serverDocs: string;
+  /** Built from docs/privacy-policy.md by the landing build. */
+  privacy: string;
+  /** Built from docs/terms-of-service.md by the landing build. */
+  terms: string;
+}
+
+export const defaultLinks: LandingLinks = {
+  appStore: "https://apps.apple.com/app/id6821252003",
+  playStore: "https://play.google.com/store/apps/details?id=me.bessa.vamovirar",
+  source: REPO,
+  docs: `${REPO}/tree/main/docs`,
+  serverDocs: `${REPO}/blob/main/docs/deploy.md`,
+  privacy: "/privacidade/",
+  terms: "/termos/",
+};
+
+/** Docs that the legal pages link to by file name, as they appear on GitHub. */
+export const docUrl = (file: string) => `${REPO}/blob/main/docs/${file}`;
