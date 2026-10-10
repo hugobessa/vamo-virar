@@ -115,6 +115,14 @@ npm run storybook -w @vamo-virar/mobile        # http://localhost:6006
 npm run build-storybook -w @vamo-virar/mobile  # versão estática em apps/mobile/dist-storybook
 ```
 
+As telas reais do app (`src/app`) também estão no Storybook, em "Telas", com
+dados de exemplo (comunidade "Horta da Vila", pessoas e eventos inventados).
+O Storybook troca `lib/context`, `lib/storage`, `lib/matching`, `lib/confirm`
+e o `expo-router` por versões de teste em `apps/mobile/src/storybook`, então
+nada precisa de servidor, chaves ou agenda. Navegação e ações aparecem no
+painel Actions. Para uma tela nova, crie o cenário em
+`src/storybook/scenario.tsx` e a história em `src/storybook/screens/`.
+
 A identidade segue a campanha: vermelho como cor da marca, com as cores da
 bandeira como detalhe. Como o vermelho também significa "perigo", ele nunca é
 o fundo de um botão de ação: a ação principal é azul, a de destaque é amarela.
