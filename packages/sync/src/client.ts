@@ -236,8 +236,12 @@ export class NodeClient {
     }
   }
 
-  async putSnapshot(cid: Uint8Array, admin: SigningKeyPair, s: SnapshotEnvelope): Promise<void> {
-    await this.authed("PUT", `/v1/c/${toHex(cid)}/snapshot`, cid, "control", admin, encode(snapshotEnvelopeToCbor(s)));
+  /**
+   * `scope` is `control` for admins (works with any node) and `moderate`
+   * for moderators; the same holds for `intake` and `ackIntake`.
+   */
+  async putSnapshot(cid: Uint8Array, admin: SigningKeyPair, s: SnapshotEnvelope, scope: StaffScope = "control"): Promise<void> {
+    await this.authed("PUT", `/v1/c/${toHex(cid)}/snapshot`, cid, scope, admin, encode(snapshotEnvelopeToCbor(s)));
   }
 
   async postMailbox(cid: Uint8Array, eak: SigningKeyPair, mailbox: Uint8Array, kind: string, ct: Uint8Array, ttlS?: number): Promise<number> {
@@ -263,8 +267,8 @@ export class NodeClient {
     return res.id as number;
   }
 
-  async intake(cid: Uint8Array, admin: SigningKeyPair, after = 0): Promise<IntakeItem[]> {
-    const res = (await this.authed("GET", `/v1/c/${toHex(cid)}/intake?after=${after}`, cid, "control", admin)) as Obj;
+  async intake(cid: Uint8Array, admin: SigningKeyPair, after = 0, scope: StaffScope = "control"): Promise<IntakeItem[]> {
+    const res = (await this.authed("GET", `/v1/c/${toHex(cid)}/intake?after=${after}`, cid, scope, admin)) as Obj;
     return (res.items as Obj[]).map((i) => ({
       id: i.id as number,
       sealed: { enc: i.enc as Uint8Array, ct: i.ct as Uint8Array },
@@ -272,8 +276,8 @@ export class NodeClient {
     }));
   }
 
-  async ackIntake(cid: Uint8Array, admin: SigningKeyPair, id: number): Promise<void> {
-    await this.authed("DELETE", `/v1/c/${toHex(cid)}/intake/${id}`, cid, "control", admin);
+  async ackIntake(cid: Uint8Array, admin: SigningKeyPair, id: number, scope: StaffScope = "control"): Promise<void> {
+    await this.authed("DELETE", `/v1/c/${toHex(cid)}/intake/${id}`, cid, scope, admin);
   }
 
   async setIntakeMode(cid: Uint8Array, admin: SigningKeyPair, mode: IntakeMode): Promise<void> {
@@ -338,6 +342,8 @@ export class NodeClient {
     return { close: () => ws.close() };
   }
 }
+
+export type StaffScope = Extract<AuthScope, "control" | "moderate">;
 
 function sessionKey(cid: Uint8Array, scope: AuthScope, key: SigningKeyPair): string {
   return `${toHex(cid)}:${scope}:${toHex(key.pk)}`;

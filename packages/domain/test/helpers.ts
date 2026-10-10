@@ -125,6 +125,17 @@ export class LogBuilder {
     );
   }
 
+  modSet(signer: Person | string, moderators: Person[], opts?: OpOpts): Entry {
+    const msk = typeof signer === "string" ? signer : signer.msk;
+    return this.push(
+      {
+        control: { kind: "mod.set", signer: msk, args: { moderators: moderators.map((m) => m.msk) } },
+        op: { author: msk, base: 0, ts: 0, type: "mod.set", body: {} },
+      },
+      opts,
+    );
+  }
+
   migrate(signer: Person | string, nodes: string[], opts?: OpOpts): Entry {
     const msk = typeof signer === "string" ? signer : signer.msk;
     return this.push(

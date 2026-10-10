@@ -137,11 +137,14 @@ export interface EntryOptions {
   probeReplies?: boolean;
   /** Admin view: reports about members, and someone already blocked. */
   reports?: boolean;
+  /** Duda is a moderator. */
+  moderator?: boolean;
   state?: CommunityState;
 }
 
 export function makeEntry(o: EntryOptions = {}) {
   const state = o.state ?? communityState();
+  if (o.moderator) state.mod_set = ["msk-duda"];
   if (o.reports) state.members.gil = { ...member("gil", "Gil Prado", "member", "removed"), blocked: true };
   const me = o.me ?? "ana";
   const active = (o.status ?? "active") === "active";
@@ -157,6 +160,8 @@ export function makeEntry(o: EntryOptions = {}) {
     status: o.status ?? "active",
     memberId: me,
     isAdmin: me === "ana",
+    isModerator: !!o.moderator && me === "duda",
+    canModerate: me === "ana" || (!!o.moderator && me === "duda"),
     node: "https://horta.example.org",
     recoveryKey: me === "ana" ? new Uint8Array(32).map((_, i) => (i * 37 + 11) % 256) : null,
     pending: new Array(o.pending ?? 0).fill({}),
@@ -173,6 +178,8 @@ export function makeEntry(o: EntryOptions = {}) {
     reportMember: async (...a: unknown[]) => action("replica.reportMember")(...a),
     dismissReport: action("replica.dismissReport"),
     blockMember: async (id: string) => action("replica.blockMember")(id),
+    makeModerator: async (id: string) => action("replica.makeModerator")(id),
+    removeModerator: async (id: string) => action("replica.removeModerator")(id),
     unblockMember: async (id: string) => action("replica.unblockMember")(id),
     approve: async (p: unknown) => action("replica.approve")(p),
     reject: async (p: unknown) => action("replica.reject")(p),

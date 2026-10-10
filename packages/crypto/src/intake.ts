@@ -71,7 +71,8 @@ export function openJoinRequest(sealed: HpkeSealed, cid: Uint8Array, ik: Encrypt
 // Node authentication
 // ---------------------------------------------------------------------------
 
-export type AuthScope = "community" | "mailbox" | "control";
+/** `moderate`: join requests and snapshots, for admins and moderators (§15). */
+export type AuthScope = "community" | "mailbox" | "control" | "moderate";
 
 export interface AuthChallenge {
   community_id: Uint8Array;
