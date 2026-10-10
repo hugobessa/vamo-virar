@@ -31,9 +31,14 @@
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
+    "@storybook/addon-a11y": "^10.6.1",
+    "@storybook/addon-docs": "^10.6.1",
+    "@storybook/react-native-web-vite": "^10.6.1",
     "@types/react": "~19.2.2",
     "playwright-core": "1.56.1",
+    "storybook": "^10.6.1",
     "typescript": "~6.0.3",
+    "vite": "^7.3.7",
     "vitest": "3.2.4"
   },
   "scripts": {
@@ -45,7 +50,9 @@
     "test": "vitest run",
     "export:web": "expo export --platform web --output-dir dist-web",
     "e2e:web": "node e2e/web.e2e.mjs",
-    "eas-build-post-install": "cd ../.. && npm run build"
+    "eas-build-post-install": "cd ../.. && npm run build",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build -o dist-storybook"
   },
   "private": true
 }
