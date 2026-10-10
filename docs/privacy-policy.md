@@ -2,8 +2,8 @@
 
 **Última atualização:** 10 de outubro de 2026
 
-> **Rascunho.** Os trechos entre [colchetes] precisam ser preenchidos, e o texto
-> deve ser revisado por um(a) advogado(a) antes da publicação.
+> **Rascunho.** O texto deve ser revisado por um(a) advogado(a) antes da
+> publicação.
 
 Esta política explica quais dados o aplicativo **Vamo Virar** ("o app") trata,
 onde eles ficam e quais são os seus direitos. O Vamo Virar foi desenhado para
@@ -15,16 +15,13 @@ O app é desenvolvido por **Hugo Rafael Bessa de Andrade**
 (CPF 090.885.294-00), contato: **[vamovirar@bessa.me](mailto:vamovirar@bessa.me)**.
 
 O Vamo Virar funciona de forma descentralizada. Cada comunidade é sincronizada
-por um **nó da comunidade**, um servidor pequeno que pode ser operado por:
-
-- **você ou alguém da sua comunidade** (nó próprio); ou
-- **um serviço de hospedagem gerenciada** [oferecido por nós / por terceiros].
+por um **nó da comunidade**, um servidor pequeno operado por **você ou por alguém
+da sua comunidade** (nó próprio), seguindo as instruções de instalação do
+projeto. Não oferecemos hospedagem gerenciada.
 
 Quem opera o nó da sua comunidade decide onde ele roda e por quanto tempo guarda
 os dados dele. Nós, como desenvolvedores do app, **não temos acesso ao conteúdo
 das comunidades** e não operamos nenhum servidor central de contas.
-[Se você oferecer hospedagem gerenciada, descreva aqui que, nesse caso, você
-também atua como operador do nó.]
 
 ## 2. Resumo
 
@@ -193,7 +190,7 @@ conseguimos atender, e por quê. Você também pode reclamar à
 
 ## 10. Crianças e adolescentes
 
-O app não é direcionado a menores de **[18 / 13]** anos, e não coletamos
+O app não é direcionado a menores de **18** anos, e não coletamos
 intencionalmente dados deles. Se você acredita que um menor usa o app, entre em
 contato.
 

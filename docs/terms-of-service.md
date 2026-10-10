@@ -2,8 +2,8 @@
 
 **Última atualização:** 10 de outubro de 2026
 
-> **Rascunho.** Os trechos entre [colchetes] precisam ser preenchidos, e o texto
-> deve ser revisado por um(a) advogado(a) antes da publicação.
+> **Rascunho.** O texto deve ser revisado por um(a) advogado(a) antes da
+> publicação.
 
 Estes Termos de Uso ("Termos") regem o uso do aplicativo **Vamo Virar** ("o
 app"), desenvolvido por **Hugo Rafael Bessa de Andrade** (CPF 090.885.294-00) ("nós"). Ao
@@ -21,7 +21,7 @@ agenda e nos seus lugares, que ficam no seu celular.
 
 ## 2. Elegibilidade e conta
 
-- Você precisa ter pelo menos **[18]** anos, ou a idade mínima legal para
+- Você precisa ter pelo menos **18** anos, ou a idade mínima legal para
   aceitar estes Termos no seu país, com autorização de responsável quando
   necessária.
 - Não há cadastro tradicional. Sua identidade é formada por **chaves
@@ -108,8 +108,6 @@ de forma que sugira vínculo ou endosso oficial.
   suspender o acesso de quem violar estes Termos, na medida em que isso esteja
   ao nosso alcance técnico. Na prática, quem controla o acesso a uma comunidade
   são seus administradores e o operador do nó.
-- [Se houver cobrança: planos, preços, renovação, cancelamento e reembolso.
-  Atualmente o app é gratuito.]
 
 ## 10. Isenção de garantias
 
@@ -126,8 +124,6 @@ lucros cessantes, perda de dados, perda de acesso a comunidades, atos de outros
 membros, administradores ou operadores de nós, nem por eventos organizados na
 plataforma. Nada nestes Termos exclui direitos que a lei não permita limitar,
 inclusive os previstos no **Código de Defesa do Consumidor**, quando aplicável.
-[Opcional: nosso limite total de responsabilidade, quando permitido, será de
-R$ [valor].]
 
 ## 12. Indenização
 
@@ -145,7 +141,7 @@ concordar, deve parar de usá-lo.
 ## 14. Lei aplicável e foro
 
 Estes Termos são regidos pelas leis da República Federativa do Brasil. Fica
-eleito o foro de **[comarca/cidade]** para dirimir controvérsias, ressalvado o
+eleito o foro de **Recife/PE** para dirimir controvérsias, ressalvado o
 direito do consumidor de propor ação no foro de seu domicílio.
 
 ## 15. Contato
