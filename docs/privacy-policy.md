@@ -12,7 +12,7 @@ que o mínimo possível de informação saia do seu celular.
 ## 1. Quem é o responsável
 
 O app é desenvolvido por **[Nome / razão social do desenvolvedor]**
-([CNPJ/CPF]), contato: **[e-mail de privacidade]**.
+([CNPJ/CPF]), contato: **[vamovirar@bessa.me](mailto:vamovirar@bessa.me)**.
 
 O Vamo Virar funciona de forma descentralizada. Cada comunidade é sincronizada
 por um **nó da comunidade**, um servidor pequeno que pode ser operado por:
@@ -187,7 +187,7 @@ Como a maior parte dos seus dados está **no seu celular**, você mesmo(a)
 exerce a maioria desses direitos no app: desconectando calendários, apagando
 lugares, saindo de comunidades ou desinstalando o app. Para pedidos sobre dados
 que estejam num nó, fale com quem o opera. Para qualquer outro pedido, escreva
-para **[e-mail de privacidade]**. Explicaremos o que conseguimos e o que não
+para **[vamovirar@bessa.me](mailto:vamovirar@bessa.me)**. Explicaremos o que conseguimos e o que não
 conseguimos atender, e por quê. Você também pode reclamar à
 **Autoridade Nacional de Proteção de Dados (ANPD)**.
 
@@ -213,4 +213,4 @@ exigir.
 
 ## 13. Contato
 
-**[Nome do responsável / Encarregado (DPO)]** — **[e-mail de privacidade]**
+**[Nome do responsável / Encarregado (DPO)]** — **[vamovirar@bessa.me](mailto:vamovirar@bessa.me)**

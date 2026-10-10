@@ -150,4 +150,4 @@ direito do consumidor de propor ação no foro de seu domicílio.
 
 ## 15. Contato
 
-Dúvidas sobre estes Termos: **[e-mail de contato]**.
+Dúvidas sobre estes Termos: **[vamovirar@bessa.me](mailto:vamovirar@bessa.me)**.
