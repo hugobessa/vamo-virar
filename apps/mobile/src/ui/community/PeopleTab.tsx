@@ -1,4 +1,4 @@
-import { isAdmin, type MemberRecord } from "@vamo-virar/domain";
+import { canModerate, isAdmin, isModerator, type MemberRecord } from "@vamo-virar/domain";
 import type { MemberReport, PendingJoin, ReportReason } from "@vamo-virar/sync";
 import { useCallback, useEffect, useState } from "react";
 import { Share, Text, View } from "react-native";
@@ -19,6 +19,8 @@ export function PeopleTab({ entry }: { entry: CommunityEntry }) {
   const state = r.view!;
   const me = state.members[r.memberId];
   const admin = !!me && isAdmin(state, me);
+  /** Admins and moderators: join requests, reports, blocking. */
+  const mod = !!me && canModerate(state, me);
   const [requests, setRequests] = useState<PendingJoin[] | null>(null);
   const [invite, setInvite] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -27,13 +29,13 @@ export function PeopleTab({ entry }: { entry: CommunityEntry }) {
   const [reporting, setReporting] = useState<string | null>(null);
 
   const loadRequests = useCallback(async () => {
-    if (!admin) return;
+    if (!mod) return;
     try {
       setRequests(await r.joinRequests());
     } catch {
       setRequests(null);
     }
-  }, [admin, r]);
+  }, [mod, r]);
 
   useEffect(() => {
     void loadRequests();
@@ -71,7 +73,9 @@ export function PeopleTab({ entry }: { entry: CommunityEntry }) {
     .sort((a, b) => (a.profile?.display_name ?? "").localeCompare(b.profile?.display_name ?? ""));
 
   const nameOf = (id: string) => state.members[id]?.profile?.display_name ?? t("formerMember");
-  const reports: readonly MemberReport[] = admin ? r.reports : [];
+  const reports: readonly MemberReport[] = mod ? r.reports : [];
+  // Moderators block members and organizers; only admins block admins and moderators.
+  const mayBlock = (m: MemberRecord) => admin || (mod && !canModerate(state, m));
   const blockedMembers = Object.values(state.members)
     .filter((m) => m.blocked)
     .sort((a, b) => nameOf(a.member_id).localeCompare(nameOf(b.member_id)));
@@ -83,7 +87,7 @@ export function PeopleTab({ entry }: { entry: CommunityEntry }) {
     <>
       {error ? <Banner tone="danger" text={error} /> : null}
       {notice ? <Banner tone="ok" text={notice} /> : null}
-      {admin ? (
+      {mod ? (
         <>
           <Heading>{t("reports")}</Heading>
           {reports.length === 0 ? <Body muted>{t("noReports")}</Body> : null}
@@ -97,7 +101,7 @@ export function PeopleTab({ entry }: { entry: CommunityEntry }) {
                 <Body muted>{`${t("reportedBy")} ${nameOf(rep.reporter)} · ${new Date(rep.receivedAt).toLocaleDateString(locale)}`}</Body>
                 {target?.blocked ? <Chip label={t("blocked")} /> : null}
                 <View style={{ flexDirection: "row", gap: space.s }}>
-                  {target && !target.blocked && target.member_id !== r.memberId ? (
+                  {target && !target.blocked && target.member_id !== r.memberId && mayBlock(target) ? (
                     <View style={{ flex: 1 }}>
                       <Button testID={`report-block-${rep.reportId}`} kind="danger" label={t("block")} busy={busy === `blk${rep.memberId}`} onPress={() => block(rep.memberId)} />
                     </View>
@@ -125,17 +129,19 @@ export function PeopleTab({ entry }: { entry: CommunityEntry }) {
               </View>
             </Card>
           ))}
-          <Button
-            testID="create-invite"
-            kind="secondary"
-            label={t("createInvite")}
-            busy={busy === "invite"}
-            onPress={() =>
-              run("invite", async () => {
-                setInvite(await r.createInvite({ maxUses: 1 }));
-              })
-            }
-          />
+          {admin ? (
+            <Button
+              testID="create-invite"
+              kind="secondary"
+              label={t("createInvite")}
+              busy={busy === "invite"}
+              onPress={() =>
+                run("invite", async () => {
+                  setInvite(await r.createInvite({ maxUses: 1 }));
+                })
+              }
+            />
+          ) : null}
           {invite ? (
             <Card>
               <Text testID="invite-text" selectable style={{ color: c.text }}>
@@ -159,13 +165,26 @@ export function PeopleTab({ entry }: { entry: CommunityEntry }) {
               onSend={(reason, details) => void sendReport(m.member_id, reason, details)}
               onCancel={() => setReporting(null)}
             />
-          ) : m.member_id !== r.memberId && (admin || canReport) ? (
+          ) : m.member_id !== r.memberId && (mod || canReport) ? (
             <View style={{ gap: space.s }}>
               {admin && m.role === "member" ? (
                 <Button kind="secondary" label={t("makeOrganizer")} onPress={() => store.submit(entry.id, "member.role", { member_id: m.member_id, role: "organizer" })} />
               ) : null}
               {admin && !isAdmin(state, m) ? (
                 <Button kind="secondary" label={t("makeAdmin")} busy={busy === `adm${m.member_id}`} onPress={() => run(`adm${m.member_id}`, () => r.makeAdmin(m.member_id))} />
+              ) : null}
+              {admin && !isAdmin(state, m) && !isModerator(state, m) ? (
+                <Button testID={`make-mod-${m.member_id}`} kind="secondary" label={t("makeModerator")} busy={busy === `mod${m.member_id}`} onPress={() => run(`mod${m.member_id}`, () => r.makeModerator(m.member_id))} />
+              ) : null}
+              {admin && isModerator(state, m) ? (
+                <Button
+                  kind="secondary"
+                  label={t("removeModerator")}
+                  busy={busy === `unmod${m.member_id}`}
+                  onPress={async () => {
+                    if (await confirm(t("removeModeratorConfirm"), t("yes"), t("no"))) await run(`unmod${m.member_id}`, () => r.removeModerator(m.member_id));
+                  }}
+                />
               ) : null}
               {canReport ? (
                 <Button
@@ -179,23 +198,23 @@ export function PeopleTab({ entry }: { entry: CommunityEntry }) {
                 />
               ) : null}
               {admin ? (
-                <>
-                  <Button
-                    kind="danger"
-                    label={t("remove")}
-                    busy={busy === `rm${m.member_id}`}
-                    onPress={async () => {
-                      if (await confirm(t("removeConfirm"), t("yes"), t("no"))) await run(`rm${m.member_id}`, () => r.removeMember(m.member_id));
-                    }}
-                  />
-                  <Button testID={`block-${m.member_id}`} kind="danger" label={t("block")} busy={busy === `blk${m.member_id}`} onPress={() => block(m.member_id)} />
-                </>
+                <Button
+                  kind="danger"
+                  label={t("remove")}
+                  busy={busy === `rm${m.member_id}`}
+                  onPress={async () => {
+                    if (await confirm(t("removeConfirm"), t("yes"), t("no"))) await run(`rm${m.member_id}`, () => r.removeMember(m.member_id));
+                  }}
+                />
+              ) : null}
+              {mayBlock(m) ? (
+                <Button testID={`block-${m.member_id}`} kind="danger" label={t("block")} busy={busy === `blk${m.member_id}`} onPress={() => block(m.member_id)} />
               ) : null}
             </View>
           ) : null}
         </Card>
       ))}
-      {admin ? (
+      {mod ? (
         <>
           <Heading>{t("blockedPeople")}</Heading>
           {blockedMembers.length === 0 ? <Body muted>{t("noBlocked")}</Body> : null}

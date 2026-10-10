@@ -3,11 +3,13 @@ export { DEFAULT_POLICY, parsePolicy } from "./policy.js";
 export {
   applyAll,
   applyInPlace,
+  canModerate,
   DATA_OP_TYPES,
   fold,
   genesis,
   GenesisError,
   isAdmin,
+  isModerator,
   isOrganizer,
   reduce,
   SequenceError,

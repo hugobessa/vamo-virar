@@ -32,7 +32,9 @@ export type ControlArgs =
   | { kind: "rotate"; args: { new_epoch: number; eak: Uint8Array } }
   | { kind: "admin.set"; args: { admins: Uint8Array[]; ik?: Uint8Array } }
   /** Where the community lives from now on (§11.3). Empty cancels a move. */
-  | { kind: "migrate"; args: { nodes: string[] } };
+  | { kind: "migrate"; args: { nodes: string[] } }
+  /** The moderator set (§9.2). Empty removes every moderator. */
+  | { kind: "mod.set"; args: { moderators: Uint8Array[] } };
 
 export type ControlHeader = ControlArgs & { signer: Uint8Array; csig: Uint8Array };
 
@@ -83,6 +85,8 @@ function argsToCbor(c: ControlArgs): CborValue {
       return { admins: [...c.args.admins], ik: c.args.ik };
     case "migrate":
       return { nodes: [...c.args.nodes] };
+    case "mod.set":
+      return { moderators: [...c.args.moderators] };
   }
 }
 
@@ -151,6 +155,11 @@ function controlFromCbor(v: CborValue): ControlHeader {
     case "migrate": {
       const a = asMap(m.args, ["nodes"]);
       return { kind, signer, csig, args: { nodes: nodeList(a.nodes) } };
+    }
+    case "mod.set": {
+      const a = asMap(m.args, ["moderators"]);
+      const list = asArray(a.moderators, 64);
+      return { kind, signer, csig, args: { moderators: list.length === 0 ? [] : keyList(list) } };
     }
     default:
       throw new WireError(`unknown control kind ${kind}`);
@@ -347,6 +356,8 @@ function controlToDomain(c: ControlHeader): DomainControl {
     }
     case "migrate":
       return { kind: "migrate", signer, args: { nodes: [...c.args.nodes] } };
+    case "mod.set":
+      return { kind: "mod.set", signer, args: { moderators: c.args.moderators.map(toHex) } };
   }
 }
 

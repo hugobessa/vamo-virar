@@ -182,6 +182,7 @@ const CONTROL_INNER_TYPE: Record<ControlHeader["kind"], string> = {
   rotate: "epoch.rotate",
   "admin.set": "admin.set",
   migrate: "community.migrate",
+  "mod.set": "mod.set",
 };
 
 function dispatch(s: CommunityState, e: Entry): Outcome {
@@ -221,7 +222,7 @@ function applyControlHeader(s: CommunityState, e: Entry, ctrl: ControlHeader): v
       reject("illegal_transition");
     // eslint-disable-next-line no-fallthrough
     case "rotate": {
-      if (!s.admin_set.includes(ctrl.signer)) reject("not_authorized");
+      if (!s.admin_set.includes(ctrl.signer) && !s.mod_set?.includes(ctrl.signer)) reject("not_authorized");
       if (e.epoch !== s.epoch) reject("stale_epoch");
       if (!isInt(ctrl.args.new_epoch) || ctrl.args.new_epoch !== s.epoch + 1) reject("epoch_conflict");
       if (!isHex(ctrl.args.eak, 32)) reject("malformed");
@@ -246,6 +247,15 @@ function applyControlHeader(s: CommunityState, e: Entry, ctrl: ControlHeader): v
       if (!Array.isArray(nodes) || nodes.length > 5 || !nodes.every(isNodeUrl)) reject("malformed");
       if (nodes.length > 0) s.community.nodes = [...nodes];
       else delete s.community.nodes;
+      return;
+    }
+    case "mod.set": {
+      if (!s.admin_set.includes(ctrl.signer) && ctrl.signer !== s.community.crk) reject("not_authorized");
+      if (e.epoch !== s.epoch) reject("stale_epoch");
+      const mods = Array.isArray(ctrl.args.moderators) && ctrl.args.moderators.length === 0 ? [] : normalizeKeySet(ctrl.args.moderators);
+      if (!mods) reject("malformed");
+      if (mods.length > 0) s.mod_set = mods;
+      else delete s.mod_set;
       return;
     }
   }
@@ -305,6 +315,20 @@ export function isAdmin(s: CommunityState, m: MemberRecord): boolean {
   return m.status === "active" && s.admin_set.includes(m.msk);
 }
 
+/**
+ * Moderators (§9.2) come from the control-plane moderator set, which the
+ * node also enforces: they accept join requests, block and unblock, read
+ * reports and may rotate the epoch key.
+ */
+export function isModerator(s: CommunityState, m: MemberRecord): boolean {
+  return m.status === "active" && !!s.mod_set?.includes(m.msk);
+}
+
+/** Admins and moderators: who may let people in and keep people out. */
+export function canModerate(s: CommunityState, m: MemberRecord): boolean {
+  return isAdmin(s, m) || isModerator(s, m);
+}
+
 export function isOrganizer(s: CommunityState, m: MemberRecord): boolean {
   return m.status === "active" && (m.role === "organizer" || m.role === "admin" || s.admin_set.includes(m.msk));
 }
@@ -317,6 +341,10 @@ function activeAdminCount(s: CommunityState): number {
 
 function requireAdmin(s: CommunityState, m: MemberRecord): void {
   if (!isAdmin(s, m)) reject("not_authorized");
+}
+
+function requireModerator(s: CommunityState, m: MemberRecord): void {
+  if (!canModerate(s, m)) reject("not_authorized");
 }
 
 function requireOrganizer(s: CommunityState, m: MemberRecord): void {
@@ -354,7 +382,7 @@ function policyUpdate(s: CommunityState, op: DecodedOp, author: MemberRecord): v
 // ---------------------------------------------------------------------------
 
 function memberAdd(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
-  requireAdmin(s, author);
+  requireModerator(s, author);
   const b = body(op);
   if (!isHex(b.msk, 32) || !isHex(b.mek, 32)) reject("malformed");
   const profile = parseProfile(b.profile);
@@ -398,11 +426,12 @@ function memberRemove(s: CommunityState, op: DecodedOp, author: MemberRecord): v
 
 /**
  * Blocks a member: removes them if still active and bars `member.add` for
- * their key until `member.unblock`. Admins only. Former members can be
- * blocked too, so someone who left cannot simply be let back in.
+ * their key until `member.unblock`. Admins block anyone; moderators block
+ * anyone but admins and moderators. Former members can be blocked too, so
+ * someone who left cannot simply be let back in.
  */
 function memberBlock(s: CommunityState, op: DecodedOp, author: MemberRecord): void {
-  requireAdmin(s, author);
+  requireModerator(s, author);
   const b = body(op);
   if (!isHex(b.member_id, 32)) reject("malformed");
   if (b.reason !== undefined && !isText(b.reason, 500)) reject("malformed");
@@ -410,13 +439,14 @@ function memberBlock(s: CommunityState, op: DecodedOp, author: MemberRecord): vo
   if (!target) reject("unknown_target");
   if (target.blocked) reject("illegal_transition");
   if (target.member_id === author.member_id) reject("illegal_transition");
+  if (!isAdmin(s, author) && canModerate(s, target)) reject("not_authorized");
   if (isAdmin(s, target) && activeAdminCount(s) <= 1) reject("last_admin");
   if (target.status === "active") endMembership(s, target, "removed");
   target.blocked = true;
 }
 
 function memberUnblock(s: CommunityState, op: DecodedOp, author: MemberRecord): void {
-  requireAdmin(s, author);
+  requireModerator(s, author);
   const b = body(op);
   if (!isHex(b.member_id, 32)) reject("malformed");
   const target = s.members[b.member_id];

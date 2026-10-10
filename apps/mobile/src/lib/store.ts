@@ -121,6 +121,8 @@ export class AppStore {
     if (!e) return;
     try {
       const report = await e.replica.sync();
+      // Moderators who left keep node access until an admin updates the set.
+      if (e.replica.isAdmin) await e.replica.tidyModerators().catch(() => undefined);
       e.connectivity = "ok";
       e.lastSync = Date.now();
       e.lastReport = report;

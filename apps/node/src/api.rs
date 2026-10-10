@@ -278,7 +278,8 @@ fn authorize_token(
         .get(token)
         .cloned()
         .ok_or_else(|| ApiError::unauthorized("unknown token"))?;
-    if s.cid != *cid || s.scope != scope || s.expires_at <= app.clock.now() {
+    let scope_ok = s.scope == scope || (scope == Scope::Moderate && s.scope == Scope::Control);
+    if s.cid != *cid || !scope_ok || s.expires_at <= app.clock.now() {
         return Err(ApiError::unauthorized("token not valid for this request"));
     }
     let st = app.store.lock().unwrap();
@@ -294,6 +295,11 @@ fn authorize_token(
         Scope::Control => {
             if !cm.admin_set.contains(&s.key) {
                 return Err(ApiError::unauthorized("not in the admin set"));
+            }
+        }
+        Scope::Moderate => {
+            if !cm.admin_set.contains(&s.key) && !cm.mod_set.contains(&s.key) {
+                return Err(ApiError::unauthorized("not an admin or a moderator"));
             }
         }
         Scope::Mailbox => {}
@@ -725,7 +731,7 @@ async fn put_snapshot(
     let cid = cid_param(&cid)?;
     // Admins only: a snapshot lets the node compact the log behind it, so a
     // member holding just the epoch access key must not be able to plant one.
-    authorize(&app, &headers, &cid, Scope::Control)?;
+    authorize(&app, &headers, &cid, Scope::Moderate)?;
     let snap = SnapshotEnvelope::decode(&body).map_err(|e| ApiError::bad(e.to_string()))?;
     if snap.cid != cid {
         return Err(ApiError::bad("snapshot for another community"));
@@ -1025,7 +1031,7 @@ async fn get_intake(
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let cid = cid_param(&cid)?;
-    authorize(&app, &headers, &cid, Scope::Control)?;
+    authorize(&app, &headers, &cid, Scope::Moderate)?;
     let st = app.store.lock().unwrap();
     let mut q2 = st.conn().prepare_cached(
         "SELECT id, enc, ct, at FROM intake WHERE cid = ?1 AND id > ?2 ORDER BY id LIMIT ?3",
@@ -1056,7 +1062,7 @@ async fn delete_intake(
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let cid = cid_param(&cid)?;
-    authorize(&app, &headers, &cid, Scope::Control)?;
+    authorize(&app, &headers, &cid, Scope::Moderate)?;
     let n = app.store.lock().unwrap().conn().execute(
         "DELETE FROM intake WHERE cid = ?1 AND id = ?2",
         params![cid, id],

@@ -4,10 +4,12 @@
 
 import {
   applyInPlace,
+  canModerate,
   clone,
   DEFAULT_POLICY,
   genesis as genesisState,
   isAdmin,
+  isModerator,
   memberIdOf,
   restoreSnapshot,
   stateHash,
@@ -51,7 +53,7 @@ import {
   type SnapshotEnvelope,
 } from "@vamo-virar/crypto";
 import { decode, encode, fromHex, toHex, type CborValue } from "@vamo-virar/protocol";
-import { movedTo, NodeClient, NodeError, type RestoreInput } from "./client.js";
+import { movedTo, NodeClient, NodeError, type RestoreInput, type StaffScope } from "./client.js";
 import {
   inviteHash,
   inviteLink,
@@ -344,6 +346,19 @@ export class Replica {
     return !!s && !!m && isAdmin(s, m);
   }
 
+  get isModerator(): boolean {
+    const s = this.data.state;
+    const m = this.me;
+    return !!s && !!m && isModerator(s, m);
+  }
+
+  /** Admin or moderator: may handle join requests, block, unblock and read reports. */
+  get canModerate(): boolean {
+    const s = this.data.state;
+    const m = this.me;
+    return !!s && !!m && canModerate(s, m);
+  }
+
   /**
    * The founder's community root key, to show once as a recovery code and
    * keep somewhere safe off the phone (§2.4, §11.4). Undefined elsewhere.
@@ -535,7 +550,7 @@ export class Replica {
     if (!opened) throw new Error("snapshot failed verification");
     const author = Object.values(opened.state.members).find((m) => m.msk === toHex(opened.author));
     const state = restoreSnapshot({ seq: opened.seq, state: opened.state, state_hash: stateHash(opened.state) });
-    if (!author || !isAdmin(state, author)) throw new Error("snapshot was not produced by an admin");
+    if (!author || !canModerate(state, author)) throw new Error("snapshot was not produced by an admin or a moderator");
     this.data.state = state;
     this.data.snapshot = snap;
     this.data.log = [];
@@ -837,7 +852,7 @@ export class Replica {
     };
   }
 
-  /** Any member: reports another member to the community's admins. */
+  /** Any member: reports another member to the community's admins and moderators. */
   async reportMember(memberId: string, reason: ReportReason, details?: string): Promise<void> {
     const state = this.data.state;
     const me = this.me;
@@ -847,8 +862,8 @@ export class Replica {
     if (!REPORT_REASONS.includes(reason)) throw new Error("unknown report reason");
     const text = details?.trim() || undefined;
     if (text && text.length > REPORT_DETAILS_MAX) throw new Error("report details are too long");
-    // Every active admin except the reported person; an admin reporting keeps a copy too.
-    const admins = Object.values(state.members).filter((m) => isAdmin(state, m) && m.member_id !== memberId);
+    // Every admin and moderator except the reported person; one of them reporting keeps a copy too.
+    const admins = Object.values(state.members).filter((m) => canModerate(state, m) && m.member_id !== memberId);
     if (admins.length === 0) throw new Error("there is no admin to report to");
     const msg = { report_id: this.rng(16), reporter: this.memberId, member_id: memberId, reason, ...(text ? { details: text } : {}) };
     const sig = sign(this.data.keys.signing.sk, "vv/report/v1", this.reportSigned(msg));
@@ -866,7 +881,7 @@ export class Replica {
   private acceptReport(m: Extract<MailMessage, { kind: "report" }>): boolean {
     const state = this.data.state;
     if (!state) return false;
-    if (!this.isAdmin) return true;
+    if (!this.canModerate) return true;
     const reporter = state.members[m.reporter];
     if (!reporter || !state.members[m.member_id]) return false;
     if (!verify(fromHex(reporter.msk), "vv/report/v1", this.reportSigned(m), m.sig)) return true;
@@ -881,12 +896,12 @@ export class Replica {
     return true;
   }
 
-  /** Admin: reports received on this device, newest first. */
+  /** Admin or moderator: reports received on this device, newest first. */
   get reports(): readonly MemberReport[] {
     return [...(this.data.reports ?? [])].reverse();
   }
 
-  /** Admin: closes a report without acting on it. Only on this device. */
+  /** Admin or moderator: closes a report without acting on it. Only on this device. */
   dismissReport(reportId: string): void {
     this.data.reports = (this.data.reports ?? []).filter((r) => r.reportId !== reportId);
     this.changed();
@@ -904,6 +919,16 @@ export class Replica {
   private requireAdmin(): CommunityState {
     if (!this.isAdmin || !this.data.state) throw new Error("only admins can do this");
     return this.data.state;
+  }
+
+  private requireModerator(): CommunityState {
+    if (!this.canModerate || !this.data.state) throw new Error("only admins and moderators can do this");
+    return this.data.state;
+  }
+
+  /** Node token scope for join requests and snapshots: admins keep `control`, so older nodes still work. */
+  private get staffScope(): StaffScope {
+    return this.isAdmin ? "control" : "moderate";
   }
 
   private async submitNow(type: string, body: CborValue): Promise<Outcome> {
@@ -935,20 +960,20 @@ export class Replica {
 
   /** Sealed join requests waiting in intake, opened with the intake key. */
   async joinRequests(): Promise<PendingJoin[]> {
-    this.requireAdmin();
+    this.requireModerator();
     if (!this.data.ik) throw new Error("this device does not hold the intake key");
-    const items = await this.client.intake(this.data.cid, this.data.keys.signing);
+    const items = await this.client.intake(this.data.cid, this.data.keys.signing, 0, this.staffScope);
     const out: PendingJoin[] = [];
     for (const item of items) {
       const req = openJoinRequest(item.sealed, this.data.cid, this.data.ik);
       if (req) out.push({ intakeId: item.id, request: req });
-      else await this.client.ackIntake(this.data.cid, this.data.keys.signing, item.id); // unreadable: drop
+      else await this.client.ackIntake(this.data.cid, this.data.keys.signing, item.id, this.staffScope); // unreadable: drop
     }
     return out;
   }
 
   async approve(p: PendingJoin, role: "member" | "organizer" = "member"): Promise<Outcome> {
-    this.requireAdmin();
+    this.requireModerator();
     const outcome = await this.submitNow("member.add", {
       msk: toHex(p.request.msk),
       mek: toHex(p.request.mek),
@@ -962,16 +987,16 @@ export class Replica {
     const mbx = mailboxId(this.data.cid, p.request.msk);
     await this.client.postMailbox(this.data.cid, epoch.access, mbx, "key_env", encodeKeyEnvelope(sealKeyEnvelope(this.data.cid, epoch.epoch, epoch.key, p.request.mek, { rng: this.rng })));
     await this.client.postMailbox(this.data.cid, epoch.access, mbx, "join_result", sealMail(this.data.cid, p.request.mek, { kind: "join_result", accepted: true }, this.rng), 30 * 86_400);
-    await this.client.ackIntake(this.data.cid, this.data.keys.signing, p.intakeId);
+    await this.client.ackIntake(this.data.cid, this.data.keys.signing, p.intakeId, this.staffScope);
     return outcome;
   }
 
   async reject(p: PendingJoin, reason?: string): Promise<void> {
-    this.requireAdmin();
+    this.requireModerator();
     const mbx = mailboxId(this.data.cid, p.request.msk);
     const msg = sealMail(this.data.cid, p.request.mek, { kind: "join_result", accepted: false, ...(reason ? { reason } : {}) }, this.rng);
     await this.client.postMailbox(this.data.cid, this.currentAccess(), mbx, "join_result", msg, 7 * 86_400);
-    await this.client.ackIntake(this.data.cid, this.data.keys.signing, p.intakeId);
+    await this.client.ackIntake(this.data.cid, this.data.keys.signing, p.intakeId, this.staffScope);
   }
 
   /** Removes a member and rotates the epoch key so they cannot read anything new (§7.2–§7.3). */
@@ -990,29 +1015,31 @@ export class Replica {
   }
 
   async unblockMember(memberId: string): Promise<void> {
-    this.requireAdmin();
+    this.requireModerator();
     const outcome = await this.submitNow("member.unblock", { member_id: memberId });
     if (outcome.status !== "applied") throw new Error(`member.unblock ${outcome.status === "rejected" ? outcome.reason : outcome.status}`);
   }
 
   private async endMembership(type: "member.remove" | "member.block", memberId: string, reason?: string): Promise<void> {
-    const state = this.requireAdmin();
+    const state = type === "member.block" ? this.requireModerator() : this.requireAdmin();
     const target = state.members[memberId];
     if (!target) throw new Error("no such member");
     const wasActive = target.status === "active";
     const wasAdmin = wasActive && state.admin_set.includes(target.msk);
+    const wasModerator = !!state.mod_set?.includes(target.msk);
     const outcome = await this.submitNow(type, { member_id: memberId, ...(reason ? { reason } : {}) });
     if (outcome.status !== "applied") throw new Error(`${type} ${outcome.status === "rejected" ? outcome.reason : outcome.status}`);
     if (!wasActive) return; // a former member: nothing to lock them out of
     const notice = sealMail(this.data.cid, fromHex(target.mek), { kind: "removed", ...(reason ? { reason } : {}) }, this.rng);
     await this.client.postMailbox(this.data.cid, this.currentAccess(), mailboxId(this.data.cid, fromHex(target.msk)), "removed", notice, 30 * 86_400);
     if (wasAdmin) await this.setAdmins(this.data.state!.admin_set.filter((k) => k !== target.msk), true);
+    if (wasModerator) await this.setModerators((this.data.state!.mod_set ?? []).filter((k) => k !== target.msk));
     await this.rotate({ reason: reason ?? "member removed", removed: [memberId] });
   }
 
   /** Generates the next epoch key and delivers it to every active member (§7.3). */
   async rotate(body: CborValue = { reason: "scheduled", removed: [] }): Promise<void> {
-    const state = this.requireAdmin();
+    const state = this.requireModerator();
     const recipients = Object.values(state.members)
       .filter((m) => m.status === "active")
       .map((m) => ({ mek: fromHex(m.mek), mbx: mailboxId(this.data.cid, fromHex(m.msk)) }));
@@ -1052,18 +1079,61 @@ export class Replica {
     }
   }
 
-  /** admin.set; when an admin leaves, also replace the intake key and hand it to the remaining admins. */
+  /** admin.set; when an admin leaves, also replace the intake key and hand it to the remaining admins and moderators. */
   private async setAdmins(adminsHex: string[], newIntakeKey: boolean): Promise<void> {
     const ik = newIntakeKey ? generateEncryptionKeyPair(this.rng) : undefined;
     await this.submitControl("admin.set", { kind: "admin.set", args: { admins: adminsHex.map(fromHex), ...(ik ? { ik: ik.pk } : {}) } }, {});
     if (ik) {
       this.data.ik = ik;
       for (const m of Object.values(this.data.state!.members)) {
-        if (m.status !== "active" || !adminsHex.includes(m.msk) || m.member_id === this.memberId) continue;
+        const staff = adminsHex.includes(m.msk) || !!this.data.state!.mod_set?.includes(m.msk);
+        if (m.status !== "active" || !staff || m.member_id === this.memberId) continue;
         const mail = sealMail(this.data.cid, fromHex(m.mek), { kind: "ik_env", ik_sk: ik.sk }, this.rng);
         await this.client.postMailbox(this.data.cid, this.currentAccess(), mailboxId(this.data.cid, fromHex(m.msk)), "ik_env", mail);
       }
     }
+  }
+
+  /** Admin: makes an active member a moderator and hands them the intake key (§9.2, §10.1). */
+  async makeModerator(memberId: string): Promise<void> {
+    const state = this.requireAdmin();
+    const target = state.members[memberId];
+    if (!target || target.status !== "active") throw new Error("no such active member");
+    if (isAdmin(state, target)) throw new Error("admins already have every moderator power");
+    await this.submitControl("mod.set", { kind: "mod.set", args: { moderators: [...new Set([...(state.mod_set ?? []), target.msk])].map(fromHex) } }, {});
+    if (this.data.ik) {
+      const mail = sealMail(this.data.cid, fromHex(target.mek), { kind: "ik_env", ik_sk: this.data.ik.sk }, this.rng);
+      await this.client.postMailbox(this.data.cid, this.currentAccess(), mailboxId(this.data.cid, fromHex(target.msk)), "ik_env", mail);
+    }
+  }
+
+  /** Admin: takes moderator powers away. They held the intake key, so it is replaced. */
+  async removeModerator(memberId: string): Promise<void> {
+    const state = this.requireAdmin();
+    const target = state.members[memberId];
+    if (!target || !state.mod_set?.includes(target.msk)) throw new Error("not a moderator");
+    await this.setModerators(state.mod_set.filter((k) => k !== target.msk));
+  }
+
+  /**
+   * Admin: drops moderators who are no longer active members (they left, or
+   * were removed on another device) from the node's moderator set. Called
+   * after each sync; does nothing in the usual case.
+   */
+  async tidyModerators(): Promise<boolean> {
+    const state = this.data.state;
+    if (!state?.mod_set || !this.isAdmin) return false;
+    const active = new Set(Object.values(state.members).filter((m) => m.status === "active").map((m) => m.msk));
+    const keep = state.mod_set.filter((k) => active.has(k));
+    if (keep.length === state.mod_set.length) return false;
+    await this.setModerators(keep);
+    return true;
+  }
+
+  /** mod.set, then a new intake key, since whoever left the set held the old one. */
+  private async setModerators(modsHex: string[]): Promise<void> {
+    await this.submitControl("mod.set", { kind: "mod.set", args: { moderators: modsHex.map(fromHex) } }, {});
+    await this.setAdmins(this.data.state!.admin_set, true);
   }
 
   /**
@@ -1111,7 +1181,7 @@ export class Replica {
 
   /** Seals the canonical state as a snapshot and uploads it (§12.3). */
   async makeSnapshot(): Promise<SnapshotEnvelope> {
-    const state = this.requireAdmin();
+    const state = this.requireModerator();
     const { op_ids: _ignored, ...snapState } = state;
     const snap = sealSnapshot({
       cid: this.data.cid,
@@ -1121,7 +1191,7 @@ export class Replica {
       author: this.data.keys.signing,
       rng: this.rng,
     });
-    await this.client.putSnapshot(this.data.cid, this.data.keys.signing, snap);
+    await this.client.putSnapshot(this.data.cid, this.data.keys.signing, snap, this.staffScope);
     this.data.snapshot = snap;
     this.data.log = this.data.log.filter((e) => e.seq > snap.seq);
     return snap;

@@ -280,6 +280,78 @@ describe.skipIf(!HAVE_NODE)("against a real node", () => {
     expect(ana.canonical!.members[caio.memberId]!.blocked).toBeUndefined();
   }, 30_000);
 
+  it("moderators accept and reject joins, block and unblock, read reports and lock blocked people out", async () => {
+    const ana = await Replica.found(node.client(), { name: "C13", displayName: "Ana" });
+    const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia);
+    const caio = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
+    await admit(ana, caio);
+
+    // Before being made a moderator, Bia cannot touch join requests.
+    await expect(bia.joinRequests()).rejects.toThrow(/only admins and moderators/);
+    await expect(caio.makeModerator(bia.memberId)).rejects.toThrow(/only admins/);
+    await ana.makeModerator(bia.memberId);
+    await syncAll(ana, bia, caio);
+    expect(bia.isModerator).toBe(true);
+    expect(bia.canModerate).toBe(true);
+    expect(bia.isAdmin).toBe(false);
+
+    // Bia (moderator) accepts one applicant and refuses another.
+    const dani = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Dani" });
+    await admit(bia, dani);
+    const eva = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Eva" });
+    const evaReq = (await bia.joinRequests()).find((p) => toHex(p.request.msk) === toHex(eva.keys.signing.pk))!;
+    await bia.reject(evaReq);
+    await eva.sync();
+    expect(eva.status).toBe("rejected");
+
+    // Reports reach admins and moderators.
+    await syncAll(ana, bia, caio, dani);
+    await dani.reportMember(caio.memberId, "spam");
+    await bia.sync();
+    await ana.sync();
+    expect(bia.reports.map((r) => r.memberId)).toEqual([caio.memberId]);
+    expect(ana.reports.map((r) => r.memberId)).toEqual([caio.memberId]);
+
+    // Bia blocks Caio: he is locked out by a rotation she signs herself.
+    await expect(bia.blockMember(ana.memberId)).rejects.toThrow(/not_authorized/);
+    await bia.blockMember(caio.memberId);
+    expect(bia.epoch).toBe(1);
+    await caio.sync();
+    expect(caio.status).toBe("removed");
+    await syncAll(ana, dani);
+    expect(dani.epoch).toBe(1);
+    expect(ana.canonical!.members[caio.memberId]!.blocked).toBe(true);
+    await bia.unblockMember(caio.memberId);
+    await ana.sync();
+    expect(ana.canonical!.members[caio.memberId]!.blocked).toBeUndefined();
+
+    // Removing the moderator role replaces the intake key; Bia loses intake access.
+    await ana.removeModerator(bia.memberId);
+    await bia.sync();
+    expect(bia.isModerator).toBe(false);
+    await expect(bia.joinRequests()).rejects.toThrow(/only admins and moderators/);
+    const node2 = bia.client;
+    const intakeAsBia = node2.intake(bia.cid, bia.keys.signing, 0, "moderate");
+    await expect(intakeAsBia).rejects.toMatchObject({ status: 401 });
+    expect(canon(bia.canonical)).toBe(canon(ana.canonical));
+  }, 30_000);
+
+  it("an admin drops a moderator who left from the node's moderator set", async () => {
+    const ana = await Replica.found(node.client(), { name: "C14", displayName: "Ana" });
+    const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia);
+    await ana.makeModerator(bia.memberId);
+    await bia.sync();
+    bia.submit("member.leave", {});
+    await bia.sync();
+    await ana.sync();
+    expect(ana.canonical!.mod_set).toEqual([toHex(bia.keys.signing.pk)]);
+    expect(await ana.tidyModerators()).toBe(true);
+    expect(ana.canonical!.mod_set).toBeUndefined();
+    expect(await ana.tidyModerators()).toBe(false);
+  }, 30_000);
+
   it("watch() syncs when the node announces new entries", async () => {
     const ana = await Replica.found(node.client(), { name: "C8", displayName: "Ana" });
     const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
@@ -335,6 +407,7 @@ describe.skipIf(!HAVE_NODE)("compaction and node replacement", () => {
     const caio = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
     await admit(ana, caio);
     await ana.removeMember(caio.memberId); // a rotation and a snapshot in the history
+    await ana.makeModerator(bia.memberId); // a moderator set the new node must rebuild
     const ev = toHex(new Uint8Array(16).fill(4));
     await bia.sync();
     bia.submit("event.create", eventBody(ev, "Antes da mudança"));
@@ -344,6 +417,7 @@ describe.skipIf(!HAVE_NODE)("compaction and node replacement", () => {
     expect(head).toBe(ana.canonical!.clock.seq);
 
     bia.moveTo(spare.client());
+    expect(await bia.joinRequests()).toEqual([]); // moderator access carried over
     bia.submit("participation.volunteer", { event_id: ev });
     await bia.sync();
     await ana.sync();

@@ -17,6 +17,7 @@ export const EventosComoAdmin: Story = community();
 export const EventosComoMembro: Story = community({ me: "caio" });
 export const PessoasComoAdmin: Story = community({ joinRequests: true }, { play: openTab("Pessoas") });
 export const DenunciasComoAdmin: Story = community({ reports: true }, { play: openTab("Pessoas") });
+export const PessoasComoModeracao: Story = community({ me: "duda", moderator: true, reports: true, joinRequests: true }, { play: openTab("Pessoas") });
 export const PessoasComoMembro: Story = community({ me: "caio" }, { play: openTab("Pessoas") });
 export const DenunciarComoMembro: Story = community(
   { me: "caio" },

@@ -56,6 +56,14 @@ fn key_list(v: Option<&Value>) -> Result<Vec<[u8; 32]>> {
     items.iter().map(|k| bytes::<32>(Some(k), "key")).collect()
 }
 
+/// Like `key_list`, but an empty list is allowed (it clears the set).
+fn key_list_or_empty(v: Option<&Value>) -> Result<Vec<[u8; 32]>> {
+    match v {
+        Some(Value::Array(items)) if items.is_empty() => Ok(Vec::new()),
+        _ => key_list(v),
+    }
+}
+
 pub const MAX_NODES: usize = 5;
 pub const MAX_NODE_URL: usize = 200;
 
@@ -110,6 +118,10 @@ pub enum ControlArgs {
     Migrate {
         nodes: Vec<String>,
     },
+    /// The moderator set (§9.2): may read intake, rotate and upload snapshots.
+    ModSet {
+        moderators: Vec<[u8; 32]>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -161,6 +173,12 @@ impl ControlHeader {
                 map_fields(a, &["nodes"], "migrate args")?;
                 ControlArgs::Migrate {
                     nodes: node_list(a.get("nodes"))?,
+                }
+            }
+            "mod.set" => {
+                map_fields(a, &["moderators"], "mod.set args")?;
+                ControlArgs::ModSet {
+                    moderators: key_list_or_empty(a.get("moderators"))?,
                 }
             }
             _ => return Err(WireError::Malformed("ctrl kind")),

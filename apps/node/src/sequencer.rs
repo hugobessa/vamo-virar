@@ -205,13 +205,17 @@ pub fn submit(
             return Err(Reject::Unauthorized("bad control signature").into());
         }
         let is_admin = cm.admin_set.contains(&ctrl.signer);
+        let is_mod = cm.mod_set.contains(&ctrl.signer);
         match &ctrl.args {
             ControlArgs::Genesis { .. } => {
                 return Err(Reject::Unauthorized("genesis after seq 1").into())
             }
             ControlArgs::Rotate { new_epoch, eak } => {
-                if !is_admin {
-                    return Err(Reject::Unauthorized("rotate must be signed by an admin").into());
+                if !is_admin && !is_mod {
+                    return Err(Reject::Unauthorized(
+                        "rotate must be signed by an admin or a moderator",
+                    )
+                    .into());
                 }
                 if *new_epoch != cm.epoch + 1 {
                     return Err(Reject::EpochConflict.into());
@@ -239,6 +243,15 @@ pub fn submit(
                 // From now on writes are refused with the new location, so
                 // nothing lands here that the new node would not have.
                 cm.moved_to = nodes.clone();
+            }
+            ControlArgs::ModSet { moderators } => {
+                if !is_admin && ctrl.signer != cm.crk {
+                    return Err(Reject::Unauthorized(
+                        "mod.set must be signed by an admin or the CRK",
+                    )
+                    .into());
+                }
+                cm.mod_set = moderators.clone();
             }
         }
     }
@@ -293,6 +306,7 @@ pub fn restore(
     // re-applying exactly the checks `submit` makes.
     let mut epoch = 0u32;
     let mut admin_set = admins.clone();
+    let mut mod_set: Vec<[u8; 32]> = Vec::new();
     let mut eaks = vec![(0u32, *eak)];
     let mut rotated_at = genesis.at;
     let eak_of =
@@ -321,7 +335,7 @@ pub fn restore(
             match &ctrl.args {
                 ControlArgs::Genesis { .. } => return Err(bad("second genesis")),
                 ControlArgs::Rotate { new_epoch, eak } => {
-                    if !admin_set.contains(&ctrl.signer)
+                    if !(admin_set.contains(&ctrl.signer) || mod_set.contains(&ctrl.signer))
                         || *new_epoch != epoch + 1
                         || e.env.epoch != epoch
                     {
@@ -336,6 +350,12 @@ pub fn restore(
                         return Err(bad("invalid admin.set in restore"));
                     }
                     admin_set = admins.clone();
+                }
+                ControlArgs::ModSet { moderators } => {
+                    if !admin_set.contains(&ctrl.signer) && ctrl.signer != *crk {
+                        return Err(bad("invalid mod.set in restore"));
+                    }
+                    mod_set = moderators.clone();
                 }
                 // A `migrate` that pointed here (or anywhere) is history on
                 // the restored node: the community lives where it is restored.
@@ -375,6 +395,7 @@ pub fn restore(
         (None, None) => (1, genesis.hash(), genesis.at),
     };
     let mut cm = Community::new(cid, *crk, admin_set, rotated_at);
+    cm.mod_set = mod_set;
     cm.epoch = epoch;
     cm.head_seq = head_seq;
     cm.head_hash = head_hash;

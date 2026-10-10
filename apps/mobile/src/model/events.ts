@@ -2,7 +2,7 @@
 // can take. Mirrors the domain state machine (protocol.md §9.4) so the UI
 // never offers something the reducer would reject.
 
-import { isAdmin, isOrganizer, type CommunityState, type Event, type MemberRecord, type ParticipationStatus } from "@vamo-virar/domain";
+import { isAdmin, isModerator, isOrganizer, type CommunityState, type Event, type MemberRecord, type ParticipationStatus } from "@vamo-virar/domain";
 import type { StringKey } from "./i18n";
 
 export type SelfAction = "volunteer" | "accept" | "decline" | "withdraw";
@@ -122,6 +122,7 @@ export const ACTION_TEXT: Record<SelfAction | OrgAction, StringKey> = {
 
 export function roleKey(state: CommunityState, m: MemberRecord): StringKey {
   if (isAdmin(state, m)) return "roleAdmin";
+  if (isModerator(state, m)) return "roleModerator";
   if (m.role === "organizer" || m.role === "admin") return "roleOrganizer";
   return "roleMember";
 }

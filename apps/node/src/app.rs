@@ -157,6 +157,9 @@ pub enum Scope {
     Community,
     Mailbox,
     Control,
+    /// Join requests and snapshots: admins or moderators. A `control`
+    /// token also passes, so admin devices need no second token.
+    Moderate,
 }
 
 impl Scope {
@@ -165,6 +168,7 @@ impl Scope {
             "community" => Some(Scope::Community),
             "mailbox" => Some(Scope::Mailbox),
             "control" => Some(Scope::Control),
+            "moderate" => Some(Scope::Moderate),
             _ => None,
         }
     }

@@ -13,7 +13,7 @@ export type OpId = Hex; // 16 random bytes
 // Log entries (input to the reducer)
 // ---------------------------------------------------------------------------
 
-export type ControlKind = "genesis" | "rotate" | "admin.set" | "migrate";
+export type ControlKind = "genesis" | "rotate" | "admin.set" | "migrate" | "mod.set";
 
 export interface GenesisArgs {
   suite: "VV1";
@@ -38,11 +38,17 @@ export interface MigrateArgs {
   nodes: string[];
 }
 
+export interface ModSetArgs {
+  /** MSK public keys; empty removes every moderator. */
+  moderators: Hex[];
+}
+
 export type ControlHeader =
   | { kind: "genesis"; signer: Hex; args: GenesisArgs }
   | { kind: "rotate"; signer: Hex; args: RotateArgs }
   | { kind: "admin.set"; signer: Hex; args: AdminSetArgs }
-  | { kind: "migrate"; signer: Hex; args: MigrateArgs };
+  | { kind: "migrate"; signer: Hex; args: MigrateArgs }
+  | { kind: "mod.set"; signer: Hex; args: ModSetArgs };
 
 /** The decrypted, signature-verified inner operation (SignedOp minus crypto fields). */
 export interface DecodedOp {
@@ -212,6 +218,11 @@ export interface CommunityState {
   epoch: number;
   eak: Hex;
   admin_set: Hex[]; // sorted MSK public keys
+  /**
+   * Sorted MSK public keys of moderators (§9.2), set by `mod.set`. Absent
+   * when there are none, so communities without moderators hash as before.
+   */
+  mod_set?: Hex[];
   ik: Hex;
   clock: Clock;
   members: Record<MemberId, MemberRecord>;
