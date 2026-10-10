@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-native-web-vite";
 import Community from "../../app/c/[id]/index";
+import { userEvent, within } from "storybook/test";
 import { makeEntry, openTab, screen } from "./helpers";
 
 const meta: Meta = { title: "Telas/Comunidade", parameters: { layout: "fullscreen" } };
@@ -17,6 +18,17 @@ export const EventosComoMembro: Story = community({ me: "caio" });
 export const PessoasComoAdmin: Story = community({ joinRequests: true }, { play: openTab("Pessoas") });
 export const DenunciasComoAdmin: Story = community({ reports: true }, { play: openTab("Pessoas") });
 export const PessoasComoMembro: Story = community({ me: "caio" }, { play: openTab("Pessoas") });
+export const DenunciarComoMembro: Story = community(
+  { me: "caio" },
+  {
+    play: async (ctx) => {
+      await openTab("Pessoas")(ctx);
+      const canvas = within(ctx.canvasElement);
+      await userEvent.click(await canvas.findByTestId("report-duda"));
+      await userEvent.click(await canvas.findByTestId("report-reason-harassment"));
+    },
+  },
+);
 export const EuComoAdmin: Story = community({}, { play: openTab("Eu") });
 export const EuComoMembro: Story = community({ me: "caio" }, { play: openTab("Eu") });
 export const SemConexao: Story = community({ connectivity: "offline", pending: 3 });
