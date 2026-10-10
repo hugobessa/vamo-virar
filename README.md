@@ -103,7 +103,39 @@ npx expo run:ios              # development build no simulador ou num iPhone (s�
 - Google Agenda e Outlook só aparecem quando há IDs de cliente OAuth
   configurados em `apps/mobile/app.json`; o passo a passo está em
   [`docs/calendars.md`](docs/calendars.md).
-- Ainda não há configuração de EAS Build para gerar versões de loja.
+
+### Compilar na nuvem com EAS
+
+Sem Android Studio nem Xcode, o [EAS Build](https://docs.expo.dev/build/introduction/)
+compila o app nos servidores da Expo. A configuração está em
+`apps/mobile/eas.json`. O build instala o monorepo inteiro e roda
+`npm run build` (gancho `eas-build-post-install`) antes de empacotar o app.
+
+Uma vez por projeto, com uma conta em [expo.dev](https://expo.dev):
+
+```sh
+cd apps/mobile
+npx eas-cli@latest login   # ou defina EXPO_TOKEN (token de acesso, de preferência de um robot user)
+npx eas-cli@latest init    # cria o projeto na Expo e grava o projectId no app.json
+```
+
+Depois, sempre a partir de `apps/mobile`:
+
+| Perfil | Comando | Gera |
+|---|---|---|
+| `development` | `npx eas-cli@latest build --profile development --platform android` | APK com o development client, para instalar direto no celular e rodar com `npx expo start` |
+| `development-simulator` | `npx eas-cli@latest build --profile development-simulator --platform ios` | build para o simulador do iOS (não precisa de conta de desenvolvedor Apple) |
+| `preview` | `npx eas-cli@latest build --profile preview --platform all` | versão de teste sem ferramentas de desenvolvimento: APK no Android, distribuição interna no iOS |
+| `production` | `npx eas-cli@latest build --profile production --platform all` | AAB para a Google Play e IPA para a App Store; o número de build sobe sozinho |
+
+- Builds para iPhone de verdade (`development`, `preview`, `production` no
+  iOS) precisam de uma conta paga no Apple Developer Program; o EAS cria e
+  guarda os certificados na primeira vez. Para `preview` e `development` no
+  iOS, cadastre os aparelhos com `npx eas-cli@latest device:create`.
+- `npx eas-cli@latest submit --profile production` envia o build de produção
+  para as lojas.
+- Os IDs de cliente OAuth do Google e da Microsoft continuam em
+  `apps/mobile/app.json` (`expo.extra`).
 
 ### Versões publicadas
 

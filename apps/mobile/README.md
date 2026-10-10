@@ -16,6 +16,9 @@ Use um development build (`npx expo run:android` / `run:ios`), não o Expo
 Go: o `expo-calendar` não vem no Expo Go. Celular e nó precisam se alcançar:
 use o endereço do computador na rede local como endereço do servidor.
 
+Para compilar na nuvem (sem Android Studio nem Xcode), veja "Compilar na
+nuvem com EAS" no README da raiz; os perfis estão em `eas.json`.
+
 ## Estrutura
 
 ```
