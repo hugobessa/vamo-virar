@@ -6,9 +6,19 @@ const pt = {
   // Welcome
   welcomeTitle: "Organize sua comunidade",
   welcomeBody: "Crie eventos, convide pessoas e veja quem pode participar. Sua agenda e sua localização ficam só no seu celular.",
+  welcomePoint1: "Sua agenda fica só no seu celular",
+  welcomePoint2: "Tudo cifrado de ponta a ponta",
+  welcomePoint3: "O servidor é pequeno e dá para trocar",
   createCommunity: "Criar uma comunidade",
   joinCommunity: "Entrar com um convite",
   yourCommunities: "Suas comunidades",
+  // Create and join forms
+  createIntro: "Leva um minuto. Você convida as pessoas depois.",
+  joinIntro: "Quem organiza vê o seu pedido e decide. Nada da sua agenda é enviado.",
+  sectionCommunity: "A comunidade",
+  sectionYou: "Você",
+  sectionServer: "Onde ela fica",
+  sectionInvite: "O convite",
   // Create
   communityName: "Nome da comunidade",
   communityDescription: "Sobre a comunidade (opcional)",

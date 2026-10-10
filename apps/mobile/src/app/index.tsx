@@ -2,7 +2,24 @@ import { router } from "expo-router";
 import { ActivityIndicator } from "react-native";
 import { useApp } from "../lib/context";
 import { insecureStorage } from "../lib/storage";
-import { Banner, Body, Button, Card, Chip, Heading, Screen, Title } from "../ui/kit";
+import { Text, View } from "react-native";
+import { Display, Star, Wordmark } from "../ui/brand";
+import { Banner, Body, Button, Card, Chip, Heading, Screen } from "../ui/kit";
+import { fonts, space, useTheme } from "../ui/theme";
+
+function Points({ items }: { items: string[] }) {
+  const c = useTheme();
+  return (
+    <View style={{ gap: space.s, marginVertical: space.s }}>
+      {items.map((text) => (
+        <View key={text} style={{ flexDirection: "row", alignItems: "center", gap: space.s }}>
+          <Star size={18} />
+          <Text style={{ flex: 1, color: c.text, fontFamily: fonts.text, fontSize: 16, fontWeight: "600" }}>{text}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export default function Home() {
   const { store, t } = useApp();
@@ -19,8 +36,10 @@ export default function Home() {
       {insecureStorage ? <Banner tone="warn" text={t("webPreviewWarning")} /> : null}
       {communities.length === 0 ? (
         <>
-          <Title>{t("welcomeTitle")}</Title>
+          <Wordmark size="lg" />
+          <Display size="h1" tone="brand">{t("welcomeTitle")}</Display>
           <Body muted>{t("welcomeBody")}</Body>
+          <Points items={[t("welcomePoint1"), t("welcomePoint2"), t("welcomePoint3")]} />
         </>
       ) : (
         <>
@@ -29,7 +48,7 @@ export default function Home() {
             const status = e.replica.status;
             const name = e.replica.view?.community.name;
             return (
-              <Card key={e.id} testID={`community-${e.id}`} onPress={() => router.push({ pathname: "/c/[id]", params: { id: e.id } })}>
+              <Card accent key={e.id} testID={`community-${e.id}`} onPress={() => router.push({ pathname: "/c/[id]", params: { id: e.id } })}>
                 <Body>{name ?? t("waitingTitle")}</Body>
                 {status === "joining" ? <Chip label={t("waitingTitle")} tone="warn" /> : null}
                 {status === "rejected" ? <Chip label={t("rejectedTitle")} tone="danger" /> : null}
