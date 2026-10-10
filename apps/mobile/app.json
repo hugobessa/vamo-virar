@@ -64,7 +64,11 @@
       "googleClientIdIos": "",
       "googleClientIdAndroid": "",
       "googleClientIdWeb": "",
-      "microsoftClientId": ""
-    }
+      "microsoftClientId": "",
+      "eas": {
+        "projectId": "643e5bf0-8533-4789-a016-d5a3491ebfe7"
+      }
+    },
+    "owner": "hugobessa"
   }
 }
