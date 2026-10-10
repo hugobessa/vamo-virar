@@ -56,6 +56,7 @@
     "eas-build-post-install": "cd ../.. && npm run build",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build -o dist-storybook",
+    "store-screenshots": "npm run build-storybook && node scripts/store-screenshots.mjs",
     "landing": "vite --config landing/vite.config.ts",
     "build:landing": "vite build --config landing/vite.config.ts",
     "preview:landing": "vite preview --config landing/vite.config.ts --outDir ../dist-landing"
