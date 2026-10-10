@@ -51,8 +51,8 @@ export const copy = {
   organizers: {
     eyebrow: "Para quem cuida da comunidade",
     title: "Um servidor que cabe em qualquer canto",
-    body: "É um programa pequeno que roda numa VPS, num Raspberry Pi ou num computador sobrando. Você cuida da infraestrutura, e as pessoas continuam donas dos próprios dados.",
-    chips: ["VPS", "Raspberry Pi", "Computador sobrando"],
+    body: "É um programa pequeno que você liga na nuvem com poucos cliques, ou de graça num computador sobrando ou num Raspberry Pi. Você cuida da infraestrutura, e as pessoas continuam donas dos próprios dados.",
+    chips: ["Nuvem", "Computador sobrando", "Raspberry Pi"],
     cta: "Como montar o servidor",
   },
   faq: {
