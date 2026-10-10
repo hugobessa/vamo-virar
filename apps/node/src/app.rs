@@ -36,6 +36,9 @@ pub struct Config {
     pub max_mailbox_ttl_secs: u64,
     pub intake_per_ip_per_hour: u32,
     pub intake_per_community_per_hour: u32,
+    /// How long a disabled community is kept before it is deleted (§11.5).
+    /// The protocol says 30 days; change it only for testing.
+    pub disabled_retention_secs: u64,
     /// How often expiry and compaction run.
     pub housekeeping_interval_secs: u64,
     /// Behind a reverse proxy (Caddy, nginx): take the client address for
@@ -123,6 +126,7 @@ impl Default for Config {
             max_mailbox_ttl_secs: 30 * 24 * 3600,
             intake_per_ip_per_hour: 20,
             intake_per_community_per_hour: 200,
+            disabled_retention_secs: 30 * 24 * 3600,
             housekeeping_interval_secs: 60,
             trust_forwarded_for: false,
             operator_listen: None,
@@ -157,6 +161,9 @@ pub enum Scope {
     Community,
     Mailbox,
     Control,
+    /// Join requests and snapshots: admins or moderators. A `control`
+    /// token also passes, so admin devices need no second token.
+    Moderate,
 }
 
 impl Scope {
@@ -165,6 +172,7 @@ impl Scope {
             "community" => Some(Scope::Community),
             "mailbox" => Some(Scope::Mailbox),
             "control" => Some(Scope::Control),
+            "moderate" => Some(Scope::Moderate),
             _ => None,
         }
     }
@@ -284,6 +292,12 @@ impl App {
             "DELETE FROM mailbox WHERE expires_at IS NOT NULL AND expires_at <= ?1",
             [now],
         )?;
+        // Communities disabled long enough ago are deleted for good (§11.5).
+        let cutoff = now.saturating_sub(self.config.disabled_retention_secs * 1000);
+        for cid in store::disabled_before(&tx, cutoff)? {
+            store::delete_community(&tx, &cid)?;
+            tracing::info!(cid = %hex(&cid), "deleted disabled community");
+        }
         let grace = self.config.compaction_grace_secs * 1000;
         for cid in store::communities(&tx)? {
             let latest: Option<(u64, u64)> = tx

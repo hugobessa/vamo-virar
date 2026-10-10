@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_POLICY } from "../src/policy.js";
-import { applyInPlace, fold, genesis, GenesisError, isAdmin, reduce, SequenceError } from "../src/reducer.js";
+import { applyInPlace, canModerate, fold, genesis, GenesisError, isAdmin, isModerator, reduce, SequenceError } from "../src/reducer.js";
 import type { Outcome, ParticipationStatus } from "../src/types.js";
 import { clone } from "../src/util.js";
 import { canon, DAY, eventId, key, LogBuilder, person, T0 } from "./helpers.js";
@@ -185,6 +185,189 @@ describe("membership", () => {
     const s = last(b).state;
     expect(s.events[ev]!.participations[caio.id]!.status).toBe("withdrawn");
     expect(s.events[ev]!.organizers).toEqual([]);
+  });
+});
+
+describe("blocking", () => {
+  it("only admins block; blocking removes the member and bars re-adding", () => {
+    const { b, ana, bia, caio } = setup();
+    const ev = b.createEvent(bia, 1);
+    b.part(caio, "volunteer", ev);
+    b.op(bia, "member.block", { member_id: caio.id });
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(ana, "member.block", { member_id: caio.id, reason: "assédio" });
+    expect(last(b).out).toEqual(applied);
+    let s = last(b).state;
+    expect(s.members[caio.id]).toMatchObject({ status: "removed", blocked: true });
+    expect(s.events[ev]!.participations[caio.id]!.status).toBe("withdrawn");
+    b.op(caio, "member.profile", { profile: { display_name: "Caio 2" } });
+    expect(last(b).out).toEqual(rejected("not_member"));
+    b.add(ana, caio);
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(ana, "member.block", { member_id: caio.id });
+    expect(last(b).out).toEqual(rejected("illegal_transition"));
+
+    b.op(ana, "member.unblock", { member_id: caio.id });
+    expect(last(b).out).toEqual(applied);
+    s = last(b).state;
+    expect(s.members[caio.id]!.blocked).toBeUndefined();
+    expect(s.members[caio.id]!.status).toBe("removed");
+    b.add(ana, caio);
+    expect(last(b).out).toEqual(applied);
+  });
+
+  it("blocks former members, and rejects unknown targets and self-blocks", () => {
+    const { b, ana, caio } = setup();
+    b.op(caio, "member.leave", {});
+    b.op(ana, "member.block", { member_id: caio.id });
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.members[caio.id]).toMatchObject({ status: "left", blocked: true });
+    b.op(ana, "member.block", { member_id: person("Zé").id });
+    expect(last(b).out).toEqual(rejected("unknown_target"));
+    b.op(ana, "member.block", { member_id: ana.id });
+    expect(last(b).out).toEqual(rejected("illegal_transition"));
+    b.op(ana, "member.unblock", { member_id: ana.id });
+    expect(last(b).out).toEqual(rejected("illegal_transition"));
+  });
+
+  it("an admin blocking another admin keeps the last-admin rule", () => {
+    const { b, ana, bia } = setup();
+    b.adminSet(ana, [ana, bia]);
+    b.op(bia, "member.block", { member_id: ana.id });
+    expect(last(b).out).toEqual(applied);
+    b.adminSet(bia, [bia]);
+    expect(isAdmin(last(b).state, last(b).state.members[bia.id]!)).toBe(true);
+  });
+});
+
+describe("moderators", () => {
+  it("only admins (or the CRK) set moderators; an empty set clears them", () => {
+    const { b, ana, bia, caio } = setup();
+    b.modSet(bia, [caio]);
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.modSet(ana, [caio]);
+    expect(last(b).out).toEqual(applied);
+    let s = last(b).state;
+    expect(isModerator(s, s.members[caio.id]!)).toBe(true);
+    expect(canModerate(s, s.members[caio.id]!)).toBe(true);
+    expect(isAdmin(s, s.members[caio.id]!)).toBe(false);
+    b.modSet(key(1), []); // the CRK
+    expect(last(b).out).toEqual(applied);
+    s = last(b).state;
+    expect(s.mod_set).toBeUndefined();
+    expect(isModerator(s, s.members[caio.id]!)).toBe(false);
+  });
+
+  it("moderators add members, block and unblock, and rotate; nothing else of an admin's", () => {
+    const { b, ana, bia, caio, davi } = setup();
+    b.modSet(ana, [caio]);
+    const eva = person("Eva");
+    b.add(caio, eva);
+    expect(last(b).out).toEqual(applied);
+    b.op(caio, "member.block", { member_id: davi.id });
+    expect(last(b).out).toEqual(applied);
+    b.op(caio, "member.unblock", { member_id: davi.id });
+    expect(last(b).out).toEqual(applied);
+    b.rotate(caio);
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.epoch).toBe(1);
+    b.op(caio, "member.role", { member_id: eva.id, role: "organizer" });
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(caio, "community.update", { name: "Outro nome" });
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(caio, "member.remove", { member_id: bia.id });
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.modSet(caio, []);
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.adminSet(caio, [caio]);
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+  });
+
+  it("moderators block members and organizers, never admins or other moderators", () => {
+    const { b, ana, bia, caio, davi } = setup();
+    b.modSet(ana, [caio, davi]);
+    b.op(caio, "member.block", { member_id: ana.id });
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(caio, "member.block", { member_id: davi.id });
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(caio, "member.block", { member_id: bia.id }); // an organizer
+    expect(last(b).out).toEqual(applied);
+    b.op(ana, "member.block", { member_id: davi.id }); // admins may
+    expect(last(b).out).toEqual(applied);
+  });
+
+  it("admins and moderators delete any event; organizers and members cannot", () => {
+    const { b, ana, bia, caio, davi } = setup();
+    b.modSet(ana, [davi]);
+    const ev1 = b.createEvent(bia, 1);
+    b.part(caio, "volunteer", ev1);
+    b.op(bia, "event.remove", { event_id: ev1 }); // its own organizer
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(caio, "event.remove", { event_id: ev1 });
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(davi, "event.remove", { event_id: ev1, reason: "conteúdo ofensivo" });
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.events[ev1]).toBeUndefined();
+    b.part(caio, "withdraw", ev1);
+    expect(last(b).out).toEqual(rejected("unknown_target"));
+    b.op(ana, "event.remove", { event_id: ev1 });
+    expect(last(b).out).toEqual(rejected("unknown_target"));
+
+    // A cancelled event that has already been summarised can go too.
+    const ev2 = b.createEvent(bia, 2);
+    b.op(bia, "event.cancel", { event_id: ev2 });
+    b.op(ana, "member.profile", { profile: { display_name: "Ana" } }, { at: b.at + 400 * DAY });
+    expect(last(b).state.event_summaries[ev2]).toBeDefined();
+    b.op(ana, "event.remove", { event_id: ev2 });
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.event_summaries[ev2]).toBeUndefined();
+  });
+
+  it("a removed moderator loses moderator powers at once", () => {
+    const { b, ana, caio, davi } = setup();
+    b.modSet(ana, [caio]);
+    b.op(ana, "member.remove", { member_id: caio.id });
+    const s = last(b).state;
+    expect(isModerator(s, s.members[caio.id]!)).toBe(false);
+    b.rotate(caio);
+    expect(last(b).out).toEqual(applied); // control header: node-equal, still in the set
+    b.op(caio, "member.block", { member_id: davi.id }, { epoch: 1 });
+    expect(last(b).out).toEqual(rejected("not_member"));
+  });
+});
+
+describe("disabling a community", () => {
+  it("an admin disables it; everything but enable and admin.set is refused", () => {
+    const { b, ana, bia, caio } = setup();
+    b.toggle("disable", bia); // an organizer
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    const e = b.toggle("disable", ana);
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.community.disabled).toEqual({ by: ana.msk, at: e.at });
+    b.op(caio, "member.profile", { profile: { display_name: "Caio 2" } });
+    expect(last(b).out).toEqual(rejected("disabled"));
+    b.rotate(ana);
+    expect(last(b).out).toEqual(rejected("disabled"));
+    b.modSet(ana, [caio]);
+    expect(last(b).out).toEqual(rejected("disabled"));
+    b.toggle("disable", ana);
+    expect(last(b).out).toEqual(rejected("disabled"));
+  });
+
+  it("only another admin re-enables it; the CRK can name that admin", () => {
+    const { b, ana, bia } = setup();
+    b.toggle("disable", ana);
+    b.toggle("enable", ana);
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.adminSet(key(1), [ana, bia]); // CRK recovery still works while disabled
+    expect(last(b).out).toEqual(applied);
+    b.toggle("enable", bia);
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.community.disabled).toBeUndefined();
+    b.op(ana, "member.profile", { profile: { display_name: "Ana de volta" } });
+    expect(last(b).out).toEqual(applied);
+    b.toggle("enable", bia);
+    expect(last(b).out).toEqual(rejected("illegal_transition"));
   });
 });
 

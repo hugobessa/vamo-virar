@@ -37,7 +37,7 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
             disabled={!name.trim() || name.trim() === me.profile?.display_name}
             onPress={() => store.submit(entry.id, "member.profile", { profile: { ...me.profile, display_name: name.trim() } })}
           />
-          <Button kind="secondary" label={t("calendarsTitle")} onPress={() => router.push("/settings")} />
+          <Button kind="secondary" label={t("calendarsTitle")} allowReadOnly onPress={() => router.push("/settings")} />
           {recovery ? (
             <Card>
               <Heading>{t("recoveryTitle")}</Heading>
@@ -47,7 +47,7 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
                   {toHex(recovery).match(/.{4}/g)!.join(" ")}
                 </Text>
               ) : null}
-              <Button kind="secondary" label={showCode ? t("recoveryHide") : t("recoveryShow")} onPress={() => setShowCode(!showCode)} />
+              <Button kind="secondary" label={showCode ? t("recoveryHide") : t("recoveryShow")} allowReadOnly onPress={() => setShowCode(!showCode)} />
             </Card>
           ) : null}
           {!r.isAdmin ? (
@@ -58,6 +58,7 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
               <Button
                 kind="secondary"
                 label={t("recoverButton")}
+                allowReadOnly
                 disabled={code.replace(/\s/g, "").length !== 64}
                 onPress={async () => {
                   setRecoverMsg(null);
@@ -78,6 +79,7 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
             </Card>
           ) : null}
           {r.isAdmin ? <MoveCard entry={entry} /> : null}
+          {r.isAdmin ? <DisableCard entry={entry} /> : null}
           <Button
             kind="danger"
             label={t("leave")}
@@ -88,6 +90,51 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
         </>
       )}
     </>
+  );
+}
+
+/**
+ * Admins: mark the community for deletion (§11.5), or, for another admin,
+ * cancel it. While disabled the rest of the tab is read-only; the enable
+ * button is not.
+ */
+function DisableCard({ entry }: { entry: CommunityEntry }) {
+  const { t, store } = useApp();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const r = entry.replica;
+  const d = r.disabled;
+  const iDisabledIt = !!d && d.by === r.view?.members[r.memberId]?.msk;
+  async function run(question: string, f: () => Promise<void>) {
+    if (!(await confirm(question, t("yes"), t("no")))) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await store.admin(entry.id, f);
+    } catch (e) {
+      setMsg(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card testID="disable-card">
+      <Heading>{t(d ? "enableTitle" : "disableTitle")}</Heading>
+      {!d ? (
+        <>
+          <Body muted>{t("disableHelp")}</Body>
+          <Button testID="disable-community" kind="danger" label={t("disableButton")} busy={busy} onPress={() => run(t("disableConfirm"), () => r.disableCommunity())} />
+        </>
+      ) : iDisabledIt ? (
+        <Body muted>{t("enableNeedsOther")}</Body>
+      ) : (
+        <>
+          <Body muted>{t("enableHelp")}</Body>
+          <Button testID="enable-community" label={t("enableButton")} busy={busy} allowReadOnly onPress={() => run(t("enableConfirm"), () => r.enableCommunity())} />
+        </>
+      )}
+      {msg ? <Banner tone="danger" text={msg} /> : null}
+    </Card>
   );
 }
 

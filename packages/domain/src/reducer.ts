@@ -182,7 +182,16 @@ const CONTROL_INNER_TYPE: Record<ControlHeader["kind"], string> = {
   rotate: "epoch.rotate",
   "admin.set": "admin.set",
   migrate: "community.migrate",
+  "mod.set": "mod.set",
+  disable: "community.disable",
+  enable: "community.enable",
 };
+
+/** What a disabled community still takes (§11.5), as the node enforces it. */
+const ALLOWED_WHILE_DISABLED = new Set<ControlHeader["kind"]>(["enable", "admin.set"]);
+
+/** How long the node keeps a disabled community before deleting it (§11.5). */
+export const DISABLED_RETENTION_MS = 30 * DAY_MS;
 
 function dispatch(s: CommunityState, e: Entry): Outcome {
   if (e.control) return applyControl(s, e, e.control);
@@ -190,6 +199,7 @@ function dispatch(s: CommunityState, e: Entry): Outcome {
   // Data plane. Ops under the previous epoch are accepted during the node's
   // grace window (§7.4); anything older or newer is stale.
   if (e.epoch !== s.epoch && e.epoch !== s.epoch - 1) reject("stale_epoch");
+  if (s.community.disabled) reject("disabled");
   const op = e.op;
   if (!op) return { status: "opaque" };
   if (Object.values(CONTROL_INNER_TYPE).includes(op.type)) reject("malformed");
@@ -210,6 +220,7 @@ function dispatch(s: CommunityState, e: Entry): Outcome {
  */
 function applyControl(s: CommunityState, e: Entry, ctrl: ControlHeader): Outcome {
   if (ctrl.kind === "genesis") reject("illegal_transition");
+  if (s.community.disabled && !ALLOWED_WHILE_DISABLED.has(ctrl.kind)) reject("disabled");
   applyControlHeader(s, e, ctrl);
   const bodyMatches = e.op?.type === CONTROL_INNER_TYPE[ctrl.kind] && e.op.author === ctrl.signer;
   return bodyMatches ? { status: "applied" } : { status: "opaque" };
@@ -221,7 +232,7 @@ function applyControlHeader(s: CommunityState, e: Entry, ctrl: ControlHeader): v
       reject("illegal_transition");
     // eslint-disable-next-line no-fallthrough
     case "rotate": {
-      if (!s.admin_set.includes(ctrl.signer)) reject("not_authorized");
+      if (!s.admin_set.includes(ctrl.signer) && !s.mod_set?.includes(ctrl.signer)) reject("not_authorized");
       if (e.epoch !== s.epoch) reject("stale_epoch");
       if (!isInt(ctrl.args.new_epoch) || ctrl.args.new_epoch !== s.epoch + 1) reject("epoch_conflict");
       if (!isHex(ctrl.args.eak, 32)) reject("malformed");
@@ -248,6 +259,29 @@ function applyControlHeader(s: CommunityState, e: Entry, ctrl: ControlHeader): v
       else delete s.community.nodes;
       return;
     }
+    case "disable": {
+      if (!s.admin_set.includes(ctrl.signer)) reject("not_authorized");
+      if (e.epoch !== s.epoch) reject("stale_epoch");
+      s.community.disabled = { by: ctrl.signer, at: e.at };
+      return;
+    }
+    case "enable": {
+      const d = s.community.disabled;
+      if (!d) reject("illegal_transition");
+      if (!s.admin_set.includes(ctrl.signer) || ctrl.signer === d.by) reject("not_authorized");
+      if (e.epoch !== s.epoch) reject("stale_epoch");
+      delete s.community.disabled;
+      return;
+    }
+    case "mod.set": {
+      if (!s.admin_set.includes(ctrl.signer) && ctrl.signer !== s.community.crk) reject("not_authorized");
+      if (e.epoch !== s.epoch) reject("stale_epoch");
+      const mods = Array.isArray(ctrl.args.moderators) && ctrl.args.moderators.length === 0 ? [] : normalizeKeySet(ctrl.args.moderators);
+      if (!mods) reject("malformed");
+      if (mods.length > 0) s.mod_set = mods;
+      else delete s.mod_set;
+      return;
+    }
   }
 }
 
@@ -263,6 +297,8 @@ const HANDLERS: Record<string, Handler> = {
   "policy.update": policyUpdate,
   "member.add": memberAdd,
   "member.remove": memberRemove,
+  "member.block": memberBlock,
+  "member.unblock": memberUnblock,
   "member.leave": memberLeave,
   "member.role": memberRole,
   "member.profile": memberProfile,
@@ -271,6 +307,7 @@ const HANDLERS: Record<string, Handler> = {
   "event.cancel": eventClose("cancelled"),
   "event.complete": eventClose("completed"),
   "event.attendance": eventAttendance,
+  "event.remove": eventRemove,
   "participation.invite": participation("invite"),
   "participation.volunteer": participation("volunteer"),
   "participation.accept": participation("accept"),
@@ -303,6 +340,20 @@ export function isAdmin(s: CommunityState, m: MemberRecord): boolean {
   return m.status === "active" && s.admin_set.includes(m.msk);
 }
 
+/**
+ * Moderators (§9.2) come from the control-plane moderator set, which the
+ * node also enforces: they accept join requests, block and unblock, read
+ * reports and may rotate the epoch key.
+ */
+export function isModerator(s: CommunityState, m: MemberRecord): boolean {
+  return m.status === "active" && !!s.mod_set?.includes(m.msk);
+}
+
+/** Admins and moderators: who may let people in and keep people out. */
+export function canModerate(s: CommunityState, m: MemberRecord): boolean {
+  return isAdmin(s, m) || isModerator(s, m);
+}
+
 export function isOrganizer(s: CommunityState, m: MemberRecord): boolean {
   return m.status === "active" && (m.role === "organizer" || m.role === "admin" || s.admin_set.includes(m.msk));
 }
@@ -315,6 +366,10 @@ function activeAdminCount(s: CommunityState): number {
 
 function requireAdmin(s: CommunityState, m: MemberRecord): void {
   if (!isAdmin(s, m)) reject("not_authorized");
+}
+
+function requireModerator(s: CommunityState, m: MemberRecord): void {
+  if (!canModerate(s, m)) reject("not_authorized");
 }
 
 function requireOrganizer(s: CommunityState, m: MemberRecord): void {
@@ -352,7 +407,7 @@ function policyUpdate(s: CommunityState, op: DecodedOp, author: MemberRecord): v
 // ---------------------------------------------------------------------------
 
 function memberAdd(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
-  requireAdmin(s, author);
+  requireModerator(s, author);
   const b = body(op);
   if (!isHex(b.msk, 32) || !isHex(b.mek, 32)) reject("malformed");
   const profile = parseProfile(b.profile);
@@ -364,6 +419,7 @@ function memberAdd(s: CommunityState, op: DecodedOp, author: MemberRecord, e: En
   }
   const id = memberIdOf(b.msk);
   if (s.members[id]?.status === "active") reject("already_exists");
+  if (s.members[id]?.blocked) reject("not_authorized");
   s.members[id] = {
     member_id: id,
     msk: b.msk,
@@ -391,6 +447,37 @@ function memberRemove(s: CommunityState, op: DecodedOp, author: MemberRecord): v
   }
   if (isAdmin(s, target) && activeAdminCount(s) <= 1) reject("last_admin");
   endMembership(s, target, "removed");
+}
+
+/**
+ * Blocks a member: removes them if still active and bars `member.add` for
+ * their key until `member.unblock`. Admins block anyone; moderators block
+ * anyone but admins and moderators. Former members can be blocked too, so
+ * someone who left cannot simply be let back in.
+ */
+function memberBlock(s: CommunityState, op: DecodedOp, author: MemberRecord): void {
+  requireModerator(s, author);
+  const b = body(op);
+  if (!isHex(b.member_id, 32)) reject("malformed");
+  if (b.reason !== undefined && !isText(b.reason, 500)) reject("malformed");
+  const target = s.members[b.member_id];
+  if (!target) reject("unknown_target");
+  if (target.blocked) reject("illegal_transition");
+  if (target.member_id === author.member_id) reject("illegal_transition");
+  if (!isAdmin(s, author) && canModerate(s, target)) reject("not_authorized");
+  if (isAdmin(s, target) && activeAdminCount(s) <= 1) reject("last_admin");
+  if (target.status === "active") endMembership(s, target, "removed");
+  target.blocked = true;
+}
+
+function memberUnblock(s: CommunityState, op: DecodedOp, author: MemberRecord): void {
+  requireModerator(s, author);
+  const b = body(op);
+  if (!isHex(b.member_id, 32)) reject("malformed");
+  const target = s.members[b.member_id];
+  if (!target) reject("unknown_target");
+  if (!target.blocked) reject("illegal_transition");
+  delete target.blocked;
 }
 
 function memberLeave(s: CommunityState, _op: DecodedOp, author: MemberRecord): void {
@@ -520,6 +607,21 @@ function eventAttendance(s: CommunityState, op: DecodedOp, author: MemberRecord)
     attended.add(id);
   }
   ev.attended = [...attended].sort();
+}
+
+/**
+ * Moderation: deletes an event outright, whatever its status, for content
+ * that should not stay up. Unlike `event.cancel`, nothing remains: no
+ * details, no participations, no summary. Admins and moderators only.
+ */
+function eventRemove(s: CommunityState, op: DecodedOp, author: MemberRecord): void {
+  requireModerator(s, author);
+  const b = body(op);
+  if (!isHex(b.event_id, 16)) reject("malformed");
+  if (b.reason !== undefined && !isText(b.reason, 500)) reject("malformed");
+  if (!s.events[b.event_id] && !s.event_summaries[b.event_id]) reject("unknown_target");
+  delete s.events[b.event_id];
+  delete s.event_summaries[b.event_id];
 }
 
 function scheduledEvent(s: CommunityState, eventId: unknown): Event {

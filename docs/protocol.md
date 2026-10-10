@@ -202,13 +202,17 @@ sequenceDiagram
 - Os tokens são opacos, com ≥ 128 bits aleatórios, TTL ≤ 24 h, vinculados ao
   escopo.
 - Um dispositivo normalmente mantém dois tokens por comunidade: `community`
-  (via `EAK_e`) e `mailbox` (via sua `MSK`). Admins também mantêm `control`.
+  (via `EAK_e`) e `mailbox` (via sua `MSK`). Admins também mantêm `control`;
+  moderadores (§9.2), `moderate`. O escopo `moderate` vale para chaves em
+  `admin_set` ou em `mod_set`, e um token `control` também passa onde se exige
+  `moderate`.
 
 > **Nota de projeto — o que o nó descobre.** O nó descobre a metade pública da
 > `EAK_e` (compartilhada por todos os membros — não revela nada individual), a
 > chave pública `MSK` de cada dispositivo que consulta sua caixa postal
-> (pseudônima, por comunidade) e as chaves públicas do conjunto de admins. Ele
-> não descobre nomes de membros, a lista de membros nem papéis além de admin.
+> (pseudônima, por comunidade) e as chaves públicas dos conjuntos de admins e
+> de moderadores. Ele não descobre nomes de membros, a lista de membros nem
+> papéis além de admin e moderador.
 > Esse é o significado concreto de "o nó não recebe a confiança de guardar
 > dados privados em texto claro".
 
@@ -298,7 +302,7 @@ para humanos.
 
 ```
 ControlHeader {
-  kind:     "genesis" | "rotate" | "admin.set" | "migrate"
+  kind:     "genesis" | "rotate" | "admin.set" | "migrate" | "mod.set" | "disable" | "enable"
   signer:   bytes(32)      # MSK.public de um admin, ou CRK.public para gênese / recuperação
   csig:     bytes(64)      # Sign(signer, "vv/ctrl-sig/v1", {cid, op_id, epoch, kind, args})
   args:     map            # específico do kind, abaixo
@@ -308,9 +312,12 @@ ControlHeader {
 | kind | args | O nó impõe |
 |---|---|---|
 | `genesis` | `{suite: "VV1", crk: CRK.public, admins: [MSK.public], eak: EAK_0.public, ik: IK.public}` | `signer == crk`; `SHA-256(ctx‖crk) == cid`; válido apenas como `seq 1` |
-| `rotate` | `{new_epoch: u32, eak: EAK_new.public}` | `signer ∈ admin_set`; `new_epoch == current_epoch + 1` |
+| `rotate` | `{new_epoch: u32, eak: EAK_new.public}` | `signer ∈ admin_set ∪ mod_set`; `new_epoch == current_epoch + 1` |
 | `admin.set` | `{admins: [MSK.public], ik: IK.public?}` | `signer ∈ admin_set` **ou** `signer == crk`; conjunto não vazio |
 | `migrate` | `{nodes: [text]}`: 0–5 URLs base, cada uma `http(s)://` seguida de ASCII imprimível (0x21–0x7E), ≤ 200 bytes | `signer ∈ admin_set` **ou** `signer == crk`; depois disso, toda escrita exceto `migrate` é recusada com `moved` (§11.3). Uma lista vazia cancela uma mudança |
+| `disable` | `{}` | `signer ∈ admin_set`; marca a comunidade para exclusão (§11.5) |
+| `enable` | `{}` | a comunidade está desativada; `signer ∈ admin_set` **e** `signer ≠` quem desativou (§11.5) |
+| `mod.set` | `{moderators: [MSK.public]}` (0–64 chaves) | `signer ∈ admin_set` **ou** `signer == crk`; substitui `mod_set`. Uma lista vazia remove todos os moderadores |
 
 `rotate` e `admin.set` são cifradas sob a chave da época **antiga** (a que
 está em `epoch`), e o nó troca `current_epoch` depois de aceitar um `rotate`.
@@ -324,7 +331,8 @@ cabeçalho de controle — a imposição pelo nó é uma conveniência, não uma
 de confiança.
 
 O `SignedOp.type` interno de uma operação de controle é `community.init`
-(gênese), `epoch.rotate`, `admin.set` ou `community.migrate`, e seu `author`
+(gênese), `epoch.rotate`, `admin.set`, `community.migrate`, `mod.set`,
+`community.disable` ou `community.enable`, e seu `author`
 MUST ser igual a `ctrl.signer`. Listas de nós de `migrate` malformadas falham
 na decodificação do envelope (`malformed`) em ambos os lados;
 `tests/vectors/vv1.json` traz casos.
@@ -602,11 +610,26 @@ MemberRecord {
 
 | type | body | quem | legal quando |
 |---|---|---|---|
-| `member.add` | `{msk, mek, profile, role="member", request_id?}` | admin | `msk` não está ativa |
+| `member.add` | `{msk, mek, profile, role="member", request_id?}` | admin ou moderador | `msk` não está ativa nem bloqueada |
 | `member.remove` | `{member_id, reason?}` | admin; organizador só pode remover o papel `member` | alvo ativo |
+| `member.block` | `{member_id, reason?}` | admin; moderador, se o alvo não for admin nem moderador | alvo conhecido (ativo ou ex-membro), não bloqueado, não é o próprio autor; MUST NOT bloquear o último admin |
+| `member.unblock` | `{member_id}` | admin ou moderador | alvo bloqueado |
 | `member.leave` | `{}` | o próprio | o próprio está ativo |
 | `member.role` | `{member_id, role}` | admin | alvo ativo; MUST NOT rebaixar o último admin |
 | `member.profile` | `{profile}` | o próprio | o próprio está ativo |
+
+**Moderadores.** Um membro é moderador sse está ativo e sua `msk` está em
+`mod_set` (operação de controle `mod.set`, §5, só admins ou a CRK). Não há
+rótulo de papel no plano de dados. Moderadores podem: `member.add` (aceitar
+pedidos de entrada, §10.2), `member.block`/`member.unblock` (de membros e
+organizadores; nunca de admins ou de outros moderadores), receber denúncias
+(§10) e assinar `rotate`. O nó lhes dá o escopo `moderate`: ler e apagar a
+entrada (§10.1) e enviar snapshots (§12.3), sem os quais não conseguiriam
+aceitar pedidos nem trancar quem bloquearam. Eles recebem a metade privada da
+`IK` como os admins (`ik_env`). Quando alguém sai de `mod_set` (rebaixado,
+removido, bloqueado ou porque saiu), um admin MUST emitir `mod.set` sem essa
+chave e uma nova `IK` (via `admin.set {ik}`); o cliente de admin faz isso
+sozinho ao sincronizar.
 
 `member.add` com papel de admin não é permitido diretamente: adicione como
 membro e depois use `admin.set` do plano de controle (e, para exibição,
@@ -623,7 +646,16 @@ do plano de dados é um rótulo; sozinho, ele concede direitos de organizador.
 > conjunto de admins é o que o nó impõe e o que a CRK controla, então ele é a
 > fonte de autoridade.
 
-`member.remove`/`member.leave` MUST ser seguidos de um `rotate` (§7.2). Os
+`member.block` encerra a filiação do alvo como `removed` (se ele ainda estava
+ativo) e marca `blocked: true` no `MemberRecord`; enquanto bloqueado,
+`member.add` com a mesma `msk` é rejeitado com `not_authorized`.
+`member.unblock` só retira a marca: a pessoa precisa pedir para entrar de
+novo. Como cada pedido de entrada traz chaves novas, o bloqueio vale para a
+identidade na comunidade, não para a pessoa; a coordenação ainda pode
+reconhecê-la pelo perfil num novo pedido.
+
+`member.remove`/`member.leave`, e `member.block` de um membro ativo, MUST ser
+seguidos de um `rotate` (§7.2). Os
 clientes de admin fazem isso automaticamente e de forma atômica do ponto de
 vista do usuário.
 
@@ -662,6 +694,7 @@ Event {
 | `event.cancel` | `{event_id, reason?}` | organizador do evento ou admin | `scheduled` |
 | `event.complete` | `{event_id}` | organizador do evento ou admin | `scheduled` |
 | `event.attendance` | `{event_id, attended: [member_id]}` | organizador do evento ou admin | `completed`; cada id tem participação `confirmed` |
+| `event.remove` | `{event_id, reason?}` | admin ou moderador (moderação) | o evento existe, em qualquer estado, ou tem resumo. Apaga tudo: detalhes, participações e resumo; operações posteriores sobre ele dão `unknown_target` |
 
 Um `event.update` que altera `starts_at`, `ends_at` ou `location.area`
 redefine todo participante `confirmed` para `reconfirm` (ver §9.4), porque a
@@ -765,6 +798,7 @@ MailboxItem {
 | `probe_reply` | membro | §10.4, correspondência selada, assinada | ≤ 72 h |
 | `ping` | qualquer um | despertar para push (§14) | 1 h |
 | `ik_env` | admin | HPKE para a MEK de um novo admin: `{ik_sk}` (a metade privada da chave de entrada) | nenhum |
+| `report` | membro | `{report_id: bytes(16), reporter, member_id, reason, details?, sig}`, uma cópia selada para a MEK de cada admin e moderador ativo (exceto o denunciado); `reason` ∈ `harassment`, `spam`, `impersonation`, `unsafe`, `other`; `details` ≤ 1000 caracteres; `sig = Sign(MSK, "vv/report/v1", {cid, report_id, reporter, member_id, reason, details?})`. O admin aceita só se a assinatura for verificada sob a MSK de `reporter`. Nada vai para o log: o nó e o denunciado não sabem da denúncia | máximo do nó (30 d) |
 | `removed` | admin | HPKE para a MEK de um membro removido: `{reason?}`; ele não consegue mais ler o log depois da rotação, então é assim que ele fica sabendo o motivo | nenhum (até ser confirmado) |
 
 Os tipos de correspondência selada, exceto `key_env`, usam `HPKE.Seal(MEK, info = "vv/mail/<kind>/v1" || cid, aad = "", cbor(body))`,
@@ -970,6 +1004,31 @@ suspenso.
 
 ---
 
+### 11.5 Desativar e apagar uma comunidade
+
+Um admin pode marcar a comunidade para exclusão com a operação de controle
+`disable` (§5). A partir dela:
+
+- O nó recusa toda escrita com `disabled` (403): operações (exceto `enable` e
+  `admin.set`), caixas postais, pedidos de entrada, convites, política de
+  entrada e snapshots. Leitura e exportação continuam funcionando.
+- O reducer guarda `community.disabled = {by: MSK, at}` (`at` é o horário de
+  recebimento do nó) e rejeita com `disabled` qualquer entrada que não seja
+  `enable` ou `admin.set`, igual ao nó.
+- Os clientes mostram a todos os membros um aviso de que a comunidade foi
+  marcada para exclusão por um admin, com a data, e desligam toda ação de
+  escrita.
+- Só **outro** admin pode cancelar, com `enable` (`signer ≠ disabled.by`).
+  `admin.set` continua aceito para que, se o único admin for quem desativou,
+  quem detém a CRK possa nomear um segundo admin (§11.4).
+- 30 dias depois de `at` (`disabled_retention_secs` na configuração do nó,
+  só para testes), o nó apaga a comunidade inteira: log, snapshots, épocas,
+  caixas postais, entrada, convites e diretório. Depois disso ela responde
+  `not_hosted`, e os dispositivos que já passaram da data esquecem a cópia
+  local.
+- Uma restauração (§11.3) refaz a desativação a partir do log de controle; o
+  prazo continua contando do `disable` original.
+
 ## 12. Snapshots e compactação [MVP]
 
 ### 12.1 Formato do snapshot
@@ -1133,12 +1192,12 @@ autenticadas enviam `Authorization: Bearer <token>` da §3.1.
 | `GET /c/{cid}/ops?after=&limit=` | community | → `{entries: [LogEntry], head_seq}` ou `410 {code: "gone", snapshot_seq}` |
 | `GET /c/{cid}/control` | community | → `{entries}`: todas as entradas do plano de controle (nunca compactadas) |
 | `GET /c/{cid}/snapshot` | community | → `SnapshotEnvelope` mais recente |
-| `PUT /c/{cid}/snapshot` | **control** | `SnapshotEnvelope` → `{seq}`; `head` deve ser igual ao hash da entrada `seq` |
+| `PUT /c/{cid}/snapshot` | **moderate** | `SnapshotEnvelope` → `{seq}`; `head` deve ser igual ao hash da entrada `seq` |
 | `POST /c/{cid}/mailbox/{mbx}` | community | `{kind, ct, ttl_s?}` → `{id}`; itens `key_env` nunca expiram |
 | `GET /c/{cid}/mailbox/{mbx}?after=` | mailbox (apenas o próprio `mbx`) | → `{items: [{id, kind, ct, posted_at}]}` |
 | `DELETE /c/{cid}/mailbox/{mbx}/{id}` | mailbox | confirmação |
 | `POST /c/{cid}/intake` | — (com limite de taxa) | `{enc, ct, invite?}` → `{id}`; `invite` é o segredo bruto, verificado contra os hashes registrados no modo `invite_only` |
-| `GET /c/{cid}/intake?after=` / `DELETE …/{id}` | control | admins leem/confirmam pedidos de entrada selados |
+| `GET /c/{cid}/intake?after=` / `DELETE …/{id}` | moderate | admins e moderadores leem/confirmam pedidos de entrada selados |
 | `GET /c/{cid}/intake-policy` / `PUT` | control | `{mode: "open" \| "invite_only" \| "closed"}` |
 | `GET /c/{cid}/export` | control | o corpo de restauração da §11.3 para esta comunidade; funciona mesmo movida ou suspensa |
 | `POST /c/{cid}/invites` | control | `{hash, expires_at, max_uses}` |
@@ -1153,14 +1212,17 @@ dados.
 
 Os tokens são revalidados a cada requisição: um token `community` deixa de
 funcionar quando sua EAK não é mais a atual (depois da janela de tolerância);
-um token `control`, quando sua chave sai do conjunto de admins.
+um token `control`, quando sua chave sai do conjunto de admins; um token
+`moderate`, quando sai de ambos os conjuntos.
 
-> **Nota de projeto — envio de snapshot é exclusivo de admins.** Enviar um
+> **Nota de projeto — envio de snapshot é exclusivo de admins (e moderadores).** Enviar um
 > snapshot permite que o nó compacte o log anterior a ele depois de
 > `compaction_grace`. Se qualquer membro que possui a EAK pudesse enviar um,
 > um membro malicioso poderia plantar um snapshot lixo e, um mês depois,
 > deixar os novos membros sem nada utilizável. Descoberto durante a
-> implementação da Fase 3.
+> implementação da Fase 3. Moderadores também enviam: depois de uma rotação
+> que eles mesmos fizeram, só um snapshot na época nova deixa entrar quem eles
+> aceitarem (§7.6). Os dispositivos aceitam snapshots de admins ou moderadores.
 
 Erros: `{code: text, detail: text}` com os códigos `malformed`,
 `unauthorized`, `forbidden`, `not_hosted`, `not_found`, `epoch_stale`,
@@ -1169,9 +1231,11 @@ Erros: `{code: text, detail: text}` com os códigos `malformed`,
 para hospedagem: `moved` (409, com `nodes`; §11.3), `suspended` (403: o
 operador pausou as escritas; leituras e exportação funcionam) e
 `quota_exceeded` (507; por operação nos resultados de `POST /ops`, ou na
-criação/restauração). Os dispositivos mantêm na fila de saída as operações
-recusadas com `moved`, `suspended` ou `quota_exceeded`. Um `migrate` é aceito
-nos três estados, então uma comunidade sempre pode ir embora.
+criação/restauração) e `disabled` (403; a comunidade foi marcada para
+exclusão, §11.5). Os dispositivos mantêm na fila de saída as operações
+recusadas com `moved`, `suspended`, `quota_exceeded` ou `disabled`. Um `migrate` é aceito
+nos três primeiros estados, então uma comunidade sempre pode ir embora; uma
+comunidade desativada (§11.5) precisa ser reativada antes.
 
 Um nó também pode expor uma API de operador em um listener separado
 ([`managed-hosting.md`](managed-hosting.md)); ela não faz parte deste

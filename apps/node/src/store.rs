@@ -111,6 +111,15 @@ const MIGRATIONS: &[&str] = &[
       (SELECT COALESCE(SUM(length(entry)), 0) FROM entries e WHERE e.cid = communities.cid);
     CREATE INDEX IF NOT EXISTS communities_by_tenant ON communities (tenant);
     "#,
+    // 2 — moderators (§9.2).
+    r#"
+    ALTER TABLE communities ADD COLUMN mod_set BLOB;
+    "#,
+    // 3 — disabled communities, deleted 30 days later (§11.5).
+    r#"
+    ALTER TABLE communities ADD COLUMN disabled_at INTEGER;
+    ALTER TABLE communities ADD COLUMN disabled_by BLOB;
+    "#,
 ];
 
 pub const SCHEMA_VERSION: usize = MIGRATIONS.len();
@@ -145,6 +154,8 @@ pub struct Community {
     pub epoch: u32,
     pub rotated_at: u64,
     pub admin_set: Vec<[u8; 32]>,
+    /// Moderators (`mod.set`): may read intake, rotate and upload snapshots.
+    pub mod_set: Vec<[u8; 32]>,
     pub head_seq: u64,
     pub head_hash: [u8; 32],
     pub head_at: u64,
@@ -159,6 +170,9 @@ pub struct Community {
     pub moved_to: Vec<String>,
     /// Bytes of log entries currently stored, for quotas and usage.
     pub log_bytes: u64,
+    /// Set by an accepted `disable` (§11.5): when (node time) and by whom.
+    /// Writes are refused; housekeeping deletes the community 30 days later.
+    pub disabled: Option<(u64, [u8; 32])>,
 }
 
 impl Community {
@@ -169,6 +183,8 @@ impl Community {
             epoch: 0,
             rotated_at,
             admin_set,
+            mod_set: Vec::new(),
+            disabled: None,
             head_seq: 0,
             head_hash: [0; 32],
             head_at: 0,
@@ -268,7 +284,7 @@ impl Store {
 pub fn community(c: &Connection, cid: &Cid) -> rusqlite::Result<Option<Community>> {
     c.query_row(
         "SELECT crk, epoch, rotated_at, admin_set, head_seq, head_hash, head_at, compacted_through, intake_mode,
-                tenant, suspended, moved_to, log_bytes
+                tenant, suspended, moved_to, log_bytes, mod_set, disabled_at, disabled_by
          FROM communities WHERE cid = ?1",
         [cid],
         |r| {
@@ -287,6 +303,11 @@ pub fn community(c: &Connection, cid: &Cid) -> rusqlite::Result<Option<Community
                 suspended: r.get(10)?,
                 moved_to: decode_urls(r.get(11)?),
                 log_bytes: r.get(12)?,
+                mod_set: r.get::<_, Option<Vec<u8>>>(13)?.map(|b| decode_keys(&b)).unwrap_or_default(),
+                disabled: match (r.get::<_, Option<u64>>(14)?, r.get::<_, Option<Vec<u8>>>(15)?) {
+                    (Some(at), Some(by)) => Some((at, blob32(by)?)),
+                    _ => None,
+                },
             })
         },
     )
@@ -297,8 +318,8 @@ pub fn insert_community(c: &Connection, cm: &Community, now: u64) -> rusqlite::R
     c.execute(
         "INSERT INTO communities
            (cid, crk, epoch, rotated_at, admin_set, head_seq, head_hash, head_at, compacted_through, intake_mode, created_at,
-            tenant, suspended, moved_to, log_bytes)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            tenant, suspended, moved_to, log_bytes, mod_set, disabled_at, disabled_by)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
         params![
             cm.cid,
             cm.crk,
@@ -314,7 +335,10 @@ pub fn insert_community(c: &Connection, cm: &Community, now: u64) -> rusqlite::R
             cm.tenant,
             cm.suspended,
             encode_urls(&cm.moved_to),
-            cm.log_bytes
+            cm.log_bytes,
+            encode_keys(&cm.mod_set),
+            cm.disabled.map(|(at, _)| at),
+            cm.disabled.map(|(_, by)| by.to_vec())
         ],
     )?;
     Ok(())
@@ -324,7 +348,7 @@ pub fn update_community(c: &Connection, cm: &Community) -> rusqlite::Result<()> 
     c.execute(
         "UPDATE communities SET epoch = ?2, rotated_at = ?3, admin_set = ?4, head_seq = ?5, head_hash = ?6,
            head_at = ?7, compacted_through = ?8, intake_mode = ?9, tenant = ?10, suspended = ?11,
-           moved_to = ?12, log_bytes = ?13
+           moved_to = ?12, log_bytes = ?13, mod_set = ?14, disabled_at = ?15, disabled_by = ?16
          WHERE cid = ?1",
         params![
             cm.cid,
@@ -339,7 +363,10 @@ pub fn update_community(c: &Connection, cm: &Community) -> rusqlite::Result<()> 
             cm.tenant,
             cm.suspended,
             encode_urls(&cm.moved_to),
-            cm.log_bytes
+            cm.log_bytes,
+            encode_keys(&cm.mod_set),
+            cm.disabled.map(|(at, _)| at),
+            cm.disabled.map(|(_, by)| by.to_vec())
         ],
     )?;
     Ok(())
@@ -436,6 +463,15 @@ pub fn communities_of_tenant(c: &Connection, tenant: &str) -> rusqlite::Result<u
         [tenant],
         |r| r.get(0),
     )
+}
+
+/// Communities disabled at or before `cutoff` (node time), due for deletion (§11.5).
+pub fn disabled_before(c: &Connection, cutoff: u64) -> rusqlite::Result<Vec<Cid>> {
+    let mut st = c.prepare(
+        "SELECT cid FROM communities WHERE disabled_at IS NOT NULL AND disabled_at <= ?1",
+    )?;
+    let rows = st.query_map([cutoff], |r| blob32(r.get(0)?))?;
+    rows.collect()
 }
 
 /// Removes every row of a community. Irreversible; the operator API asks for confirmation.

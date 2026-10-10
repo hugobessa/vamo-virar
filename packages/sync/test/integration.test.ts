@@ -47,7 +47,7 @@ async function syncAll(...rs: Replica[]) {
 describe.skipIf(!HAVE_NODE)("against a real node", () => {
   let node: RunningNode;
   beforeAll(async () => {
-    node = await startNode({ epoch_grace_secs: 0 });
+    node = await startNode({ epoch_grace_secs: 0, intake_per_ip_per_hour: 1000 }); // every join here comes from one address
   });
   afterAll(() => node?.stop());
 
@@ -235,6 +235,156 @@ describe.skipIf(!HAVE_NODE)("against a real node", () => {
     expect(ana.probeResults(ev)!.replies).toEqual({ [bia.memberId]: "eligible" });
   }, 30_000);
 
+  it("members report to the admins only; admins block from a report and blocked people cannot be re-added", async () => {
+    const ana = await Replica.found(node.client(), { name: "C12", displayName: "Ana" });
+    const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia);
+    const caio = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
+    await admit(ana, caio);
+    await syncAll(ana, bia, caio);
+
+    await expect(bia.reportMember(bia.memberId, "spam")).rejects.toThrow(/yourself/);
+    await bia.reportMember(caio.memberId, "harassment", "  mensagens ofensivas no grupo  ");
+    await caio.sync();
+    expect(caio.reports).toHaveLength(0); // only admins receive reports
+    await ana.sync();
+    expect(ana.reports).toHaveLength(1);
+    expect(ana.reports[0]).toMatchObject({ reporter: bia.memberId, memberId: caio.memberId, reason: "harassment", details: "mensagens ofensivas no grupo" });
+
+    // A forged report (Caio claiming to be Bia) is dropped.
+    const { sealMail } = await import("../src/invite.js");
+    const { sign, mailboxId } = await import("@vamo-virar/crypto");
+    const forgedBody = { report_id: new Uint8Array(16).fill(9), reporter: bia.memberId, member_id: ana.memberId, reason: "spam" as const };
+    const forgedSig = sign(caio.keys.signing.sk, "vv/report/v1", { cid: caio.cid, ...forgedBody });
+    const access = (caio as unknown as { currentAccess(): Parameters<typeof caio.client.postMailbox>[1] }).currentAccess();
+    await caio.client.postMailbox(caio.cid, access, mailboxId(ana.cid, ana.keys.signing.pk), "report", sealMail(caio.cid, ana.keys.encryption.pk, { kind: "report", ...forgedBody, sig: forgedSig }), 3600);
+    await ana.sync();
+    expect(ana.reports).toHaveLength(1);
+
+    await expect(bia.blockMember(caio.memberId)).rejects.toThrow(/only admins/);
+    await ana.blockMember(caio.memberId, "assédio");
+    expect(ana.reports).toHaveLength(0);
+    expect(ana.canonical!.members[caio.memberId]).toMatchObject({ status: "removed", blocked: true });
+    expect(ana.epoch).toBe(1);
+    await caio.sync();
+    expect(caio.status).toBe("removed");
+    await bia.sync();
+    expect(bia.epoch).toBe(1);
+    expect(canon(bia.canonical)).toBe(canon(ana.canonical));
+
+    // Re-adding the same keys is refused until an admin unblocks.
+    ana.submit("member.add", { msk: toHex(caio.keys.signing.pk), mek: toHex(caio.keys.encryption.pk), profile: { display_name: "Caio" } });
+    const report = await ana.sync();
+    expect(report.rejected.map((r) => r.reason)).toEqual(["not_authorized"]);
+    await ana.unblockMember(caio.memberId);
+    expect(ana.canonical!.members[caio.memberId]!.blocked).toBeUndefined();
+  }, 30_000);
+
+  it("moderators accept and reject joins, block and unblock, read reports and lock blocked people out", async () => {
+    const ana = await Replica.found(node.client(), { name: "C13", displayName: "Ana" });
+    const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia);
+    const caio = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
+    await admit(ana, caio);
+
+    // Before being made a moderator, Bia cannot touch join requests.
+    await expect(bia.joinRequests()).rejects.toThrow(/only admins and moderators/);
+    await expect(caio.makeModerator(bia.memberId)).rejects.toThrow(/only admins/);
+    await ana.makeModerator(bia.memberId);
+    await syncAll(ana, bia, caio);
+    expect(bia.isModerator).toBe(true);
+    expect(bia.canModerate).toBe(true);
+    expect(bia.isAdmin).toBe(false);
+
+    // Bia (moderator) accepts one applicant and refuses another.
+    const dani = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Dani" });
+    await admit(bia, dani);
+    const eva = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Eva" });
+    const evaReq = (await bia.joinRequests()).find((p) => toHex(p.request.msk) === toHex(eva.keys.signing.pk))!;
+    await bia.reject(evaReq);
+    await eva.sync();
+    expect(eva.status).toBe("rejected");
+
+    // Reports reach admins and moderators.
+    await syncAll(ana, bia, caio, dani);
+    await dani.reportMember(caio.memberId, "spam");
+    await bia.sync();
+    await ana.sync();
+    expect(bia.reports.map((r) => r.memberId)).toEqual([caio.memberId]);
+    expect(ana.reports.map((r) => r.memberId)).toEqual([caio.memberId]);
+
+    // Bia blocks Caio: he is locked out by a rotation she signs herself.
+    await expect(bia.blockMember(ana.memberId)).rejects.toThrow(/not_authorized/);
+    await bia.blockMember(caio.memberId);
+    expect(bia.epoch).toBe(1);
+    await caio.sync();
+    expect(caio.status).toBe("removed");
+    await syncAll(ana, dani);
+    expect(dani.epoch).toBe(1);
+    expect(ana.canonical!.members[caio.memberId]!.blocked).toBe(true);
+    await bia.unblockMember(caio.memberId);
+    await ana.sync();
+    expect(ana.canonical!.members[caio.memberId]!.blocked).toBeUndefined();
+
+    // Removing the moderator role replaces the intake key; Bia loses intake access.
+    await ana.removeModerator(bia.memberId);
+    await bia.sync();
+    expect(bia.isModerator).toBe(false);
+    await expect(bia.joinRequests()).rejects.toThrow(/only admins and moderators/);
+    const node2 = bia.client;
+    const intakeAsBia = node2.intake(bia.cid, bia.keys.signing, 0, "moderate");
+    await expect(intakeAsBia).rejects.toMatchObject({ status: 401 });
+    expect(canon(bia.canonical)).toBe(canon(ana.canonical));
+  }, 30_000);
+
+  it("an admin drops a moderator who left from the node's moderator set", async () => {
+    const ana = await Replica.found(node.client(), { name: "C14", displayName: "Ana" });
+    const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia);
+    await ana.makeModerator(bia.memberId);
+    await bia.sync();
+    bia.submit("member.leave", {});
+    await bia.sync();
+    await ana.sync();
+    expect(ana.canonical!.mod_set).toEqual([toHex(bia.keys.signing.pk)]);
+    expect(await ana.tidyModerators()).toBe(true);
+    expect(ana.canonical!.mod_set).toBeUndefined();
+    expect(await ana.tidyModerators()).toBe(false);
+  }, 30_000);
+
+  it("an admin disables the community: everyone sees it, writes stop, only another admin re-enables", async () => {
+    const ana = await Replica.found(node.client(), { name: "C15", displayName: "Ana" });
+    const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia);
+    const caio = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
+    await admit(ana, caio);
+    await ana.makeAdmin(bia.memberId);
+    await syncAll(ana, bia, caio);
+
+    await expect(caio.disableCommunity()).rejects.toThrow(/only admins/);
+    await ana.disableCommunity();
+    await syncAll(bia, caio);
+    const d = caio.disabled!;
+    expect(d.by).toBe(toHex(ana.keys.signing.pk));
+    expect(d.deleteAt - d.at).toBe(30 * 86_400_000);
+    expect(() => caio.submit("member.profile", { profile: { display_name: "Caio 2" } })).toThrow(/disabled/);
+
+    // Writes the node refuses: a join request, a report.
+    const dani = Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Dani" });
+    await expect(dani).rejects.toMatchObject({ code: "disabled" });
+    await expect(caio.reportMember(ana.memberId, "spam")).rejects.toMatchObject({ code: "disabled" });
+
+    await expect(ana.enableCommunity()).rejects.toThrow(/another admin/);
+    await bia.enableCommunity();
+    await syncAll(ana, caio);
+    expect(caio.disabled).toBeUndefined();
+    caio.submit("member.profile", { profile: { display_name: "Caio de volta" } });
+    await caio.sync();
+    await ana.sync();
+    expect(ana.canonical!.members[caio.memberId]!.profile!.display_name).toBe("Caio de volta");
+    expect(canon(caio.canonical)).toBe(canon(ana.canonical));
+  }, 30_000);
+
   it("watch() syncs when the node announces new entries", async () => {
     const ana = await Replica.found(node.client(), { name: "C8", displayName: "Ana" });
     const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
@@ -290,6 +440,7 @@ describe.skipIf(!HAVE_NODE)("compaction and node replacement", () => {
     const caio = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
     await admit(ana, caio);
     await ana.removeMember(caio.memberId); // a rotation and a snapshot in the history
+    await ana.makeModerator(bia.memberId); // a moderator set the new node must rebuild
     const ev = toHex(new Uint8Array(16).fill(4));
     await bia.sync();
     bia.submit("event.create", eventBody(ev, "Antes da mudança"));
@@ -299,6 +450,7 @@ describe.skipIf(!HAVE_NODE)("compaction and node replacement", () => {
     expect(head).toBe(ana.canonical!.clock.seq);
 
     bia.moveTo(spare.client());
+    expect(await bia.joinRequests()).toEqual([]); // moderator access carried over
     bia.submit("participation.volunteer", { event_id: ev });
     await bia.sync();
     await ana.sync();

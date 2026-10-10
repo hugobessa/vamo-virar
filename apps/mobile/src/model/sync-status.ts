@@ -5,7 +5,7 @@ export function syncStatusKey(input: {
   connectivity: "ok" | "offline";
   pending: number;
   /** Why the server is holding changes back, from the last sync. */
-  blocked?: "moved" | "suspended" | "quota_exceeded" | undefined;
+  blocked?: "moved" | "suspended" | "quota_exceeded" | "disabled" | undefined;
 }): { key: StringKey; tone: "ok" | "warn" | "danger" | "neutral" } {
   if (input.status === "removed") return { key: "syncRemoved", tone: "danger" };
   if (input.status === "waiting_for_key") return { key: "syncWaitingAccess", tone: "warn" };
@@ -13,6 +13,7 @@ export function syncStatusKey(input: {
   if (input.blocked === "moved") return { key: "syncMoving", tone: "warn" };
   if (input.blocked === "suspended") return { key: "syncSuspended", tone: "warn" };
   if (input.blocked === "quota_exceeded") return { key: "syncFull", tone: "danger" };
+  if (input.blocked === "disabled") return { key: "syncDisabled", tone: "danger" };
   if (input.pending > 0) return { key: "syncSending", tone: "neutral" };
   return { key: "syncUpToDate", tone: "ok" };
 }

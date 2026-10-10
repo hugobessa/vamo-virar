@@ -13,7 +13,7 @@ export type OpId = Hex; // 16 random bytes
 // Log entries (input to the reducer)
 // ---------------------------------------------------------------------------
 
-export type ControlKind = "genesis" | "rotate" | "admin.set" | "migrate";
+export type ControlKind = "genesis" | "rotate" | "admin.set" | "migrate" | "mod.set" | "disable" | "enable";
 
 export interface GenesisArgs {
   suite: "VV1";
@@ -38,11 +38,19 @@ export interface MigrateArgs {
   nodes: string[];
 }
 
+export interface ModSetArgs {
+  /** MSK public keys; empty removes every moderator. */
+  moderators: Hex[];
+}
+
 export type ControlHeader =
   | { kind: "genesis"; signer: Hex; args: GenesisArgs }
   | { kind: "rotate"; signer: Hex; args: RotateArgs }
   | { kind: "admin.set"; signer: Hex; args: AdminSetArgs }
-  | { kind: "migrate"; signer: Hex; args: MigrateArgs };
+  | { kind: "migrate"; signer: Hex; args: MigrateArgs }
+  | { kind: "mod.set"; signer: Hex; args: ModSetArgs }
+  | { kind: "disable"; signer: Hex; args: Record<string, never> }
+  | { kind: "enable"; signer: Hex; args: Record<string, never> };
 
 /** The decrypted, signature-verified inner operation (SignedOp minus crypto fields). */
 export interface DecodedOp {
@@ -112,6 +120,11 @@ export interface MemberRecord {
   key_epoch: number;
   /** Retention clock value when the member was removed or left. */
   ended_at?: number;
+  /**
+   * Set by `member.block`: the member was removed and may not be added back
+   * until an admin unblocks them. Absent (never `false`) when not blocked.
+   */
+  blocked?: true;
 }
 
 export interface Location {
@@ -177,6 +190,7 @@ export type RejectReason =
   | "epoch_conflict"
   | "last_admin"
   | "already_exists"
+  | "disabled"
   | "unsupported";
 
 export interface RejectedOp {
@@ -203,10 +217,21 @@ export interface CommunityState {
     policy: Policy;
     /** Set by `migrate` (§11.3): where the community lives now. */
     nodes?: string[];
+    /**
+     * Set by `disable` (§11.5): who (MSK) and when (node time). Writes stop;
+     * the node deletes the community 30 days later unless another admin
+     * sends `enable`.
+     */
+    disabled?: { by: Hex; at: number };
   };
   epoch: number;
   eak: Hex;
   admin_set: Hex[]; // sorted MSK public keys
+  /**
+   * Sorted MSK public keys of moderators (§9.2), set by `mod.set`. Absent
+   * when there are none, so communities without moderators hash as before.
+   */
+  mod_set?: Hex[];
   ik: Hex;
   clock: Clock;
   members: Record<MemberId, MemberRecord>;
