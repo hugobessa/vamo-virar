@@ -52,7 +52,18 @@ import {
 } from "@vamo-virar/crypto";
 import { decode, encode, fromHex, toHex, type CborValue } from "@vamo-virar/protocol";
 import { movedTo, NodeClient, NodeError, type RestoreInput } from "./client.js";
-import { inviteHash, inviteLink, openMail, sealMail, type Invite, type ProbeAnswer } from "./invite.js";
+import {
+  inviteHash,
+  inviteLink,
+  openMail,
+  REPORT_DETAILS_MAX,
+  REPORT_REASONS,
+  sealMail,
+  type Invite,
+  type MailMessage,
+  type ProbeAnswer,
+  type ReportReason,
+} from "./invite.js";
 
 export type Status =
   /** Join request sent; waiting for an admin. */
@@ -96,6 +107,8 @@ export interface ReplicaData {
   incomingProbes?: IncomingProbe[];
   /** Probes this person sent, with the answers received so far. */
   sentProbes?: SentProbe[];
+  /** Admins only: reports about members, received and not yet dismissed. */
+  reports?: MemberReport[];
   /**
    * Set when we verified an admin-signed `migrate` (§11.3) and have not yet
    * reached the new node. Only signed log entries set it, never a node's say-so.
@@ -118,6 +131,19 @@ export interface SentProbe {
   asked: number;
   replies: Record<string, ProbeAnswer>;
 }
+
+export interface MemberReport {
+  reportId: string;
+  /** Who sent it; checked against their signature. */
+  reporter: string;
+  /** Who it is about. */
+  memberId: string;
+  reason: ReportReason;
+  details?: string;
+  receivedAt: number;
+}
+
+const REPORTS_MAX = 500;
 
 export interface SyncReport {
   pushed: number;
@@ -479,6 +505,11 @@ export class Replica {
         const m = openMail(this.data.cid, "probe_reply", me.encryption, item.ct);
         if (m?.kind === "probe_reply") this.acceptProbeReply(m.probe_id, m.member_id, m.answer, m.sig);
         handled = true;
+      } else if (item.kind === "report") {
+        const m = openMail(this.data.cid, "report", me.encryption, item.ct);
+        // Keep it for a later sync if we have not seen the people in it yet
+        // (another admin may have just added the reporter).
+        handled = m?.kind !== "report" || this.acceptReport(m);
       } else if (item.kind === "join_result") {
         const m = openMail(this.data.cid, "join_result", me.encryption, item.ct);
         if (m?.kind === "join_result" && !m.accepted && this.data.status === "joining") this.data.status = "rejected";
@@ -790,6 +821,83 @@ export class Replica {
   }
 
   // -------------------------------------------------------------------------
+  // Reports. A member reports another member to the admins; each admin gets
+  // a sealed, signed copy in their mailbox. The node and the reported person
+  // see nothing; other members do not learn a report was made.
+  // -------------------------------------------------------------------------
+
+  private reportSigned(m: { report_id: Uint8Array; reporter: string; member_id: string; reason: ReportReason; details?: string }): CborValue {
+    return {
+      cid: this.data.cid,
+      report_id: m.report_id,
+      reporter: m.reporter,
+      member_id: m.member_id,
+      reason: m.reason,
+      ...(m.details !== undefined ? { details: m.details } : {}),
+    };
+  }
+
+  /** Any member: reports another member to the community's admins. */
+  async reportMember(memberId: string, reason: ReportReason, details?: string): Promise<void> {
+    const state = this.data.state;
+    const me = this.me;
+    if (!state || !me || me.status !== "active") throw new Error("only members can report");
+    if (memberId === this.memberId) throw new Error("you cannot report yourself");
+    if (!state.members[memberId]) throw new Error("no such member");
+    if (!REPORT_REASONS.includes(reason)) throw new Error("unknown report reason");
+    const text = details?.trim() || undefined;
+    if (text && text.length > REPORT_DETAILS_MAX) throw new Error("report details are too long");
+    // Every active admin except the reported person; an admin reporting keeps a copy too.
+    const admins = Object.values(state.members).filter((m) => isAdmin(state, m) && m.member_id !== memberId);
+    if (admins.length === 0) throw new Error("there is no admin to report to");
+    const msg = { report_id: this.rng(16), reporter: this.memberId, member_id: memberId, reason, ...(text ? { details: text } : {}) };
+    const sig = sign(this.data.keys.signing.sk, "vv/report/v1", this.reportSigned(msg));
+    for (const a of admins) {
+      if (a.member_id === this.memberId) {
+        this.acceptReport({ kind: "report", ...msg, sig });
+        continue;
+      }
+      const mail = sealMail(this.data.cid, fromHex(a.mek), { kind: "report", ...msg, sig }, this.rng);
+      await this.client.postMailbox(this.data.cid, this.currentAccess(), mailboxId(this.data.cid, fromHex(a.msk)), "report", mail);
+    }
+  }
+
+  /** Stores a verified report. False means "not yet": we do not know the people in it. */
+  private acceptReport(m: Extract<MailMessage, { kind: "report" }>): boolean {
+    const state = this.data.state;
+    if (!state) return false;
+    if (!this.isAdmin) return true;
+    const reporter = state.members[m.reporter];
+    if (!reporter || !state.members[m.member_id]) return false;
+    if (!verify(fromHex(reporter.msk), "vv/report/v1", this.reportSigned(m), m.sig)) return true;
+    const reports = (this.data.reports ??= []);
+    const reportId = toHex(m.report_id);
+    if (reports.some((r) => r.reportId === reportId)) return true;
+    const r: MemberReport = { reportId, reporter: m.reporter, memberId: m.member_id, reason: m.reason, receivedAt: Date.now() };
+    if (m.details !== undefined) r.details = m.details;
+    reports.push(r);
+    if (reports.length > REPORTS_MAX) reports.shift();
+    this.changed();
+    return true;
+  }
+
+  /** Admin: reports received on this device, newest first. */
+  get reports(): readonly MemberReport[] {
+    return [...(this.data.reports ?? [])].reverse();
+  }
+
+  /** Admin: closes a report without acting on it. Only on this device. */
+  dismissReport(reportId: string): void {
+    this.data.reports = (this.data.reports ?? []).filter((r) => r.reportId !== reportId);
+    this.changed();
+  }
+
+  private dropReportsAbout(memberId: string): void {
+    this.data.reports = (this.data.reports ?? []).filter((r) => r.memberId !== memberId);
+    this.changed();
+  }
+
+  // -------------------------------------------------------------------------
   // Admin flows. These need the node to be reachable.
   // -------------------------------------------------------------------------
 
@@ -868,12 +976,34 @@ export class Replica {
 
   /** Removes a member and rotates the epoch key so they cannot read anything new (§7.2–§7.3). */
   async removeMember(memberId: string, reason?: string): Promise<void> {
+    await this.endMembership("member.remove", memberId, reason);
+  }
+
+  /**
+   * Blocks a member (§9.2): removes them if they are still active, with the
+   * same notice and key rotation as a removal, and bars them from being
+   * added back. Reports about them are cleared from this device.
+   */
+  async blockMember(memberId: string, reason?: string): Promise<void> {
+    await this.endMembership("member.block", memberId, reason);
+    this.dropReportsAbout(memberId);
+  }
+
+  async unblockMember(memberId: string): Promise<void> {
+    this.requireAdmin();
+    const outcome = await this.submitNow("member.unblock", { member_id: memberId });
+    if (outcome.status !== "applied") throw new Error(`member.unblock ${outcome.status === "rejected" ? outcome.reason : outcome.status}`);
+  }
+
+  private async endMembership(type: "member.remove" | "member.block", memberId: string, reason?: string): Promise<void> {
     const state = this.requireAdmin();
     const target = state.members[memberId];
     if (!target) throw new Error("no such member");
-    const wasAdmin = state.admin_set.includes(target.msk);
-    const outcome = await this.submitNow("member.remove", { member_id: memberId, ...(reason ? { reason } : {}) });
-    if (outcome.status !== "applied") throw new Error(`member.remove ${outcome.status === "rejected" ? outcome.reason : outcome.status}`);
+    const wasActive = target.status === "active";
+    const wasAdmin = wasActive && state.admin_set.includes(target.msk);
+    const outcome = await this.submitNow(type, { member_id: memberId, ...(reason ? { reason } : {}) });
+    if (outcome.status !== "applied") throw new Error(`${type} ${outcome.status === "rejected" ? outcome.reason : outcome.status}`);
+    if (!wasActive) return; // a former member: nothing to lock them out of
     const notice = sealMail(this.data.cid, fromHex(target.mek), { kind: "removed", ...(reason ? { reason } : {}) }, this.rng);
     await this.client.postMailbox(this.data.cid, this.currentAccess(), mailboxId(this.data.cid, fromHex(target.msk)), "removed", notice, 30 * 86_400);
     if (wasAdmin) await this.setAdmins(this.data.state!.admin_set.filter((k) => k !== target.msk), true);

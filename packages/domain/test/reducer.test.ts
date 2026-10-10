@@ -188,6 +188,58 @@ describe("membership", () => {
   });
 });
 
+describe("blocking", () => {
+  it("only admins block; blocking removes the member and bars re-adding", () => {
+    const { b, ana, bia, caio } = setup();
+    const ev = b.createEvent(bia, 1);
+    b.part(caio, "volunteer", ev);
+    b.op(bia, "member.block", { member_id: caio.id });
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(ana, "member.block", { member_id: caio.id, reason: "assédio" });
+    expect(last(b).out).toEqual(applied);
+    let s = last(b).state;
+    expect(s.members[caio.id]).toMatchObject({ status: "removed", blocked: true });
+    expect(s.events[ev]!.participations[caio.id]!.status).toBe("withdrawn");
+    b.op(caio, "member.profile", { profile: { display_name: "Caio 2" } });
+    expect(last(b).out).toEqual(rejected("not_member"));
+    b.add(ana, caio);
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(ana, "member.block", { member_id: caio.id });
+    expect(last(b).out).toEqual(rejected("illegal_transition"));
+
+    b.op(ana, "member.unblock", { member_id: caio.id });
+    expect(last(b).out).toEqual(applied);
+    s = last(b).state;
+    expect(s.members[caio.id]!.blocked).toBeUndefined();
+    expect(s.members[caio.id]!.status).toBe("removed");
+    b.add(ana, caio);
+    expect(last(b).out).toEqual(applied);
+  });
+
+  it("blocks former members, and rejects unknown targets and self-blocks", () => {
+    const { b, ana, caio } = setup();
+    b.op(caio, "member.leave", {});
+    b.op(ana, "member.block", { member_id: caio.id });
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.members[caio.id]).toMatchObject({ status: "left", blocked: true });
+    b.op(ana, "member.block", { member_id: person("Zé").id });
+    expect(last(b).out).toEqual(rejected("unknown_target"));
+    b.op(ana, "member.block", { member_id: ana.id });
+    expect(last(b).out).toEqual(rejected("illegal_transition"));
+    b.op(ana, "member.unblock", { member_id: ana.id });
+    expect(last(b).out).toEqual(rejected("illegal_transition"));
+  });
+
+  it("an admin blocking another admin keeps the last-admin rule", () => {
+    const { b, ana, bia } = setup();
+    b.adminSet(ana, [ana, bia]);
+    b.op(bia, "member.block", { member_id: ana.id });
+    expect(last(b).out).toEqual(applied);
+    b.adminSet(bia, [bia]);
+    expect(isAdmin(last(b).state, last(b).state.members[bia.id]!)).toBe(true);
+  });
+});
+
 describe("control plane", () => {
   it("rotates epochs, signed by an admin only", () => {
     const { b, ana, caio } = setup();

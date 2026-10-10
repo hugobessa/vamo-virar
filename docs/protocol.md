@@ -604,6 +604,8 @@ MemberRecord {
 |---|---|---|---|
 | `member.add` | `{msk, mek, profile, role="member", request_id?}` | admin | `msk` não está ativa |
 | `member.remove` | `{member_id, reason?}` | admin; organizador só pode remover o papel `member` | alvo ativo |
+| `member.block` | `{member_id, reason?}` | admin | alvo conhecido (ativo ou ex-membro), não bloqueado, não é o próprio autor; MUST NOT bloquear o último admin |
+| `member.unblock` | `{member_id}` | admin | alvo bloqueado |
 | `member.leave` | `{}` | o próprio | o próprio está ativo |
 | `member.role` | `{member_id, role}` | admin | alvo ativo; MUST NOT rebaixar o último admin |
 | `member.profile` | `{profile}` | o próprio | o próprio está ativo |
@@ -623,7 +625,16 @@ do plano de dados é um rótulo; sozinho, ele concede direitos de organizador.
 > conjunto de admins é o que o nó impõe e o que a CRK controla, então ele é a
 > fonte de autoridade.
 
-`member.remove`/`member.leave` MUST ser seguidos de um `rotate` (§7.2). Os
+`member.block` encerra a filiação do alvo como `removed` (se ele ainda estava
+ativo) e marca `blocked: true` no `MemberRecord`; enquanto bloqueado,
+`member.add` com a mesma `msk` é rejeitado com `not_authorized`.
+`member.unblock` só retira a marca: a pessoa precisa pedir para entrar de
+novo. Como cada pedido de entrada traz chaves novas, o bloqueio vale para a
+identidade na comunidade, não para a pessoa; a coordenação ainda pode
+reconhecê-la pelo perfil num novo pedido.
+
+`member.remove`/`member.leave`, e `member.block` de um membro ativo, MUST ser
+seguidos de um `rotate` (§7.2). Os
 clientes de admin fazem isso automaticamente e de forma atômica do ponto de
 vista do usuário.
 
@@ -765,6 +776,7 @@ MailboxItem {
 | `probe_reply` | membro | §10.4, correspondência selada, assinada | ≤ 72 h |
 | `ping` | qualquer um | despertar para push (§14) | 1 h |
 | `ik_env` | admin | HPKE para a MEK de um novo admin: `{ik_sk}` (a metade privada da chave de entrada) | nenhum |
+| `report` | membro | `{report_id: bytes(16), reporter, member_id, reason, details?, sig}`, uma cópia selada para a MEK de cada admin ativo (exceto o denunciado); `reason` ∈ `harassment`, `spam`, `impersonation`, `unsafe`, `other`; `details` ≤ 1000 caracteres; `sig = Sign(MSK, "vv/report/v1", {cid, report_id, reporter, member_id, reason, details?})`. O admin aceita só se a assinatura for verificada sob a MSK de `reporter`. Nada vai para o log: o nó e o denunciado não sabem da denúncia | máximo do nó (30 d) |
 | `removed` | admin | HPKE para a MEK de um membro removido: `{reason?}`; ele não consegue mais ler o log depois da rotação, então é assim que ele fica sabendo o motivo | nenhum (até ser confirmado) |
 
 Os tipos de correspondência selada, exceto `key_env`, usam `HPKE.Seal(MEK, info = "vv/mail/<kind>/v1" || cid, aad = "", cbor(body))`,

@@ -74,10 +74,28 @@ export type MailMessage =
   /** "Could you come to this event?" from an organizer (§10.4). */
   | { kind: "probe"; probe_id: Uint8Array; event_id: string; reply_to: Uint8Array; reply_mbx: Uint8Array; expires: number }
   /** A member's answer, signed by their MSK so the organizer knows who answered. */
-  | { kind: "probe_reply"; probe_id: Uint8Array; member_id: string; answer: ProbeAnswer; sig: Uint8Array };
+  | { kind: "probe_reply"; probe_id: Uint8Array; member_id: string; answer: ProbeAnswer; sig: Uint8Array }
+  /**
+   * A member reporting another member to the admins. One copy is sealed to
+   * each admin's MEK, so neither the node nor the reported person can read
+   * it; signed by the reporter's MSK so admins know who sent it.
+   */
+  | {
+      kind: "report";
+      report_id: Uint8Array;
+      reporter: string;
+      member_id: string;
+      reason: ReportReason;
+      details?: string;
+      sig: Uint8Array;
+    };
 
 export type ProbeAnswer = "eligible" | "maybe" | "not_eligible";
 const ANSWERS: ProbeAnswer[] = ["eligible", "maybe", "not_eligible"];
+
+export type ReportReason = "harassment" | "spam" | "impersonation" | "unsafe" | "other";
+export const REPORT_REASONS: readonly ReportReason[] = ["harassment", "spam", "impersonation", "unsafe", "other"];
+export const REPORT_DETAILS_MAX = 1000;
 
 const isBytes = (v: unknown, n: number): v is Uint8Array => v instanceof Uint8Array && v.length === n;
 
@@ -105,6 +123,21 @@ export function openMail(cid: Uint8Array, kind: string, me: EncryptionKeyPair, c
     if (kind === "probe_reply") {
       if (!isBytes(body.probe_id, 16) || typeof body.member_id !== "string" || !ANSWERS.includes(body.answer as ProbeAnswer) || !isBytes(body.sig, 64)) return null;
       return { kind, probe_id: body.probe_id, member_id: body.member_id, answer: body.answer as ProbeAnswer, sig: body.sig };
+    }
+    if (kind === "report") {
+      if (
+        !isBytes(body.report_id, 16) ||
+        typeof body.reporter !== "string" ||
+        typeof body.member_id !== "string" ||
+        !REPORT_REASONS.includes(body.reason as ReportReason) ||
+        (body.details !== undefined && (typeof body.details !== "string" || body.details.length > REPORT_DETAILS_MAX)) ||
+        !isBytes(body.sig, 64)
+      ) {
+        return null;
+      }
+      const m: MailMessage = { kind, report_id: body.report_id, reporter: body.reporter, member_id: body.member_id, reason: body.reason as ReportReason, sig: body.sig };
+      if (typeof body.details === "string") m.details = body.details;
+      return m;
     }
     if (kind === "removed") {
       const m: MailMessage = { kind };

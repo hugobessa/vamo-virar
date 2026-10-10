@@ -135,11 +135,14 @@ export interface EntryOptions {
   joinRequests?: boolean;
   /** Organizer view: answers to "who can come?" on e1. */
   probeReplies?: boolean;
+  /** Admin view: reports about members, and someone already blocked. */
+  reports?: boolean;
   state?: CommunityState;
 }
 
 export function makeEntry(o: EntryOptions = {}) {
   const state = o.state ?? communityState();
+  if (o.reports) state.members.gil = { ...member("gil", "Gil Prado", "member", "removed"), blocked: true };
   const me = o.me ?? "ana";
   const active = (o.status ?? "active") === "active";
   const requests = o.joinRequests
@@ -161,6 +164,16 @@ export function makeEntry(o: EntryOptions = {}) {
     probeResults: (eventId: string) =>
       o.probeReplies && eventId === "e1" ? { asked: 4, replies: { bia: "eligible", caio: "maybe", duda: "not_eligible" } } : undefined,
     joinRequests: async () => requests,
+    reports: o.reports
+      ? [
+          { reportId: "rp1", reporter: "duda", memberId: "edu", reason: "harassment", details: "Mandou mensagens ofensivas para várias pessoas depois da assembleia.", receivedAt: NOW - 3 * H },
+          { reportId: "rp2", reporter: "bia", memberId: "edu", reason: "spam", receivedAt: NOW - D },
+        ]
+      : [],
+    reportMember: async (...a: unknown[]) => action("replica.reportMember")(...a),
+    dismissReport: action("replica.dismissReport"),
+    blockMember: async (id: string) => action("replica.blockMember")(id),
+    unblockMember: async (id: string) => action("replica.unblockMember")(id),
     approve: async (p: unknown) => action("replica.approve")(p),
     reject: async (p: unknown) => action("replica.reject")(p),
     createInvite: async (opts: unknown) => {

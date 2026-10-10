@@ -112,6 +112,11 @@ export interface MemberRecord {
   key_epoch: number;
   /** Retention clock value when the member was removed or left. */
   ended_at?: number;
+  /**
+   * Set by `member.block`: the member was removed and may not be added back
+   * until an admin unblocks them. Absent (never `false`) when not blocked.
+   */
+  blocked?: true;
 }
 
 export interface Location {

@@ -15,6 +15,7 @@ const community = (o: Parameters<typeof makeEntry>[0] = {}, extra: Partial<Story
 export const EventosComoAdmin: Story = community();
 export const EventosComoMembro: Story = community({ me: "caio" });
 export const PessoasComoAdmin: Story = community({ joinRequests: true }, { play: openTab("Pessoas") });
+export const DenunciasComoAdmin: Story = community({ reports: true }, { play: openTab("Pessoas") });
 export const PessoasComoMembro: Story = community({ me: "caio" }, { play: openTab("Pessoas") });
 export const EuComoAdmin: Story = community({}, { play: openTab("Eu") });
 export const EuComoMembro: Story = community({ me: "caio" }, { play: openTab("Eu") });
