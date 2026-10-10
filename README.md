@@ -143,7 +143,7 @@ npm run preview:landing -w @vamo-virar/mobile  # serve o build, http://localhost
 ```
 
 No Cloudflare Pages: diretório raiz vazio, comando de build
-`npm ci && npm run build:landing -w @vamo-virar/mobile`, diretório de saída
+`npm ci && npm run build:landing` (atalho na raiz para o script do app), diretório de saída
 `apps/mobile/dist-landing` e a variável `NODE_VERSION=22`. Os cabeçalhos de
 segurança estão em `apps/mobile/landing/public/_headers`.
 
