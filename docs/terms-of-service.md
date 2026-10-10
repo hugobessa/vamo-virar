@@ -6,7 +6,7 @@
 > deve ser revisado por um(a) advogado(a) antes da publicação.
 
 Estes Termos de Uso ("Termos") regem o uso do aplicativo **Vamo Virar** ("o
-app"), desenvolvido por **[Nome / razão social]** ([CNPJ/CPF]) ("nós"). Ao
+app"), desenvolvido por **Hugo Rafael Bessa de Andrade** (CPF 090.885.294-00) ("nós"). Ao
 instalar ou usar o app, você concorda com estes Termos e com a
 [Política de Privacidade](privacy-policy.md). Se não concordar, não use o app.
 
@@ -94,7 +94,7 @@ qualquer encontro presencial. **O app não é um serviço de emergência.**
 
 O código do Vamo Virar é distribuído sob a licença **MIT**, disponível no
 repositório do projeto (`LICENSE`). O nome "Vamo Virar", o ícone e a identidade
-visual pertencem a **[titular]**, e a licença do código não autoriza o uso deles
+visual pertencem a **Hugo Rafael Bessa de Andrade**, e a licença do código não autoriza o uso deles
 de forma que sugira vínculo ou endosso oficial.
 
 ## 9. Disponibilidade, mudanças e encerramento

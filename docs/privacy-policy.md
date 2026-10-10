@@ -11,8 +11,8 @@ que o mínimo possível de informação saia do seu celular.
 
 ## 1. Quem é o responsável
 
-O app é desenvolvido por **[Nome / razão social do desenvolvedor]**
-([CNPJ/CPF]), contato: **[vamovirar@bessa.me](mailto:vamovirar@bessa.me)**.
+O app é desenvolvido por **Hugo Rafael Bessa de Andrade**
+(CPF 090.885.294-00), contato: **[vamovirar@bessa.me](mailto:vamovirar@bessa.me)**.
 
 O Vamo Virar funciona de forma descentralizada. Cada comunidade é sincronizada
 por um **nó da comunidade**, um servidor pequeno que pode ser operado por:
@@ -213,4 +213,4 @@ exigir.
 
 ## 13. Contato
 
-**[Nome do responsável / Encarregado (DPO)]** — **[vamovirar@bessa.me](mailto:vamovirar@bessa.me)**
+**Hugo Rafael Bessa de Andrade** — **[vamovirar@bessa.me](mailto:vamovirar@bessa.me)**
