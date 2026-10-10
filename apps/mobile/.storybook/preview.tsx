@@ -43,7 +43,7 @@ const preview: Preview = {
       return (
         <PhoneFrame.Provider value={frame}>
           <SchemeOverride.Provider value={scheme}>
-            <View style={{ minHeight: "100vh" as unknown as number, backgroundColor: themes[scheme].bg }}>
+            <View style={{ minHeight: "100vh" as unknown as number, backgroundColor: ctx.parameters["transparent"] ? "transparent" : themes[scheme].bg }}>
               <Story />
             </View>
           </SchemeOverride.Provider>
