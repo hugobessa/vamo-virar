@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import { useApp } from "../lib/context";
-import { Banner, Button, Field, Screen } from "../ui/kit";
+import { Banner, Body, Button, Field, FormSection, Screen } from "../ui/kit";
 import { errorText } from "../model/errors";
 
 export default function Create() {
@@ -37,20 +37,27 @@ export default function Create() {
 
   return (
     <Screen>
-      <Field testID="community-name" label={t("communityName")} value={name} onChangeText={setName} />
-      <Field testID="community-description" label={t("communityDescription")} value={description} onChangeText={setDescription} multiline />
-      <Field testID="display-name" label={t("yourName")} help={t("yourNameHelp")} value={displayName} onChangeText={setDisplayName} autoComplete="name" />
-      <Field
-        testID="node-url"
-        label={t("serverAddress")}
-        help={t("serverAddressHelp")}
-        value={node}
-        onChangeText={setNode}
-        autoCapitalize="none"
-        keyboardType="url"
-        placeholder="https://"
-      />
-      <Field testID="setup-code" label={t("setupCode")} value={setupCode} onChangeText={setSetupCode} autoCapitalize="none" secureTextEntry />
+      <Body muted>{t("createIntro")}</Body>
+      <FormSection title={t("sectionCommunity")}>
+        <Field testID="community-name" label={t("communityName")} value={name} onChangeText={setName} />
+        <Field testID="community-description" label={t("communityDescription")} value={description} onChangeText={setDescription} multiline />
+      </FormSection>
+      <FormSection title={t("sectionYou")}>
+        <Field testID="display-name" label={t("yourName")} help={t("yourNameHelp")} value={displayName} onChangeText={setDisplayName} autoComplete="name" />
+      </FormSection>
+      <FormSection title={t("sectionServer")}>
+        <Field
+          testID="node-url"
+          label={t("serverAddress")}
+          help={t("serverAddressHelp")}
+          value={node}
+          onChangeText={setNode}
+          autoCapitalize="none"
+          keyboardType="url"
+          placeholder="https://"
+        />
+        <Field testID="setup-code" label={t("setupCode")} value={setupCode} onChangeText={setSetupCode} autoCapitalize="none" secureTextEntry />
+      </FormSection>
       {error ? <Banner tone="danger" text={error} /> : null}
       <Button testID="create-submit" label={busy ? t("creating") : t("create")} busy={busy} disabled={!ok} onPress={submit} />
     </Screen>

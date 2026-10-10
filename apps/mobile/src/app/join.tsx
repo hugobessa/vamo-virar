@@ -2,7 +2,7 @@ import { parseInvite } from "@vamo-virar/sync";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { useApp } from "../lib/context";
-import { Banner, Button, Field, Screen } from "../ui/kit";
+import { Banner, Body, Button, Field, FormSection, Screen } from "../ui/kit";
 import { errorText } from "../model/errors";
 
 export default function Join() {
@@ -47,17 +47,22 @@ export default function Join() {
 
   return (
     <Screen>
-      <Field
-        testID="invite-link"
-        label={t("pasteInvite")}
-        value={link}
-        onChangeText={setLink}
-        autoCapitalize="none"
-        error={link && !linkOk ? t("inviteInvalid") : undefined}
-      />
-      <Field testID="display-name" label={t("yourName")} help={t("yourNameHelp")} value={displayName} onChangeText={setDisplayName} />
-      <Field label={t("contactOptional")} value={contact} onChangeText={setContact} />
-      <Field label={t("messageToOrganizers")} value={message} onChangeText={setMessage} multiline />
+      <Body muted>{t("joinIntro")}</Body>
+      <FormSection title={t("sectionInvite")}>
+        <Field
+          testID="invite-link"
+          label={t("pasteInvite")}
+          value={link}
+          onChangeText={setLink}
+          autoCapitalize="none"
+          error={link && !linkOk ? t("inviteInvalid") : undefined}
+        />
+      </FormSection>
+      <FormSection title={t("sectionYou")}>
+        <Field testID="display-name" label={t("yourName")} help={t("yourNameHelp")} value={displayName} onChangeText={setDisplayName} />
+        <Field label={t("contactOptional")} value={contact} onChangeText={setContact} />
+        <Field label={t("messageToOrganizers")} value={message} onChangeText={setMessage} multiline />
+      </FormSection>
       {error ? <Banner tone="danger" text={error} /> : null}
       <Button
         testID="join-submit"

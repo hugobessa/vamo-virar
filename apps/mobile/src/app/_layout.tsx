@@ -2,7 +2,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider, useApp } from "../lib/context";
-import { useTheme } from "../ui/theme";
+import { fonts, useTheme } from "../ui/theme";
 
 function Nav() {
   const { t } = useApp();
@@ -12,6 +12,8 @@ function Nav() {
       screenOptions={{
         headerStyle: { backgroundColor: c.bg },
         headerTintColor: c.text,
+        headerShadowVisible: false,
+        headerTitleStyle: { fontFamily: fonts.display, fontWeight: "900" },
         contentStyle: { backgroundColor: c.bg },
         headerBackTitle: t("back"),
       }}
