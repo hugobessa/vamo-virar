@@ -131,8 +131,10 @@ o fundo de um botão de ação: a ação principal é azul, a de destaque é ama
 
 A landing page em pt-BR é um site estático separado, feito com os mesmos
 componentes do app (`apps/mobile/landing`). A política de privacidade
-(`/privacidade/`) e os termos de uso (`/termos/`) são gerados a partir de
-`docs/privacy-policy.md` e `docs/terms-of-service.md`, então o texto jurídico
+(`/privacidade/`), os termos de uso (`/termos/`) e os padrões de segurança
+infantil contra abuso e exploração sexual infantil (`/seguranca-infantil/`, a
+URL pedida pelo Google Play) são gerados a partir de `docs/privacy-policy.md`,
+`docs/terms-of-service.md` e `docs/child-safety.md`, então o texto jurídico
 tem uma fonte só. Os links da página (lojas, código, documentação) ficam em
 `apps/mobile/src/ui/landing/links.ts`.
 

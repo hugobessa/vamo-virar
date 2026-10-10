@@ -15,6 +15,8 @@ export interface LandingLinks {
   privacy: string;
   /** Built from docs/terms-of-service.md by the landing build. */
   terms: string;
+  /** Standards against child sexual abuse and exploitation, from docs/child-safety.md. */
+  childSafety: string;
 }
 
 export const defaultLinks: LandingLinks = {
@@ -25,6 +27,7 @@ export const defaultLinks: LandingLinks = {
   serverDocs: `${REPO}/blob/main/docs/deploy.md`,
   privacy: "/privacidade/",
   terms: "/termos/",
+  childSafety: "/seguranca-infantil/",
 };
 
 /** Docs that the legal pages link to by file name, as they appear on GitHub. */

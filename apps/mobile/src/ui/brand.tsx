@@ -3,7 +3,7 @@
 // as small details. All built from plain Views and Text so they render on
 // native and on the web (Storybook) alike.
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Text, View, type ViewStyle } from "react-native";
 import { fonts, palette, shear, useTheme } from "./theme";
 
@@ -178,17 +178,23 @@ export function Display({
 }: {
   children: ReactNode;
   tone?: "text" | "brand" | "onBrand" | "green";
-  size?: "display" | "h1" | "h2";
+  size?: "jumbo" | "display" | "h1" | "h2";
   skewed?: boolean;
   align?: "left" | "center";
 }) {
   const c = useTheme();
   const color = tone === "brand" ? c.brand : tone === "onBrand" ? palette.white : tone === "green" ? c.greenDark : c.text;
-  const sizes = { display: [88, 80], h1: [56, 52], h2: [36, 36] } as const;
+  const sizes = { jumbo: [120, 108], display: [88, 80], h1: [56, 52], h2: [36, 36] } as const;
   const [fontSize, lineHeight] = sizes[size];
+  // The shear drops the left end and lifts the right end of the box by
+  // tan(11.3°) / 2 ≈ 0.1 of its width; leave room for both so the headline
+  // never runs into what is above or below it, however wide it gets.
+  const [width, setWidth] = useState(0);
+  const lift = Math.max(fontSize * 0.25, width * 0.1 + 4);
   return (
     <Text
       accessibilityRole="header"
+      onLayout={skewed ? (e) => setWidth(e.nativeEvent.layout.width) : undefined}
       style={[
         {
           color,
@@ -200,8 +206,8 @@ export function Display({
           letterSpacing: -fontSize * 0.02,
           textAlign: align,
         },
-        // The shear drops the left end and lifts the right end of a line; leave room for both.
-        skewed ? { transform: [{ skewY: shear }], marginVertical: fontSize * 0.4 } : null,
+        // Shrink-wrap the text so the shear (and the room it needs) follows the longest line.
+        skewed ? { transform: [{ skewY: shear }], marginVertical: lift, alignSelf: align === "center" ? "center" : "flex-start", maxWidth: "100%" } : null,
       ]}
     >
       {children}
