@@ -21,6 +21,7 @@
     "expo-location": "~57.0.20",
     "expo-router": "~57.0.25",
     "expo-secure-store": "~57.0.4",
+    "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "expo-web-browser": "~57.0.3",
     "react": "19.2.3",
@@ -57,6 +58,7 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build -o dist-storybook",
     "store-screenshots": "npm run build-storybook && node scripts/store-screenshots.mjs",
+    "brand-assets": "npm run build-storybook && node scripts/brand-assets.mjs",
     "landing": "vite --config landing/vite.config.ts",
     "build:landing": "vite build --config landing/vite.config.ts",
     "preview:landing": "vite preview --config landing/vite.config.ts --outDir ../dist-landing"

@@ -15,9 +15,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FD0000",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
@@ -53,6 +52,18 @@
           "locationWhenInUsePermission": "O Vamo Virar usa sua localização só quando você pede, uma vez, para marcar onde você está agora. Ela fica no celular.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 290,
+          "backgroundColor": "#FFFFFF",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#0E0E12"
+          }
         }
       ]
     ],
