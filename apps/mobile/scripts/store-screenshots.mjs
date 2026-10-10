@@ -19,16 +19,33 @@ const dist = join(root, "dist-storybook");
 const out = process.env.STORE_SCREENSHOTS ?? join(root, "store-screenshots");
 const chromePath = process.env.CHROME_PATH ?? "/opt/pw-browsers/chromium";
 
-/** CSS viewport × scale = the pixel size the store wants. */
+/**
+ * CSS viewport × scale = the pixel size the store wants. Apple's sizes follow
+ * App Store Connect's screenshot specifications, one per display class; the
+ * viewport is the device's size in points where Apple ships one.
+ */
 const devices = {
-  // App Store: 6.9" iPhone (1320×2868) is the one required size; smaller iPhones are scaled from it.
-  "ios-iphone-6.9": { width: 440, height: 956, scale: 3 },
-  // App Store: 13" iPad (2064×2752), required because the app sets supportsTablet.
-  "ios-ipad-13": { width: 1032, height: 1376, scale: 2 },
-  // Play Store: phone, 9:16 at 1080×1920.
-  "android-phone": { width: 432, height: 768, scale: 2.5 },
-  // Play Store: 10" tablet, 1600×2560.
-  "android-tablet-10": { width: 800, height: 1280, scale: 2 },
+  // App Store, iPhone. Only "Dynamic Island (medium)" is required; Apple scales the rest from the next size up.
+  "ios-iphone-duo-outer": { width: 466, height: 678, scale: 3 }, // 1398×2034
+  "ios-iphone-duo-inner": { width: 669, height: 951, scale: 3 }, // 2007×2853
+  "ios-iphone-6.9-dynamic-island-large": { width: 440, height: 956, scale: 3 }, // 1320×2868
+  "ios-iphone-6.5-face-id-large": { width: 428, height: 926, scale: 3 }, // 1284×2778
+  "ios-iphone-6.3-dynamic-island-medium": { width: 402, height: 874, scale: 3 }, // 1206×2622
+  "ios-iphone-6.1-face-id-medium": { width: 390, height: 844, scale: 3 }, // 1170×2532
+  "ios-iphone-5.5-home-button-large": { width: 414, height: 736, scale: 3 }, // 1242×2208
+  "ios-iphone-4.7-home-button-medium": { width: 375, height: 667, scale: 2 }, // 750×1334
+  "ios-iphone-4.0-home-button": { width: 320, height: 568, scale: 2 }, // 640×1136
+  "ios-iphone-3.5-home-button": { width: 320, height: 480, scale: 2 }, // 640×960
+  // App Store, iPad. 13" is required because the app sets supportsTablet.
+  "ios-ipad-13": { width: 1032, height: 1376, scale: 2 }, // 2064×2752
+  "ios-ipad-12.9": { width: 1024, height: 1366, scale: 2 }, // 2048×2732
+  "ios-ipad-11": { width: 834, height: 1194, scale: 2 }, // 1668×2388
+  "ios-ipad-10.5": { width: 834, height: 1112, scale: 2 }, // 1668×2224
+  "ios-ipad-9.7": { width: 768, height: 1024, scale: 2 }, // 1536×2048
+  // Play Store: phone (9:16), 7" and 10" tablets.
+  "android-phone": { width: 432, height: 768, scale: 2.5 }, // 1080×1920
+  "android-tablet-7": { width: 600, height: 960, scale: 2 }, // 1200×1920
+  "android-tablet-10": { width: 800, height: 1280, scale: 2 }, // 1600×2560
 };
 
 /** In store order: the story that sells the app first. */
@@ -39,7 +56,7 @@ const stories = process.argv.slice(2).length
       "telas-comunidade--eventos-como-admin",
       "telas-evento--convite-pendente",
       "telas-evento--organizacao-vendo-respostas",
-      "telas-comunidade--pessoas-como-admin",
+      "telas-comunidade--pessoas-como-moderacao",
       "telas-evento--concluido-registrando-presenca",
       "telas-ajustes--agenda-em-lugares",
       "telas-comunidade--sem-conexao",
@@ -65,11 +82,11 @@ const browser = await chromium.launch({
   // Web fonts come through the HTTPS proxy, if any; Chromium skips it for loopback on its own.
   args: process.env.HTTPS_PROXY ? [`--proxy-server=${process.env.HTTPS_PROXY}`] : [],
 });
+rmSync(out, { recursive: true, force: true });
 let failed = false;
 try {
   for (const [device, { width, height, scale }] of Object.entries(devices)) {
     const dir = join(out, device);
-    rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, ignoreHTTPSErrors: true });
     const page = await context.newPage();
