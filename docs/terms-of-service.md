@@ -2,9 +2,6 @@
 
 **Última atualização:** 10 de outubro de 2026
 
-> **Rascunho.** O texto deve ser revisado por um(a) advogado(a) antes da
-> publicação.
-
 Estes Termos de Uso ("Termos") regem o uso do aplicativo **Vamo Virar** ("o
 app"), desenvolvido por **Hugo Rafael Bessa de Andrade** (CPF 090.885.294-00) ("nós"). Ao
 instalar ou usar o app, você concorda com estes Termos e com a

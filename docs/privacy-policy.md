@@ -2,9 +2,6 @@
 
 **Última atualização:** 10 de outubro de 2026
 
-> **Rascunho.** O texto deve ser revisado por um(a) advogado(a) antes da
-> publicação.
-
 Esta política explica quais dados o aplicativo **Vamo Virar** ("o app") trata,
 onde eles ficam e quais são os seus direitos. O Vamo Virar foi desenhado para
 que o mínimo possível de informação saia do seu celular.
