@@ -58,6 +58,24 @@ describe("genesis", () => {
   });
 });
 
+describe("community details", () => {
+  it("admins set and clear the community's WhatsApp group link", () => {
+    const { b, ana, caio } = setup();
+    const link = "https://chat.whatsapp.com/AbC123xyz";
+    b.op(caio, "community.update", { whatsapp: link });
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(ana, "community.update", { whatsapp: "chat.whatsapp.com/AbC123xyz" });
+    expect(last(b).out).toEqual(rejected("malformed"));
+    b.op(ana, "community.update", { whatsapp: link });
+    expect(last(b).state.community.whatsapp).toBe(link);
+    b.op(ana, "community.update", { name: "Outro nome" });
+    expect(last(b).state.community.whatsapp).toBe(link);
+    b.op(ana, "community.update", { whatsapp: null });
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.community.whatsapp).toBeUndefined();
+  });
+});
+
 describe("sequencing and bookkeeping", () => {
   it("requires contiguous seqs", () => {
     const { b } = setup();
@@ -480,6 +498,20 @@ describe("events", () => {
     const ps = last(b).state.events[ev]!.participations;
     expect(ps[caio.id]!.status).toBe("reconfirm");
     expect(ps[davi.id]!.status).toBe("invited");
+  });
+
+  it("keeps a WhatsApp group link, which can be changed and cleared", () => {
+    const { b, bia } = setup();
+    const link = "https://chat.whatsapp.com/AbC123xyz";
+    b.createEvent(bia, 1, { whatsapp: "https://example.com/AbC123xyz" });
+    expect(last(b).out).toEqual(rejected("malformed"));
+    const ev = b.createEvent(bia, 2, { whatsapp: link });
+    expect(last(b).state.events[ev]!.whatsapp).toBe(link);
+    b.op(bia, "event.update", { event_id: ev, whatsapp: "https://chat.whatsapp.com/Other1" });
+    expect(last(b).state.events[ev]!.whatsapp).toBe("https://chat.whatsapp.com/Other1");
+    b.op(bia, "event.update", { event_id: ev, whatsapp: null });
+    expect(last(b).out).toEqual(applied);
+    expect(last(b).state.events[ev]!.whatsapp).toBeUndefined();
   });
 
   it("records attendance only for confirmed participants of a completed event", () => {

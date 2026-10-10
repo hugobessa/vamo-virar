@@ -9,6 +9,7 @@ import { NodeClient } from "@vamo-virar/sync";
 import { Banner, Body, Button, Card, Field, Heading } from "../kit";
 import { useTheme } from "../theme";
 import { errorText } from "../../model/errors";
+import { WhatsAppEditor } from "../WhatsApp";
 
 export function MeTab({ entry }: { entry: CommunityEntry }) {
   const { t, store } = useApp();
@@ -77,6 +78,15 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
               />
               {recoverMsg ? <Banner tone={recoverMsg.tone} text={recoverMsg.text} /> : null}
             </Card>
+          ) : null}
+          {r.isAdmin ? (
+            <WhatsAppEditor
+              key={r.view?.community.whatsapp ?? ""}
+              testID="community-whatsapp-editor"
+              title={t("whatsappCommunityTitle")}
+              current={r.view?.community.whatsapp}
+              onSave={(link) => store.submit(entry.id, "community.update", { whatsapp: link })}
+            />
           ) : null}
           {r.isAdmin ? <MoveCard entry={entry} /> : null}
           {r.isAdmin ? <DisableCard entry={entry} /> : null}

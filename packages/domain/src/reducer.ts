@@ -24,7 +24,7 @@ import type {
   RejectReason,
   Role,
 } from "./types.js";
-import { clone, isHex, isInt, isObject, isText, memberIdOf, sortedKeys } from "./util.js";
+import { clone, isHex, isInt, isObject, isText, isWhatsAppLink, memberIdOf, sortedKeys } from "./util.js";
 
 const DAY_MS = 86_400_000;
 const REJECTED_RECENT_MAX = 100;
@@ -71,6 +71,7 @@ export function genesis(entry: Entry): CommunityState {
     throw new GenesisError("malformed community.init");
   }
   if (b.region !== undefined && !isText(b.region, 120, 1)) throw new GenesisError("malformed region");
+  if (b.whatsapp !== undefined && !isWhatsAppLink(b.whatsapp)) throw new GenesisError("malformed whatsapp");
   const policy = parsePolicy(b.policy ?? DEFAULT_POLICY);
   if (!policy.ok) throw new GenesisError(`genesis policy ${policy.reason}`);
 
@@ -105,6 +106,7 @@ export function genesis(entry: Entry): CommunityState {
     policy: policy.policy,
   };
   if (b.region !== undefined) community.region = b.region;
+  if (b.whatsapp !== undefined) community.whatsapp = b.whatsapp;
 
   return {
     community,
@@ -390,9 +392,12 @@ function communityUpdate(s: CommunityState, op: DecodedOp, author: MemberRecord)
   if (b.name !== undefined && !isText(b.name, 120, 1)) reject("malformed");
   if (b.description !== undefined && !isText(b.description, 2000)) reject("malformed");
   if (b.region !== undefined && !isText(b.region, 120, 1)) reject("malformed");
+  if (b.whatsapp !== undefined && b.whatsapp !== null && !isWhatsAppLink(b.whatsapp)) reject("malformed");
   if (b.name !== undefined) s.community.name = b.name;
   if (b.description !== undefined) s.community.description = b.description;
   if (b.region !== undefined) s.community.region = b.region;
+  if (b.whatsapp === null) delete s.community.whatsapp;
+  else if (b.whatsapp !== undefined) s.community.whatsapp = b.whatsapp;
 }
 
 function policyUpdate(s: CommunityState, op: DecodedOp, author: MemberRecord): void {
@@ -543,6 +548,7 @@ function eventCreate(s: CommunityState, op: DecodedOp, author: MemberRecord, e: 
     participations: {},
   };
   if (f.capacity !== undefined) ev.capacity = f.capacity;
+  if (f.whatsapp !== undefined) ev.whatsapp = f.whatsapp;
   if (ev.starts_at >= ev.ends_at) reject("malformed");
   s.events[ev.event_id] = ev;
 }
@@ -570,6 +576,8 @@ function eventUpdate(s: CommunityState, op: DecodedOp, author: MemberRecord, e: 
   if (f.organizers !== undefined) ev.organizers = f.organizers;
   if (f.capacity !== undefined) ev.capacity = f.capacity;
   if (b.capacity === null) delete ev.capacity;
+  if (f.whatsapp !== undefined) ev.whatsapp = f.whatsapp;
+  if (b.whatsapp === null) delete ev.whatsapp;
   ev.starts_at = startsAt;
   ev.ends_at = endsAt;
 
@@ -647,6 +655,7 @@ interface EventFields {
   tz?: string;
   location?: Location;
   capacity?: number;
+  whatsapp?: string;
   organizers?: MemberId[];
 }
 
@@ -669,6 +678,9 @@ function parseEventFields(b: Record<string, unknown>, create: boolean): EventFie
   if (b.location !== undefined) f.location = parseLocation(b.location) ?? reject("malformed");
   if (b.capacity !== undefined && b.capacity !== null) {
     f.capacity = isInt(b.capacity, 1, 1_000_000) ? b.capacity : reject("malformed");
+  }
+  if (b.whatsapp !== undefined && b.whatsapp !== null) {
+    f.whatsapp = isWhatsAppLink(b.whatsapp) ? b.whatsapp : reject("malformed");
   }
   if (b.organizers !== undefined) {
     if (!Array.isArray(b.organizers) || b.organizers.length === 0) reject("malformed");

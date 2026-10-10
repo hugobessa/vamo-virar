@@ -22,6 +22,13 @@ const pt = {
   // Create
   communityName: "Nome da comunidade",
   communityDescription: "Sobre a comunidade (opcional)",
+  whatsappGroup: "Grupo do WhatsApp (opcional)",
+  whatsappHelp: "Cole aqui o link de convite do grupo.",
+  whatsappInvalid: "Esse link não é de um grupo do WhatsApp. Ele começa com https://chat.whatsapp.com/",
+  whatsappOpen: "Abrir o grupo do WhatsApp",
+  whatsappCommunityTitle: "Grupo do WhatsApp da comunidade",
+  whatsappEventTitle: "Grupo do WhatsApp do evento",
+  whatsappRemove: "Tirar o link",
   yourName: "Seu nome",
   yourNameHelp: "É assim que as outras pessoas vão ver você.",
   serverAddress: "Endereço do servidor da comunidade",

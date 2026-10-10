@@ -576,8 +576,8 @@ Os papéis são hierárquicos: `admin ⊃ organizer ⊃ member`.
 
 | type | body | quem | efeito |
 |---|---|---|---|
-| `community.init` | `{name, description, region?, policy, founders: [{msk, mek, profile}]}` | um admin fundador | Metade cifrada da gênese; MUST estar em `seq 1`. `founders` MUST ser exatamente os `admins` da gênese; eles começam como admins ativos. |
-| `community.update` | `{name?, description?, region?}` | admin | |
+| `community.init` | `{name, description, region?, whatsapp?, policy, founders: [{msk, mek, profile}]}` | um admin fundador | Metade cifrada da gênese; MUST estar em `seq 1`. `founders` MUST ser exatamente os `admins` da gênese; eles começam como admins ativos. |
+| `community.update` | `{name?, description?, region?, whatsapp?}` | admin | `whatsapp` é um link de convite de grupo (`https://chat.whatsapp.com/<código>`, até 200 caracteres); `null` remove. |
 | `policy.update` | `{policy}` | admin | Substitui a política por inteiro. |
 
 ```
@@ -681,6 +681,7 @@ Event {
     radius_m: u32?               # raio de embaralhamento mostrado a membros não confirmados
   },
   capacity: u32?,
+  whatsapp: text?,               # link de grupo https://chat.whatsapp.com/<código>; `null` em event.update remove
   organizers: [member_id],
   status: "scheduled" | "cancelled" | "completed",
   created_seq
@@ -1056,7 +1057,7 @@ Exatamente o estado do reducer, canonicalizado:
 
 ```
 CommunityState {
-  community: {crk, name, description, region, policy, nodes?},   # nodes: definido por `migrate`
+  community: {crk, name, description, region, whatsapp?, policy, nodes?},   # nodes: definido por `migrate`
   epoch, eak, admin_set, ik,
   clock: {seq, now},                       # último seq aplicado; relógio de retenção
   members: [MemberRecord],                 # ativos + removidos recentemente (para exibir o motivo)

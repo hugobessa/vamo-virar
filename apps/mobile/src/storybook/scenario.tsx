@@ -55,6 +55,7 @@ export function communityState(): CommunityState {
       description: "Vamos capinar os canteiros e plantar as mudas novas. Traga luvas e uma garrafa d'água.",
       starts_at: NOW + D - 5 * H,
       capacity: 12,
+      whatsapp: "https://chat.whatsapp.com/HortaDaVila",
       participations: { ana: part("confirmed"), bia: part("confirmed"), caio: part("volunteered"), duda: part("invited"), edu: part("declined") },
     }),
     event({
@@ -95,6 +96,7 @@ export function communityState(): CommunityState {
       crk: "crk",
       name: "Horta da Vila",
       description: "Cuidamos juntas da horta comunitária e dos encontros do bairro.",
+      whatsapp: "https://chat.whatsapp.com/HortaDaVila",
       policy: {
         join: "request",
         rotate_on_join: false,

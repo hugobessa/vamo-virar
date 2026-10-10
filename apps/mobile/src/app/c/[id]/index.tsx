@@ -8,6 +8,7 @@ import { MeTab } from "../../../ui/community/MeTab";
 import { DisabledScope } from "../../../ui/community/Disabled";
 import { PeopleTab } from "../../../ui/community/PeopleTab";
 import { Banner, Body, Screen, Segmented, Title } from "../../../ui/kit";
+import { WhatsAppButton } from "../../../ui/WhatsApp";
 
 type Tab = "events" | "people" | "me";
 
@@ -49,6 +50,7 @@ export default function Community() {
       {entry.unseenRejections.map((x, i) => (
         <Banner key={i} tone="danger" text={`${t("rejectedChange")}: ${t(reasonKey(x.reason))}`} />
       ))}
+      {state.community.whatsapp ? <WhatsAppButton testID="community-whatsapp-open" link={state.community.whatsapp} /> : null}
       <Segmented<Tab>
         value={tab}
         onChange={(v) => {
