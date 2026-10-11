@@ -159,6 +159,8 @@ export interface Event {
   tz: string;
   location: Location;
   capacity?: number;
+  /** WhatsApp group invite link (https://chat.whatsapp.com/…). */
+  whatsapp?: string;
   organizers: MemberId[];
   status: EventStatus;
   created_seq: number;
@@ -214,6 +216,8 @@ export interface CommunityState {
     name: string;
     description: string;
     region?: string;
+    /** WhatsApp group invite link (https://chat.whatsapp.com/…). */
+    whatsapp?: string;
     policy: Policy;
     /** Set by `migrate` (§11.3): where the community lives now. */
     nodes?: string[];

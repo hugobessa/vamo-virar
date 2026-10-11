@@ -9,6 +9,7 @@ import { deviceTimeZone, formatDateInput, parseDurationHours, parseLocal } from 
 import { DisabledScope } from "../../../ui/community/Disabled";
 import { Banner, Body, Button, Card, Field, Screen } from "../../../ui/kit";
 import { space } from "../../../ui/theme";
+import { parseWhatsApp, WhatsAppField } from "../../../ui/WhatsApp";
 
 export default function NewEvent() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,6 +24,7 @@ export default function NewEvent() {
   const [areaQuery, setAreaQuery] = useState("");
   const [area, setArea] = useState<Place | null>(null);
   const [capacity, setCapacity] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const matches = useMemo(() => (area ? [] : searchPlaces(areaQuery)), [areaQuery, area]);
@@ -35,6 +37,8 @@ export default function NewEvent() {
     if (!area) return setError(t("placeArea"));
     const cap = capacity.trim() ? Number(capacity) : undefined;
     if (cap !== undefined && (!Number.isInteger(cap) || cap < 1)) return setError(t("capacity"));
+    const wa = parseWhatsApp(whatsapp);
+    if (wa.invalid) return setError(t("whatsappInvalid"));
     store.submit(id!, "event.create", {
       event_id: toHex(ExpoCrypto.getRandomBytes(16)),
       title: title.trim(),
@@ -44,6 +48,7 @@ export default function NewEvent() {
       tz: deviceTimeZone(),
       location: { label: placeName.trim() || area.name, area: { lat_e4: area.lat_e4, lng_e4: area.lng_e4 } },
       ...(cap !== undefined ? { capacity: cap } : {}),
+      ...(wa.link ? { whatsapp: wa.link } : {}),
     });
     router.back();
   }
@@ -81,6 +86,7 @@ export default function NewEvent() {
             </Card>
           ))}
           <Field label={t("capacity")} value={capacity} onChangeText={setCapacity} keyboardType="number-pad" />
+          <WhatsAppField testID="event-whatsapp" value={whatsapp} onChangeText={setWhatsapp} />
           {error ? <Banner tone="danger" text={error} /> : null}
           <Button testID="event-save" label={t("save")} onPress={save} />
         </DisabledScope>

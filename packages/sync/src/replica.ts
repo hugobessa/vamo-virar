@@ -201,7 +201,7 @@ export class Replica {
   /** Founder flow: CRK, epoch 0, intake key, genesis (§2, §5). */
   static async found(
     client: NodeClient,
-    input: { name: string; description?: string; region?: string; displayName: string; policy?: Policy },
+    input: { name: string; description?: string; region?: string; whatsapp?: string; displayName: string; policy?: Policy },
     rng: Rng = defaultRng,
   ): Promise<Replica> {
     const root = generateCommunityRoot(rng);
@@ -212,6 +212,7 @@ export class Replica {
       name: input.name,
       description: input.description ?? "",
       region: input.region,
+      whatsapp: input.whatsapp,
       policy: (input.policy ?? DEFAULT_POLICY) as unknown as CborValue,
       founders: [{ msk: toHex(keys.signing.pk), mek: toHex(keys.encryption.pk), profile: { display_name: input.displayName } }],
     };

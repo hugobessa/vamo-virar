@@ -341,7 +341,7 @@ vez que abrir o app.
 
 | O que aconteceu | O que fazer |
 |---|---|
-| **Railway:** o serviço fica vermelho e o log fala em `permission denied` ou `readonly` | Confira se a variável `RAILWAY_RUN_UID=0` está na aba **Variables** e se o volume está montado em `/data`. Depois clique em **Deploy** de novo. |
+| **Railway:** o serviço fica vermelho e o log (aba **Deployments** › **View logs**) mostra `unable to open database file` | Confira se a variável `RAILWAY_RUN_UID=0` está na aba **Variables** e se o volume está montado em `/data`. Depois clique em **Deploy** de novo. |
 | **Railway:** o endereço mostra "Application failed to respond" | Em **Settings › Networking**, confira se a porta do domínio é `8787`. |
 | **Railway:** esqueci o código de criação | Ele está na aba **Variables** do serviço, em `VV_PROVISIONING_TOKEN`. |
 | `docker: command not found` | O Docker não está instalado ou não está aberto. No Windows e no Mac, abra o Docker Desktop e espere ele terminar de iniciar. |
