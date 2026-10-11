@@ -3,6 +3,8 @@
 Uma plataforma local-first e que preserva a privacidade para organizar
 eventos comunitários e coordenar as pessoas que participam deles.
 
+Site: **[vamovirar.app](https://vamovirar.app)**
+
 - Seu celular guarda sua agenda, sua localização e sua disponibilidade. Nada
   disso sai do aparelho; ele só responde "consigo ir?".
 - O estado compartilhado de uma comunidade é cifrado de ponta a ponta e
@@ -129,11 +131,15 @@ o fundo de um botão de ação: a ação principal é azul, a de destaque é ama
 
 ### Landing page (Cloudflare Pages)
 
-A landing page em pt-BR é um site estático separado, feito com os mesmos
-componentes do app (`apps/mobile/landing`). A política de privacidade
-(`/privacidade/`), os termos de uso (`/termos/`) e os padrões de segurança
-infantil contra abuso e exploração sexual infantil (`/seguranca-infantil/`, a
-URL pedida pelo Google Play) e o guia para montar o servidor (`/servidor/`) são
+A landing page em pt-BR, publicada em
+[vamovirar.app](https://vamovirar.app), é um site estático separado, feito
+com os mesmos componentes do app (`apps/mobile/landing`). A política de
+privacidade ([vamovirar.app/privacidade/](https://vamovirar.app/privacidade/)),
+os termos de uso ([vamovirar.app/termos/](https://vamovirar.app/termos/)), os
+padrões de segurança infantil contra abuso e exploração sexual infantil
+([vamovirar.app/seguranca-infantil/](https://vamovirar.app/seguranca-infantil/),
+a URL pedida pelo Google Play) e o guia para montar o servidor
+([vamovirar.app/servidor/](https://vamovirar.app/servidor/)) são
 gerados a partir de `docs/privacy-policy.md`, `docs/terms-of-service.md`,
 `docs/child-safety.md` e `docs/hosting-guide.md`, então cada texto tem uma
 fonte só. Os links da página (lojas, código, documentação) ficam em

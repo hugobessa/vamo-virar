@@ -22,6 +22,9 @@ const outputs = [
   // Play Store listing icon: 512×512, Google applies the mask.
   ["play-store-icon.png", "icone", 512, false],
   ["favicon.png", "icone", 48, false],
+  // Landing page (apps/mobile/landing): browsers scale the favicon down; iOS uses the touch icon.
+  ["../landing/public/favicon.png", "icone", 192, false],
+  ["../landing/public/apple-touch-icon.png", "icone", 180, false],
   ["splash-icon.png", "abertura", S, true],
   // Play Store listing banner: 1024×500, opaque.
   ["play-feature-graphic.png", "destaque-play-store", 1024, false, 500],
