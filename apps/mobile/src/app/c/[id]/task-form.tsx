@@ -12,6 +12,7 @@ import { canEdit, canManage, parseTagInput, PRIORITY_ORDER, PRIORITY_TEXT } from
 import { formatDateInput, parseLocal } from "../../../model/time";
 import { DisabledScope } from "../../../ui/community/Disabled";
 import { DateField } from "../../../ui/DateField";
+import { RichTextEditor } from "../../../ui/RichTextEditor";
 import { Banner, Body, Button, Field, Screen } from "../../../ui/kit";
 import { space } from "../../../ui/theme";
 import { AttachmentList } from "../../../ui/tasks/Attachments";
@@ -109,7 +110,7 @@ export default function TaskForm() {
       <Stack.Screen options={{ title: t(existing ? "editTask" : "newTask") }} />
       <DisabledScope entry={entry}>
         <Field testID="task-title" label={t("taskTitle")} value={title} onChangeText={setTitle} />
-        <Field testID="task-description" label={t("taskDescription")} help={t("taskDescriptionHelp")} value={description} onChangeText={setDescription} multiline />
+        <RichTextEditor testID="task-description" label={t("taskDescription")} markdown={description} placeholder="Escreva os detalhes…" />
         {scopeOptions.length > 1 && (!existing || manager) ? (
           <View style={{ gap: space.xs }}>
             <Label>{t("taskScope")}</Label>

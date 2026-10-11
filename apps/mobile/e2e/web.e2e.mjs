@@ -56,7 +56,7 @@ const node2 = await startNode();
 const upstreams = { "/node/": node.url, "/node2/": node2.url };
 
 // --- static app + same-origin proxy to the node -----------------------------
-const types = { ".html": "text/html", ".js": "text/javascript", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".ttf": "font/ttf" };
+const types = { ".html": "text/html", ".js": "text/javascript", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".ttf": "font/ttf", ".css": "text/css" };
 const server = createServer(async (req, res) => {
   try {
     const prefix = Object.keys(upstreams).find((p) => req.url.startsWith(p));
