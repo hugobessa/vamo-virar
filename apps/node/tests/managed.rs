@@ -221,6 +221,7 @@ fn managed_config(max_communities: Option<u64>, max_log_bytes: Option<u64>) -> C
             token_sha256: tenant_token_hash("acme-secret"),
             max_communities,
             max_log_bytes,
+            max_blob_bytes_total: None,
         }],
         ..Config::default()
     }

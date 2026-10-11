@@ -36,7 +36,10 @@ Apenas o que consegue verificar sem chaves:
   `seq`, assinado com a chave de acesso daquela época;
 - **mudanças**: `migrate` só por um admin ou pela CRK; depois disso a
   comunidade fica somente leitura aqui e as escritas respondem `409 moved` com o
-  novo endereço (protocolo §11.3).
+  novo endereço (protocolo §11.3);
+- **anexos**: um blob (arquivo cifrado no dispositivo) é guardado sob o
+  SHA-256 dos bytes recebidos, até `max_blob_bytes` por arquivo e
+  `max_blob_bytes_total` por comunidade; admins e moderadores listam e apagam.
 
 Regras de domínio (quem pode convidar quem, capacidade, …) são verificadas
 pelos dispositivos.
@@ -79,3 +82,6 @@ compactação, e restauração em um novo nó. `tests/stream.rs` cobre notifica�
 via WebSocket. `tests/managed.rs` cobre a mudança de uma comunidade (congelar,
 exportar, restaurar em outro lugar, cancelar), clientes e cotas, suspensão, a
 API de operador e a atualização de um banco de dados v0 no próprio lugar.
+`tests/blobs.rs` cobre os anexos: envio e download por hash, limites e cotas,
+listagem e exclusão pelo escopo `moderate`, estados da comunidade, a exclusão
+junto com uma comunidade desativada e a restauração em outro nó.

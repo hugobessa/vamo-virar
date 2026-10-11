@@ -9,7 +9,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, Path, Query, Request, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::Router;
 use rusqlite::{params, OptionalExtension};
 use serde::Deserialize;
@@ -62,6 +62,18 @@ pub fn router(app: Shared) -> Router {
             get(get_directory).put(put_directory),
         )
         .route("/v1/c/{cid}/stream", get(stream));
+    // Blob uploads may exceed the router-wide body limit (§15); this inner
+    // layer replaces it for these routes only.
+    let blobs = Router::new()
+        .route("/v1/c/{cid}/blobs", get(list_blobs))
+        .route(
+            "/v1/c/{cid}/blobs/{blob_id}",
+            put(put_blob).get(get_blob).delete(delete_blob),
+        )
+        .layer(axum::extract::DefaultBodyLimit::max(
+            app.config.max_blob_bytes,
+        ));
+    let r = r.merge(blobs);
     #[cfg(feature = "test-clock")]
     let r = r.route("/v1/test/clock", post(test_clock));
     r.with_state(app)
@@ -408,9 +420,10 @@ fn tenant_has_room(
 
 async fn well_known(State(app): State<Shared>) -> Response {
     let body = format!(
-        "{{\"protocol\":\"{PROTOCOL}\",\"node_id\":\"{}\",\"api\":\"/v1\",\"limits\":{{\"max_batch\":{},\"max_op_bytes\":65536}}}}",
+        "{{\"protocol\":\"{PROTOCOL}\",\"node_id\":\"{}\",\"api\":\"/v1\",\"limits\":{{\"max_batch\":{},\"max_op_bytes\":65536,\"max_blob_bytes\":{}}}}}",
         hex(&app.node_id),
-        app.config.max_batch
+        app.config.max_batch,
+        app.config.max_blob_bytes
     );
     ([(header::CONTENT_TYPE, "application/json")], body).into_response()
 }
@@ -1216,6 +1229,138 @@ async fn put_directory(
         "INSERT OR REPLACE INTO directory (cid, entry) VALUES (?1, ?2)",
         params![cid, body.to_vec()],
     )?;
+    ok(Value::Map(Vec::new()))
+}
+
+// ---------------------------------------------------------------------------
+// Blobs (§15): encrypted file attachments. Devices encrypt each file under
+// a per-file key; the node stores opaque bytes named by the SHA-256 of what
+// it receives, and only counts them against the community's quota.
+// ---------------------------------------------------------------------------
+
+fn blob_id_param(s: &str) -> Result<[u8; 32], ApiError> {
+    unhex::<32>(s).ok_or_else(|| ApiError::bad("blob id must be 64 hex characters"))
+}
+
+fn too_large() -> ApiError {
+    ApiError::new(
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "too_large",
+        "blob larger than this node's max_blob_bytes",
+    )
+}
+
+/// Upload. Idempotent: a blob that already exists answers like a fresh
+/// upload. The same state checks as `POST /c/{cid}/ops`: a disabled, moved
+/// or suspended community takes no new blobs. The quota check and the
+/// insert share one transaction.
+async fn put_blob(
+    State(app): State<Shared>,
+    Path((cid, blob_id)): Path<(String, String)>,
+    req: Request,
+) -> Result<Response, ApiError> {
+    let cid = cid_param(&cid)?;
+    let blob_id = blob_id_param(&blob_id)?;
+    authorize(&app, req.headers(), &cid, Scope::Community)?;
+    let max = app.config.max_blob_bytes;
+    // Refuse early when the client announces the size; the body limit layer
+    // and `to_bytes` stop oversized chunked bodies anyway.
+    let announced = req
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<usize>().ok());
+    if announced.is_some_and(|n| n > max) {
+        return Err(too_large());
+    }
+    let body = to_bytes(req.into_body(), max)
+        .await
+        .map_err(|_| too_large())?;
+    let digest = <sha2::Sha256 as sha2::Digest>::digest(&body);
+    if digest[..] != blob_id[..] {
+        return Err(ApiError::bad("blob id is not the SHA-256 of the body"));
+    }
+    let size = body.len() as u64;
+    let now = app.clock.now();
+    let mut st = app.store.lock().unwrap();
+    let tx = st.tx()?;
+    let cm = store::community(&tx, &cid)?.ok_or_else(ApiError::not_hosted)?;
+    require_writable(&cm)?;
+    if store::blob_size(&tx, &cid, &blob_id)?.is_none() {
+        let quota = app.config.max_blob_bytes_total(cm.tenant.as_deref());
+        if cm.blob_bytes + size > quota {
+            return Err(ApiError::new(
+                StatusCode::INSUFFICIENT_STORAGE,
+                "quota_exceeded",
+                "this community has no room for another file; delete some first",
+            ));
+        }
+        store::insert_blob(&tx, &cid, &blob_id, &body, now)?;
+    }
+    tx.commit()?;
+    ok(Value::map([("blob_id", b(&blob_id)), ("size", int(size))]))
+}
+
+/// Download. Like `GET /c/{cid}/ops`, reads keep working while the
+/// community is suspended, moved or disabled.
+async fn get_blob(
+    State(app): State<Shared>,
+    Path((cid, blob_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let cid = cid_param(&cid)?;
+    let blob_id = blob_id_param(&blob_id)?;
+    authorize(&app, &headers, &cid, Scope::Community)?;
+    let body = store::blob(app.store.lock().unwrap().conn(), &cid, &blob_id)?
+        .ok_or_else(ApiError::not_found)?;
+    Ok((
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/octet-stream")],
+        body,
+    )
+        .into_response())
+}
+
+/// Every blob with its size and upload time, for admins and moderators to
+/// reconcile against the community state and delete orphans.
+async fn list_blobs(
+    State(app): State<Shared>,
+    Path(cid): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let cid = cid_param(&cid)?;
+    authorize(&app, &headers, &cid, Scope::Moderate)?;
+    let st = app.store.lock().unwrap();
+    let cm = store::community(st.conn(), &cid)?.ok_or_else(ApiError::not_hosted)?;
+    let blobs = store::blobs(st.conn(), &cid)?
+        .iter()
+        .map(|i| {
+            Value::map([
+                ("blob_id", b(&i.blob_id)),
+                ("size", int(i.size)),
+                ("at", int(i.at)),
+            ])
+        })
+        .collect();
+    ok(Value::map([
+        ("blobs", Value::Array(blobs)),
+        ("total_bytes", int(cm.blob_bytes)),
+    ]))
+}
+
+/// Idempotent: deleting a blob that is not there is still a success.
+async fn delete_blob(
+    State(app): State<Shared>,
+    Path((cid, blob_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let cid = cid_param(&cid)?;
+    let blob_id = blob_id_param(&blob_id)?;
+    authorize(&app, &headers, &cid, Scope::Moderate)?;
+    let mut st = app.store.lock().unwrap();
+    let tx = st.tx()?;
+    store::delete_blob(&tx, &cid, &blob_id)?;
+    tx.commit()?;
     ok(Value::Map(Vec::new()))
 }
 

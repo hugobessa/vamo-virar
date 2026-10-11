@@ -15,6 +15,11 @@ epoch_grace_secs = 600            # old-epoch writes accepted this long after a 
 compaction_grace_secs = 2592000   # 30 days: log behind a snapshot is kept this long
 session_ttl_secs = 3600
 max_batch = 100
+# Encrypted file attachments (blobs). The largest single upload, and how many
+# bytes of blobs one community may hold unless its [[tenants]] entry says
+# otherwise. Deleting blobs frees quota.
+max_blob_bytes = 11534336         # 11 MiB: a 10 MiB file plus encryption overhead
+max_blob_bytes_total = 536870912  # 512 MiB per community
 max_mailbox_items = 1000
 max_mailbox_ttl_secs = 2592000
 intake_per_ip_per_hour = 20
@@ -41,3 +46,4 @@ trust_forwarded_for = false
 # token_sha256 = "<64 hex characters>"
 # max_communities = 3
 # max_log_bytes = 268435456
+# max_blob_bytes_total = 1073741824   # overrides the node-wide default above

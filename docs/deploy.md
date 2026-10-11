@@ -78,6 +78,8 @@ Tudo tem um valor padrão. Precedência: ambiente > flags > arquivo de configura
 | `trust_forwarded_for` | `VV_TRUST_FORWARDED_FOR` | `false` | defina quando estiver atrás de um proxy reverso, para que os limites de taxa de pedidos de entrada se apliquem por cliente |
 | `epoch_grace_secs` | | 600 | escritas com a chave antiga aceitas após uma troca de chave |
 | `compaction_grace_secs` | | 30 dias | por quanto tempo as entradas de log anteriores a um snapshot são mantidas |
+| `max_blob_bytes` | | 11 MiB | maior anexo (arquivo cifrado) aceito num envio; o app limita o arquivo a 10 MiB e o resto é a sobrecarga da cifragem. Aparece em `limits` do `.well-known` |
+| `max_blob_bytes_total` | | 512 MiB | quantos bytes de anexos cada comunidade pode guardar; acima disso os envios respondem `507 quota_exceeded` até que um admin ou moderador apague anexos. Um `[[tenants]]` pode ter o seu próprio valor |
 | `max_mailbox_ttl_secs` | | 30 dias | |
 | `intake_per_ip_per_hour` / `intake_per_community_per_hour` | | 20 / 200 | limites de pedidos de entrada |
 | `operator_listen` | `VV_OPERATOR_LISTEN` | desligado | hospedagem gerenciada: endereço privado para a API de operador |
@@ -125,8 +127,8 @@ nó sem backup pode ser substituído.
 
 ## O que você, como operador, pode e não pode ver
 
-Você pode ver: que comunidades existem (ids opacos), quantas entradas de log e
-itens de caixa postal elas têm e quando, as chaves públicas dos admins, os endereços IP dos
+Você pode ver: que comunidades existem (ids opacos), quantas entradas de log,
+anexos e itens de caixa postal elas têm e quando, as chaves públicas dos admins, os endereços IP dos
 dispositivos que se conectam (em memória, apenas para limitação de taxa) e o tamanho e
 o momento dos dados criptografados. Você não pode ver nomes, eventos, quem participa de quê,
 calendários, localizações nem qualquer conteúdo de mensagem.

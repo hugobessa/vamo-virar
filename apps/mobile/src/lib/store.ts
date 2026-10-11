@@ -19,6 +19,8 @@ export interface CommunityEntry {
 }
 
 const SYNC_EVERY_MS = 20_000;
+/** How often an admin or moderator device looks for orphaned attachments on the node (§9.7). */
+const TIDY_BLOBS_EVERY_MS = 60 * 60_000;
 
 export class AppStore {
   private readonly entries = new Map<string, CommunityEntry>();
@@ -26,6 +28,7 @@ export class AppStore {
   private version = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
   private stops = new Map<string, () => void>();
+  private lastTidy = new Map<string, number>();
   ready = false;
   /** Set by the app: answers pending probes when the person allowed it. */
   autoAnswer: ((e: CommunityEntry) => Promise<void>) | null = null;
@@ -128,6 +131,11 @@ export class AppStore {
       const report = await e.replica.sync();
       // Moderators who left keep node access until an admin updates the set.
       if (e.replica.isAdmin) await e.replica.tidyModerators().catch(() => undefined);
+      // Files whose task is gone stay on the node until someone with moderation drops them.
+      if (e.replica.canModerate && Date.now() - (this.lastTidy.get(id) ?? 0) > TIDY_BLOBS_EVERY_MS) {
+        this.lastTidy.set(id, Date.now());
+        await e.replica.tidyBlobs().catch(() => undefined);
+      }
       e.connectivity = "ok";
       e.lastSync = Date.now();
       e.lastReport = report;
