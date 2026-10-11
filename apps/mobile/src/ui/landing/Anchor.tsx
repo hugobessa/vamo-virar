@@ -7,11 +7,12 @@ import { fonts, useTheme } from "../theme";
 
 const external = (href: string) => /^https?:\/\//.test(href);
 
-export function Anchor({ href, children, style, label }: { href: string; children: ReactNode; style?: CSSProperties; label?: string }) {
+export function Anchor({ href, children, style, label, className }: { href: string; children: ReactNode; style?: CSSProperties; label?: string; className?: string }) {
   return createElement(
     "a",
     {
       href,
+      className,
       "aria-label": label,
       style: { color: "inherit", textDecoration: "none", cursor: "pointer", ...style },
       ...(external(href) ? { target: "_blank", rel: "noopener noreferrer" } : {}),
@@ -41,10 +42,10 @@ export function TextLink({ href, children, color, size = 15, bold = true, underl
   );
 }
 
-/** A link that looks like a button. */
+/** A link that looks like a button: its face sinks onto the depth edge while pressed (motion.css). */
 export function LinkButton({ href, label, kind = "primary" }: { href: string; label: string; kind?: ButtonKind }) {
   return (
-    <Anchor href={href} style={{ display: "block" }}>
+    <Anchor href={href} className="vv-btn" style={{ display: "block" }}>
       <ButtonFace label={label} kind={kind} />
     </Anchor>
   );

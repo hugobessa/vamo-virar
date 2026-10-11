@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-native-web-vite";
 import Community from "../../app/c/[id]/index";
 import { userEvent, within } from "storybook/test";
+import { COMMUNITY_NAME } from "../scenario";
 import { makeEntry, openTab, screen } from "./helpers";
 
 const meta: Meta = { title: "Telas/Comunidade", parameters: { layout: "fullscreen" } };
@@ -9,7 +10,7 @@ type Story = StoryObj;
 
 const params = { id: "c1" };
 const community = (o: Parameters<typeof makeEntry>[0] = {}, extra: Partial<Story> = {}): Story => ({
-  ...screen(Community, "Horta da Vila", { entries: [makeEntry({ id: "c1", ...o })], params }),
+  ...screen(Community, COMMUNITY_NAME, { entries: [makeEntry({ id: "c1", ...o })], params }),
   ...extra,
 });
 

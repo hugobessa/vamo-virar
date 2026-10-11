@@ -5,6 +5,7 @@
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
+    "@react-native-community/datetimepicker": "9.1.0",
     "@vamo-virar/crypto": "0.0.0",
     "@vamo-virar/domain": "0.0.0",
     "@vamo-virar/matching": "0.0.0",
@@ -17,6 +18,7 @@
     "expo-crypto": "~57.0.3",
     "expo-dev-client": "~57.0.19",
     "expo-file-system": "~57.0.7",
+    "expo-haptics": "~57.0.3",
     "expo-linking": "~57.0.12",
     "expo-location": "~57.0.20",
     "expo-router": "~57.0.25",

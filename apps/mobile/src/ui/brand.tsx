@@ -3,9 +3,57 @@
 // as small details. All built from plain Views and Text so they render on
 // native and on the web (Storybook) alike.
 
-import { useState, type ReactNode } from "react";
-import { Text, View, type ViewStyle } from "react-native";
-import { fonts, palette, shear, useTheme } from "./theme";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Animated, Text, View, type ViewStyle } from "react-native";
+import { fonts, motion, palette, shear, useReducedMotion, useTheme } from "./theme";
+
+/**
+ * A burst of brand stars flying out from a point, for the moment someone
+ * confirms they are going. Fires each time `trigger` changes to a new
+ * positive value; renders nothing between bursts and under reduced motion.
+ */
+export function StarBurst({ trigger, color = palette.red }: { trigger: number; color?: string }) {
+  const reduced = useReducedMotion();
+  const [live, setLive] = useState(false);
+  const progress = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!trigger || reduced) return;
+    setLive(true);
+    progress.setValue(0);
+    Animated.timing(progress, { toValue: 1, duration: motion.story + 200, easing: motion.easing.out, useNativeDriver: true }).start(() => setLive(false));
+  }, [trigger, reduced, progress]);
+  if (!live) return null;
+  const stars = Array.from({ length: 10 }, (_, i) => {
+    const angle = (i / 10) * Math.PI * 2 - Math.PI / 2;
+    const reach = 56 + (i % 3) * 14;
+    return (
+      <Animated.Text
+        key={i}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+        style={{
+          position: "absolute",
+          color,
+          fontSize: 18 + (i % 2) * 6,
+          opacity: progress.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 1, 0] }),
+          transform: [
+            { translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [0, Math.cos(angle) * reach] }) },
+            { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [0, Math.sin(angle) * reach - 24] }) },
+            { scale: progress.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.2, 1.2, 0.6] }) },
+            { rotate: progress.interpolate({ inputRange: [0, 1], outputRange: ["0deg", `${(i % 2 ? 1 : -1) * 120}deg`] }) },
+          ],
+        }}
+      >
+        ★
+      </Animated.Text>
+    );
+  });
+  return (
+    <View pointerEvents="none" style={{ height: 0, alignItems: "center", overflow: "visible", zIndex: 10 }}>
+      {stars}
+    </View>
+  );
+}
 
 export type BoxTone = "red" | "green" | "yellow" | "blue" | "white";
 

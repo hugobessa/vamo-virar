@@ -1,13 +1,13 @@
 import { canModerate, isAdmin, isModerator, type MemberRecord } from "@vamo-virar/domain";
 import type { MemberReport, PendingJoin, ReportReason } from "@vamo-virar/sync";
 import { useCallback, useEffect, useState } from "react";
-import { Share, Text, View } from "react-native";
+import { LayoutAnimation, Share, Text, View } from "react-native";
 import { confirm } from "../../lib/confirm";
 import { useApp } from "../../lib/context";
 import type { CommunityEntry } from "../../lib/store";
 import { roleKey } from "../../model/events";
-import { Banner, Body, Button, Card, Chip, Heading } from "../kit";
-import { space, useTheme } from "../theme";
+import { Banner, Body, Button, Card, Chip, Enter, Heading } from "../kit";
+import { motion, space, useReducedMotion, useTheme } from "../theme";
 import { errorText } from "../../model/errors";
 import type { StringKey } from "../../model/i18n";
 import { ReportForm } from "./ReportForm";
@@ -15,6 +15,7 @@ import { ReportForm } from "./ReportForm";
 export function PeopleTab({ entry }: { entry: CommunityEntry }) {
   const { t, store, locale } = useApp();
   const c = useTheme();
+  const reduced = useReducedMotion();
   const r = entry.replica;
   const state = r.view!;
   const me = state.members[r.memberId];
@@ -47,6 +48,8 @@ export function PeopleTab({ entry }: { entry: CommunityEntry }) {
     setNotice(null);
     try {
       await store.admin(entry.id, f);
+      // A handled request slides out of the list and the person appears below.
+      if (!reduced) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       await loadRequests();
       return true;
     } catch (e) {
@@ -115,19 +118,21 @@ export function PeopleTab({ entry }: { entry: CommunityEntry }) {
           })}
           <Heading>{t("joinRequests")}</Heading>
           {requests === null || requests.length === 0 ? <Body muted>{t("noRequests")}</Body> : null}
-          {requests?.map((p) => (
-            <Card key={p.intakeId} testID={`request-${p.intakeId}`}>
-              <Body>{profileName(p.request.profile)}</Body>
-              {p.request.message ? <Body muted>{p.request.message}</Body> : null}
-              <View style={{ flexDirection: "row", gap: space.s }}>
-                <View style={{ flex: 1 }}>
-                  <Button testID={`approve-${p.intakeId}`} label={t("accepted")} busy={busy === `a${p.intakeId}`} onPress={() => run(`a${p.intakeId}`, () => r.approve(p))} />
+          {requests?.map((p, i) => (
+            <Enter key={p.intakeId} delay={i * motion.stagger}>
+              <Card testID={`request-${p.intakeId}`}>
+                <Body>{profileName(p.request.profile)}</Body>
+                {p.request.message ? <Body muted>{p.request.message}</Body> : null}
+                <View style={{ flexDirection: "row", gap: space.s }}>
+                  <View style={{ flex: 1 }}>
+                    <Button testID={`approve-${p.intakeId}`} label={t("accepted")} haptic="confirm" busy={busy === `a${p.intakeId}`} onPress={() => run(`a${p.intakeId}`, () => r.approve(p))} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Button kind="secondary" label={t("refuse")} busy={busy === `r${p.intakeId}`} onPress={() => run(`r${p.intakeId}`, () => r.reject(p))} />
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Button kind="secondary" label={t("refuse")} busy={busy === `r${p.intakeId}`} onPress={() => run(`r${p.intakeId}`, () => r.reject(p))} />
-                </View>
-              </View>
-            </Card>
+              </Card>
+            </Enter>
           ))}
           {admin ? (
             <Button

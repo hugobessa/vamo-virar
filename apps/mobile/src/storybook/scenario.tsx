@@ -15,6 +15,9 @@ const H = 3_600_000;
 const D = 24 * H;
 const RECIFE = { lat_e4: -80_500, lng_e4: -348_800 };
 
+/** The sample community: a neighbourhood committee mobilising for the runoff. */
+export const COMMUNITY_NAME = "Comitê Casa Amarela";
+
 // --- state ----------------------------------------------------------------
 
 function member(key: string, name: string, role: Role, status: MemberRecord["status"] = "active"): MemberRecord {
@@ -28,7 +31,7 @@ function event(o: Pick<Event, "event_id" | "title" | "starts_at"> & Partial<Even
     description: "",
     ends_at: o.starts_at + 3 * H,
     tz: "America/Recife",
-    location: { label: "Praça da Vila", area: RECIFE },
+    location: { label: "Feira de Casa Amarela", area: RECIFE },
     organizers: ["ana"],
     status: "scheduled",
     created_seq: 3,
@@ -51,40 +54,40 @@ export function communityState(): CommunityState {
   const events = [
     event({
       event_id: "e1",
-      title: "Mutirão da horta",
-      description: "Vamos capinar os canteiros e plantar as mudas novas. Traga luvas e uma garrafa d'água.",
+      title: "Panfletagem na feira",
+      description: "Vamos distribuir material na feira de Casa Amarela. Traga boné, água e disposição para conversar.",
       starts_at: NOW + D - 5 * H,
       capacity: 12,
-      whatsapp: "https://chat.whatsapp.com/HortaDaVila",
+      whatsapp: "https://chat.whatsapp.com/ComiteCasaAmarela",
       participations: { ana: part("confirmed"), bia: part("confirmed"), caio: part("volunteered"), duda: part("invited"), edu: part("declined") },
     }),
     event({
       event_id: "e2",
-      title: "Assembleia do bairro",
+      title: "Bandeiraço na ponte",
       starts_at: NOW + 4 * D + 4 * H,
-      location: { label: "Salão paroquial", area: RECIFE },
+      location: { label: "Ponte Duarte Coelho", area: RECIFE },
       capacity: 30,
       organizers: ["bia"],
       participations: { bia: part("confirmed"), caio: part("invited") },
     }),
     event({
       event_id: "e3",
-      title: "Feira de trocas",
+      title: "Caminhada da virada",
       starts_at: NOW + 7 * D - 6 * H,
-      location: { label: "Escola municipal", area: RECIFE },
+      location: { label: "Marco Zero", area: RECIFE },
       capacity: 2,
       participations: { ana: part("confirmed"), bia: part("confirmed") },
     }),
     event({
       event_id: "e4",
-      title: "Cine na praça",
+      title: "Plenária do bairro",
       starts_at: NOW - 3 * D,
       status: "cancelled",
       participations: { ana: part("confirmed") },
     }),
     event({
       event_id: "e5",
-      title: "Plantio de mudas",
+      title: "Adesivaço no Derby",
       starts_at: NOW - 10 * D,
       status: "completed",
       participations: { ana: part("confirmed"), bia: part("confirmed"), caio: part("confirmed") },
@@ -94,9 +97,9 @@ export function communityState(): CommunityState {
   return {
     community: {
       crk: "crk",
-      name: "Horta da Vila",
-      description: "Cuidamos juntas da horta comunitária e dos encontros do bairro.",
-      whatsapp: "https://chat.whatsapp.com/HortaDaVila",
+      name: COMMUNITY_NAME,
+      description: "Mobilização do bairro pelo segundo turno: panfletagem, bandeiraço e corpo a corpo.",
+      whatsapp: "https://chat.whatsapp.com/ComiteCasaAmarela",
       policy: {
         join: "request",
         rotate_on_join: false,
@@ -159,7 +162,7 @@ export function makeEntry(o: EntryOptions = {}) {
   const active = (o.status ?? "active") === "active";
   const requests = o.joinRequests
     ? [
-        { intakeId: "r1", request: { profile: { display_name: "Fabi Costa" }, message: "Moro na rua de trás e quero ajudar na horta." } },
+        { intakeId: "r1", request: { profile: { display_name: "Fabi Costa" }, message: "Moro na rua de trás e quero ajudar na panfletagem." } },
         { intakeId: "r2", request: { profile: { display_name: "Gil Prado" } } },
       ]
     : [];
@@ -174,7 +177,7 @@ export function makeEntry(o: EntryOptions = {}) {
     enableCommunity: async () => action("replica.enableCommunity")(),
     isModerator: !!o.moderator && me === "duda",
     canModerate: me === "ana" || (!!o.moderator && me === "duda"),
-    node: "https://horta.example.org",
+    node: "https://comite.example.org",
     recoveryKey: me === "ana" ? new Uint8Array(32).map((_, i) => (i * 37 + 11) % 256) : null,
     pending: new Array(o.pending ?? 0).fill({}),
     incomingProbes: o.incomingProbe ? [{ probeId: "p1", eventId: "e1" }] : [],
@@ -183,7 +186,7 @@ export function makeEntry(o: EntryOptions = {}) {
     joinRequests: async () => requests,
     reports: o.reports
       ? [
-          { reportId: "rp1", reporter: "duda", memberId: "edu", reason: "harassment", details: "Mandou mensagens ofensivas para várias pessoas depois da assembleia.", receivedAt: NOW - 3 * H },
+          { reportId: "rp1", reporter: "duda", memberId: "edu", reason: "harassment", details: "Mandou mensagens ofensivas para várias pessoas depois da plenária.", receivedAt: NOW - 3 * H },
           { reportId: "rp2", reporter: "bia", memberId: "edu", reason: "spam", receivedAt: NOW - D },
         ]
       : [],
@@ -197,7 +200,7 @@ export function makeEntry(o: EntryOptions = {}) {
     reject: async (p: unknown) => action("replica.reject")(p),
     createInvite: async (opts: unknown) => {
       action("replica.createInvite")(opts);
-      return "vamovirar://join?c=0a1b2c3d&n=https%3A%2F%2Fhorta.example.org&k=9f8e7d6c&i=5b4a";
+      return "vamovirar://join?c=0a1b2c3d&n=https%3A%2F%2Fcomite.example.org&k=9f8e7d6c&i=5b4a";
     },
     makeAdmin: async (id: string) => action("replica.makeAdmin")(id),
     removeMember: async (id: string) => action("replica.removeMember")(id),

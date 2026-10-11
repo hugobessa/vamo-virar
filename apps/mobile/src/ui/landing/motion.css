@@ -1,0 +1,123 @@
+/*
+ * Landing page motion (web only). Durations and easings mirror `motion` in
+ * ui/theme.ts. Everything here degrades to its end state when the person
+ * asked for reduced motion, or when Storybook's "Movimento" toggle is off
+ * (html[data-vv-motion="off"]).
+ */
+
+:root {
+  --vv-fast: 120ms;
+  --vv-base: 200ms;
+  --vv-slow: 320ms;
+  --vv-story: 600ms;
+  --vv-out: cubic-bezier(0.2, 0, 0, 1);
+  --vv-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --vv-cut: 48px; /* rise of a band's sheared bottom edge */
+}
+@media (max-width: 599px) {
+  :root { --vv-cut: 24px; }
+}
+
+/* --- Scroll reveal: a box "stamps" into place -------------------------------- */
+.vv-reveal {
+  opacity: 0;
+  transform: translateY(18px) scale(0.94);
+  transition:
+    opacity var(--vv-slow) var(--vv-out) var(--vv-delay, 0ms),
+    transform var(--vv-story) var(--vv-overshoot) var(--vv-delay, 0ms);
+  will-change: opacity, transform;
+}
+/* A big number rises out of a mask instead of stamping. */
+.vv-reveal.vv-rise { transform: translateY(60%); transition-timing-function: var(--vv-out), var(--vv-out); }
+.vv-reveal.is-in, .vv-reveal.vv-rise.is-in { opacity: 1; transform: none; }
+.vv-mask { overflow: hidden; }
+
+/* --- Split-flap word and digits --------------------------------------------- */
+.vv-flip { display: inline-block; perspective: 600px; }
+.vv-flip-char {
+  display: inline-block;
+  transform-origin: 50% 50% -0.5em;
+  animation: vv-flip-in var(--vv-slow) var(--vv-out) both;
+  animation-delay: var(--vv-delay, 0ms);
+  backface-visibility: hidden;
+}
+@keyframes vv-flip-in {
+  from { transform: rotateX(-90deg); opacity: 0; }
+  60% { opacity: 1; }
+  to { transform: rotateX(0); opacity: 1; }
+}
+
+/* --- Flag stripe: sweeps in on load, then fills with the scroll -------------- */
+.vv-stripe { position: fixed; top: 0; left: 0; right: 0; height: 4px; display: flex; z-index: 50; pointer-events: none; transform-origin: 0 50%; }
+.vv-stripe > span { flex: 1; transform-origin: 0 50%; animation: vv-sweep var(--vv-story) var(--vv-out) both; }
+.vv-stripe > span:nth-child(2) { animation-delay: 80ms; }
+.vv-stripe > span:nth-child(3) { animation-delay: 160ms; }
+@keyframes vv-sweep { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* --- Bands cut at the brand's angle ----------------------------------------- */
+/* Each band after the first tucks under the one above and is clipped along a
+   rising diagonal, so the band above shows through the cut corner. */
+.vv-band { position: relative; }
+.vv-band + .vv-band { clip-path: polygon(0 var(--vv-cut), 100% 0, 100% 100%, 0 100%); margin-top: calc(-1 * var(--vv-cut)); padding-top: var(--vv-cut); }
+
+/* --- Marquee of actions ------------------------------------------------------ */
+.vv-marquee { overflow: hidden; width: 100%; }
+.vv-marquee-track { display: flex; width: max-content; animation: vv-marquee 36s linear infinite; }
+.vv-marquee:hover .vv-marquee-track, .vv-marquee:focus-within .vv-marquee-track { animation-play-state: paused; }
+@keyframes vv-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* --- Buttons with a depth edge (ButtonFace inside an anchor) ---------------- */
+.vv-btn { display: block; -webkit-tap-highlight-color: transparent; }
+.vv-btn > div > div:last-child { transition: transform var(--vv-fast) var(--vv-out); }
+.vv-btn:active > div > div:last-child { transform: translateY(3px); }
+.vv-btn:focus-visible { outline: 3px solid #a237fb; outline-offset: 3px; border-radius: 14px; }
+
+/* --- FAQ accordion ------------------------------------------------------------ */
+.vv-faq-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--vv-slow) var(--vv-out); }
+.vv-faq-body.is-open { grid-template-rows: 1fr; }
+.vv-faq-body > div { overflow: hidden; }
+.vv-faq-icon { display: inline-block; transition: transform var(--vv-base) var(--vv-out); }
+.vv-faq-icon.is-open { transform: rotate(45deg); }
+
+/* --- Phone story ---------------------------------------------------------------- */
+.vv-story-item { opacity: 0; transform: translateY(8px) scale(0.96); transition: opacity var(--vv-base) var(--vv-out), transform var(--vv-slow) var(--vv-overshoot); }
+.vv-story-item.is-on { opacity: 1; transform: none; }
+.vv-story-press { transition: transform var(--vv-fast) var(--vv-out), filter var(--vv-fast); }
+.vv-story-press.is-pressed { transform: translateY(3px); filter: brightness(0.92); }
+.vv-story-bar { height: 10px; border-radius: 999px; overflow: hidden; }
+.vv-story-bar > span { display: block; height: 100%; width: 0; transition: width var(--vv-story) var(--vv-out); }
+.vv-story-bar.is-on > span { width: var(--vv-fill, 0%); }
+.vv-story-check { display: inline-block; animation: vv-pop var(--vv-slow) var(--vv-overshoot) both; }
+@keyframes vv-pop { from { transform: scale(0); } to { transform: scale(1); } }
+
+/* --- Privacy diagram (SVG) ---------------------------------------------------- */
+.vv-diagram .vv-draw { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.2s var(--vv-out); }
+.vv-diagram.is-in .vv-draw { stroke-dashoffset: 0; }
+.vv-diagram .vv-fade { opacity: 0; transition: opacity var(--vv-slow) var(--vv-out) var(--vv-delay, 0ms); }
+.vv-diagram.is-in .vv-fade { opacity: 1; }
+.vv-diagram .vv-travel { offset-path: path("M 150 118 C 230 118, 260 118, 330 118"); offset-rotate: 0deg; opacity: 0; }
+.vv-diagram.is-in .vv-travel { animation: vv-travel 2.4s var(--vv-out) 0.8s infinite; }
+@keyframes vv-travel {
+  0% { offset-distance: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  70% { offset-distance: 100%; opacity: 1; }
+  80%, 100% { offset-distance: 100%; opacity: 0; }
+}
+.vv-diagram .vv-shake { transform-origin: 72px 90px; }
+.vv-diagram.is-in .vv-shake { animation: vv-nope 2.4s ease-in-out 0.8s infinite; }
+@keyframes vv-nope { 0%, 60%, 100% { transform: none; } 64%, 72% { transform: translateX(-2px); } 68%, 76% { transform: translateX(2px); } }
+
+/* --- Reduced motion: everything lands in its final state ----------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .vv-reveal, .vv-reveal.vv-rise { opacity: 1; transform: none; transition: none; }
+  .vv-flip-char, .vv-stripe > span, .vv-story-check { animation: none; }
+  .vv-marquee-track { animation: none; }
+  .vv-story-item, .vv-story-bar > span, .vv-faq-body, .vv-faq-icon, .vv-btn > div > div:last-child, .vv-diagram .vv-draw, .vv-diagram .vv-fade { transition: none; }
+  .vv-diagram.is-in .vv-travel, .vv-diagram.is-in .vv-shake { animation: none; opacity: 1; }
+  .vv-diagram .vv-travel { offset-distance: 100%; }
+}
+html[data-vv-motion="off"] .vv-reveal, html[data-vv-motion="off"] .vv-reveal.vv-rise { opacity: 1; transform: none; transition: none; }
+html[data-vv-motion="off"] .vv-flip-char, html[data-vv-motion="off"] .vv-stripe > span, html[data-vv-motion="off"] .vv-marquee-track, html[data-vv-motion="off"] .vv-story-check,
+html[data-vv-motion="off"] .vv-diagram.is-in .vv-travel, html[data-vv-motion="off"] .vv-diagram.is-in .vv-shake { animation: none; }
+html[data-vv-motion="off"] .vv-story-item, html[data-vv-motion="off"] .vv-story-bar > span, html[data-vv-motion="off"] .vv-faq-body, html[data-vv-motion="off"] .vv-diagram .vv-draw, html[data-vv-motion="off"] .vv-diagram .vv-fade { transition: none; }
+html[data-vv-motion="off"] .vv-diagram .vv-travel { offset-distance: 100%; opacity: 1; }
