@@ -75,6 +75,8 @@ export function EventsTab({ entry }: { entry: CommunityEntry }) {
           body={organizer ? t("noEventsBody") : undefined}
           action={organizer ? t("noEventsCta") : undefined}
           onAction={organizer ? newEvent : undefined}
+          // The same test id as the "Nova ação" button above the list: the e2e creates the first action through it.
+          actionTestID="new-event"
         />
       ) : (
         groupByDay(next).map((g) => {

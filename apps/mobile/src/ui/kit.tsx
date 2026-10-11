@@ -357,7 +357,7 @@ export function useToast(): [ReactNode, (text: string) => void] {
 }
 
 /** An empty list, drawn with the brand's boxes instead of a lonely sentence. */
-export function EmptyState({ title, body, action, onAction, testID }: { title: string; body?: string; action?: string; onAction?: () => void; testID?: string }) {
+export function EmptyState({ title, body, action, onAction, testID, actionTestID }: { title: string; body?: string; action?: string; onAction?: () => void; testID?: string; actionTestID?: string }) {
   const c = useTheme();
   return (
     <View testID={testID} style={{ alignItems: "flex-start", gap: space.m, paddingVertical: space.l }}>
@@ -374,7 +374,7 @@ export function EmptyState({ title, body, action, onAction, testID }: { title: s
       </View>
       <Text style={{ color: c.text, fontFamily: fonts.text, ...type.h3 }}>{title}</Text>
       {body ? <Body muted>{body}</Body> : null}
-      {action && onAction ? <Button label={action} onPress={onAction} /> : null}
+      {action && onAction ? <Button testID={actionTestID} label={action} onPress={onAction} /> : null}
     </View>
   );
 }
