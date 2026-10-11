@@ -98,6 +98,9 @@ async function person(name) {
   return page;
 }
 const byId = (page, id) => page.getByTestId(id);
+// Text on the screen in front. Screens below in the stack (the home screen, whose community
+// card names the next action) stay mounted but hidden, and would win a plain getByText().first().
+const seen = (page, text) => page.getByText(text).filter({ visible: true });
 const step = async (label, f) => {
   process.stdout.write(`• ${label} … `);
   await f();
@@ -171,14 +174,14 @@ try {
     await byId(ana, "area-Recife, PE").click();
     await shot(ana, "08-new-event");
     await byId(ana, "event-save").click();
-    await ana.getByText("Plenária no Derby").first().waitFor();
+    await seen(ana, "Plenária no Derby").first().waitFor();
     await ana.getByText("Tudo em dia").waitFor({ timeout: 15000 });
     await shot(ana, "09-event-list");
   });
 
   await step("Bia sees the event and volunteers", async () => {
     await bia.reload();
-    await bia.getByText("Plenária no Derby").first().click({ timeout: 15000 });
+    await seen(bia, "Plenária no Derby").first().click({ timeout: 15000 });
     await byId(bia, "self-volunteer").click();
     await bia.getByText("Você se ofereceu").last().waitFor();
     await shot(bia, "10-volunteered");
@@ -186,7 +189,7 @@ try {
 
   await step("Ana confirms Bia", async () => {
     await ana.reload();
-    await ana.getByText("Plenária no Derby").first().click({ timeout: 15000 });
+    await seen(ana, "Plenária no Derby").first().click({ timeout: 15000 });
     await ana.getByRole("button", { name: "Confirmar" }).first().click({ timeout: 15000 });
     await ana.getByText("Confirmadas").last().waitFor();
     await shot(ana, "11-confirmed");
@@ -216,7 +219,7 @@ try {
     await bia.goto(appUrl);
     await bia.getByText("Coletivo Recife").first().click({ timeout: 15000 });
     // The list hides fit hints for events you're already going to; the event page shows them.
-    await bia.getByText("Plenária no Derby").first().click({ timeout: 15000 });
+    await seen(bia, "Plenária no Derby").first().click({ timeout: 15000 });
     await bia.getByText("Perto de Casa", { exact: false }).last().waitFor({ timeout: 15000 });
     await shot(bia, "15-near");
   });
@@ -228,7 +231,7 @@ try {
 
   await step("Bia gets the question and answers", async () => {
     await bia.reload();
-    await bia.getByText("Plenária no Derby").first().click({ timeout: 15000 });
+    await seen(bia, "Plenária no Derby").first().click({ timeout: 15000 });
     await bia.getByTestId("probe-question").last().waitFor({ timeout: 20000 });
     await shot(bia, "16-probe-question");
     await bia.getByTestId("probe-eligible").last().click();
@@ -237,13 +240,13 @@ try {
 
   await step("Ana sees the answer", async () => {
     await ana.reload();
-    await ana.getByText("Plenária no Derby").first().click({ timeout: 15000 });
+    await seen(ana, "Plenária no Derby").first().click({ timeout: 15000 });
     await ana.getByTestId("ask-who-can-come").last().waitFor();
     // Results load after the sync that delivers Bia's reply.
     for (let i = 0; i < 40 && !(await ana.getByText("Podem: Bia").count()); i++) {
       await ana.waitForTimeout(500);
       if (i === 10) await ana.reload();
-      if (i === 10) await ana.getByText("Plenária no Derby").first().click({ timeout: 15000 });
+      if (i === 10) await seen(ana, "Plenária no Derby").first().click({ timeout: 15000 });
     }
     await ana.getByText("Podem: Bia").last().waitFor({ timeout: 5000 });
     await shot(ana, "17-probe-results");
