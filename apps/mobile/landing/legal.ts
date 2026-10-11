@@ -208,7 +208,8 @@ export function renderPage(page: Page): string {
 <meta property="og:locale" content="pt_BR" />
 <meta property="og:title" content="${escape(title)} — Vamo Virar" />
 <meta property="og:description" content="${escape(page.description)}" />
-<link rel="icon" type="image/png" href="/favicon.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/favicon.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@900&family=Barlow+Condensed:wght@900&family=Montserrat:wght@400;700&display=swap" rel="stylesheet" />
