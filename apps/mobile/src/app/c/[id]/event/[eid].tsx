@@ -21,6 +21,7 @@ import { ProbeQuestion, ProbeResults } from "../../../../ui/ProbeSections";
 import { DisabledScope } from "../../../../ui/community/Disabled";
 import { Body, Button, Card, Chip, Heading, Screen, Title } from "../../../../ui/kit";
 import { space } from "../../../../ui/theme";
+import { WhatsAppButton, WhatsAppEditor } from "../../../../ui/WhatsApp";
 
 export default function EventScreen() {
   const { id, eid } = useLocalSearchParams<{ id: string; eid: string }>();
@@ -106,6 +107,7 @@ export default function EventScreen() {
         <Body>{formatWhen(ev.starts_at, ev.ends_at, locale, ev.tz)}</Body>
         <Body muted>{ev.location.label}</Body>
         {ev.description ? <Body>{ev.description}</Body> : null}
+        {ev.whatsapp ? <WhatsAppButton testID="event-whatsapp-open" link={ev.whatsapp} /> : null}
         {ev.status !== "scheduled" ? <Chip label={t(ev.status === "cancelled" ? "cancelled" : "completed")} tone={ev.status === "cancelled" ? "danger" : "neutral"} /> : null}
         {mine !== "none" ? <Chip label={t(STATUS_TEXT[mine])} tone={mine === "confirmed" ? "ok" : "warn"} /> : null}
         {ev.status === "scheduled" ? <AvailabilityChip ev={ev} /> : null}
@@ -122,6 +124,13 @@ export default function EventScreen() {
         {manage && ev.status === "scheduled" ? (
           <>
             <ProbeResults entry={entry} ev={ev} />
+            <WhatsAppEditor
+              key={ev.whatsapp ?? ""}
+              testID="event-whatsapp-editor"
+              title={t("whatsappEventTitle")}
+              current={ev.whatsapp}
+              onSave={(link) => submit("event.update", { whatsapp: link })}
+            />
             <Button testID="toggle-invite" kind="secondary" label={t("inviteSomeone")} onPress={() => setInviting(!inviting)} />
             {inviting
               ? invitable(state, ev).map((m) => (

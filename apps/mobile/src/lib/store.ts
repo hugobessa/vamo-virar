@@ -87,9 +87,14 @@ export class AppStore {
 
   // --- actions -------------------------------------------------------------
 
-  async create(input: { node: string; setupCode?: string; name: string; description?: string; displayName: string }): Promise<string> {
+  async create(input: { node: string; setupCode?: string; name: string; description?: string; whatsapp?: string; displayName: string }): Promise<string> {
     const client = new NodeClient(input.node, input.setupCode ? { provisioningToken: input.setupCode } : {});
-    const replica = await Replica.found(client, { name: input.name, description: input.description ?? "", displayName: input.displayName });
+    const replica = await Replica.found(client, {
+      name: input.name,
+      description: input.description ?? "",
+      whatsapp: input.whatsapp,
+      displayName: input.displayName,
+    });
     const e = this.track(replica);
     await this.persist(e);
     this.bump();

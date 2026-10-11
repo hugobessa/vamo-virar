@@ -35,6 +35,13 @@ export function isText(v: unknown, maxLen: number, minLen = 0): v is string {
   return typeof v === "string" && v.length >= minLen && v.length <= maxLen;
 }
 
+const WHATSAPP_RE = /^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9_-]+$/;
+
+/** A WhatsApp group invite link: `https://chat.whatsapp.com/<code>`. */
+export function isWhatsAppLink(v: unknown): v is string {
+  return isText(v, 200, 1) && WHATSAPP_RE.test(v);
+}
+
 /** Deep copy of plain JSON-like data. Avoids structuredClone, which Hermes lacks. */
 export function clone<T>(v: T): T {
   if (Array.isArray(v)) return v.map(clone) as T;
