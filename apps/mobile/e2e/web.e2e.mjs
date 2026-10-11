@@ -56,7 +56,7 @@ const node2 = await startNode();
 const upstreams = { "/node/": node.url, "/node2/": node2.url };
 
 // --- static app + same-origin proxy to the node -----------------------------
-const types = { ".html": "text/html", ".js": "text/javascript", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".ttf": "font/ttf" };
+const types = { ".html": "text/html", ".js": "text/javascript", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".ttf": "font/ttf", ".css": "text/css" };
 const server = createServer(async (req, res) => {
   try {
     const prefix = Object.keys(upstreams).find((p) => req.url.startsWith(p));
@@ -206,10 +206,23 @@ try {
     await seen(ana, "Plenária no Derby").first().click({ timeout: 15000 });
     await byId(ana, "event-new-task").last().click();
     await byId(ana, "task-title").fill("Levar a caixa de som");
+    // The description is a rich text editor: no Markdown typed, only toolbar buttons.
+    await ana.locator('[contenteditable="true"]').filter({ visible: true }).last().click();
+    await ana.keyboard.type("Falar com o ");
+    await byId(ana, "task-description-bold").last().click();
+    await ana.keyboard.type("Zé");
+    await byId(ana, "task-description-bold").last().click();
+    await ana.keyboard.type(" antes:");
+    await ana.keyboard.press("Enter");
+    await byId(ana, "task-description-check").last().click();
+    await ana.keyboard.type("caixa de som");
+    await ana.keyboard.press("Enter");
+    await ana.keyboard.type("cabo P10");
     await byId(ana, "task-tags").fill("som, Logística");
     await shot(ana, "12a-new-task");
     await byId(ana, "task-save").click();
     await seen(ana, "Levar a caixa de som").first().waitFor({ timeout: 15000 });
+    await seen(ana, "0 de 2 itens feitos").first().waitFor({ timeout: 15000 });
     await shot(ana, "12b-event-with-task");
     // The sync status lives on the community screen.
     await ana.goto(appUrl);
@@ -224,7 +237,13 @@ try {
     await seen(bia, "Esperando voluntário · 1").first().waitFor({ timeout: 15000 });
     await shot(bia, "12c-board");
     await seen(bia, "Levar a caixa de som").first().click();
+    // The description came through as formatted text and real check boxes.
+    await bia.getByText("Zé", { exact: true }).filter({ visible: true }).first().waitFor({ timeout: 15000 });
+    await seen(bia, "cabo P10").first().waitFor({ timeout: 15000 });
     await byId(bia, "self-take").last().click();
+    // Now responsible, she can tick the list.
+    await bia.getByRole("checkbox").filter({ hasText: "cabo P10" }).last().click({ timeout: 15000 });
+    await seen(bia, "1 de 2 itens feitos").first().waitFor({ timeout: 15000 });
     await seen(bia, "A fazer").first().waitFor({ timeout: 15000 });
     await byId(bia, "comment-text").last().fill("Pego a caixa com o **Zé** na quinta.");
     await byId(bia, "comment-send").last().click();
