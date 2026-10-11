@@ -78,7 +78,14 @@ que ficamos sabendo de um caso.
 
 ## 4. Como denunciar no app
 
-Qualquer membro pode denunciar outra pessoa:
+**Para falar com a gente sem sair do app**, toque em **Segurança e
+denúncias** na tela inicial (ou na aba **Eu** de uma comunidade). Essa tela
+está sempre disponível, mesmo para quem ainda não entrou em nenhuma
+comunidade, e mostra o nosso contato de segurança infantil (seção 5), como
+denunciar dentro da comunidade e os canais das autoridades (seção 6). Ela
+também serve para mandar qualquer outra preocupação ou sugestão sobre o app.
+
+Dentro de uma comunidade, qualquer membro pode denunciar outra pessoa:
 
 1. Abra a comunidade e vá à aba **Pessoas**.
 2. Encontre a pessoa na lista e toque em **Denunciar**.
@@ -195,7 +202,11 @@ only admins, moderators and the organizers of an action can create; comments
 on a task are seen by everyone on it and by the community's admins and
 moderators. Communities are invite-only, and admins approve every new member.
 
-- **In-app reporting:** People tab → find the person → **Denunciar**
+- **In-app feedback and reporting:** the **Segurança e denúncias** (Safety
+  and reporting) screen, always reachable from the home screen and from a
+  community's Me tab, even before joining any community, shows our child
+  safety contact, how to report inside a community and the authorities'
+  hotlines, without leaving the app. Inside a community: People tab → find the person → **Denunciar**
   (Report) → **Coloca pessoas em risco** (Puts people at risk). Reports go to
   the community's admins and moderators, who can delete actions, tasks,
   comments and files, block members and disable the community.

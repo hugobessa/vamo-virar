@@ -39,6 +39,7 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
             onPress={() => store.submit(entry.id, "member.profile", { profile: { ...me.profile, display_name: name.trim() } })}
           />
           <Button kind="secondary" label={t("calendarsTitle")} allowReadOnly onPress={() => router.push("/settings")} />
+          <Button testID="me-safety" kind="secondary" label={t("safetyTitle")} allowReadOnly onPress={() => router.push("/safety")} />
           {r.isAdmin ? (
             <WhatsAppEditor
               key={r.view?.community.whatsapp ?? ""}

@@ -297,6 +297,18 @@ const pt = {
   noReports: "Nenhuma denúncia agora.",
   reportedBy: "Denunciada por",
   dismiss: "Arquivar",
+  // Safety and reporting (Google Play Child Safety Standards: an in-app way to reach us)
+  safetyTitle: "Segurança e denúncias",
+  safetyIntro: "Tolerância zero com abuso e exploração sexual de crianças e adolescentes. O Vamo Virar é só para maiores de 18 anos.",
+  safetyEmergency: "Em perigo agora? Ligue 190 (Polícia Militar). O app não é um serviço de emergência.",
+  safetyContactTitle: "Fale com a gente",
+  safetyContactBody: "Para denunciar abuso ou exploração infantil, um menor usando o app, ou mandar qualquer outra preocupação ou sugestão, escreva para o nosso contato de segurança, com o assunto \"Segurança infantil\" ou \"Sugestão\":",
+  safetyContactInfo: "Conte o nome da comunidade, o nome da pessoa envolvida, o que aconteceu e quando. Nunca envie imagens nem cópias de material de abuso: descreva o que viu.",
+  safetyWrite: "Escrever e-mail",
+  safetyCommunityTitle: "Denunciar alguém da sua comunidade",
+  safetyCommunitySteps: "Abra a comunidade, vá à aba Pessoas, toque em Denunciar ao lado da pessoa e escolha o motivo. A coordenação e a moderação recebem a denúncia; a pessoa denunciada não fica sabendo.",
+  safetyAuthoritiesTitle: "Denunciar às autoridades",
+  safetyAuthorities: "• SaferNet Brasil (denúncia anônima): new.safernet.org.br/denuncie\n• Disque 100: grátis, 24 horas\n• Polícia Federal: gov.br/pf\n• Conselho Tutelar do seu município\n• Fora do Brasil: report.cybertip.org ou o canal do seu país na rede INHOPE",
   // Disabling a community (marked for deletion)
   disabledBanner: "{who} (coordenação) marcou esta comunidade para exclusão. Ela será apagada para sempre em {date}. Até lá, dá para ver tudo, mas nada pode ser alterado.",
   disabledBySomeone: "Alguém",
