@@ -98,6 +98,9 @@ export function RichTextEditor({
       accessibilityState={{ selected: on, disabled: readOnly }}
       disabled={readOnly}
       onPress={onPress}
+      // Web: a mouse press must not take focus from the text, or the next key typed (a space)
+      // would press the button again and never reach the editor. Tab still reaches the buttons.
+      {...({ onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() } as object)}
       style={({ pressed }) => ({
         minHeight: touch - 12,
         minWidth: touch - 12,
