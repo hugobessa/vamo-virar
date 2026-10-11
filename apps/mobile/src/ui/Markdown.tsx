@@ -1,24 +1,84 @@
 // Renders the Markdown subset of model/markdown with the app's own text styles.
+// With `onToggle`, check boxes are real check boxes: tapping one reports its
+// source line. Without it they are drawn as a quiet status, not as controls.
 
-import { Fragment, type ReactNode } from "react";
-import { Linking, Text, View } from "react-native";
-import { parseMarkdown, type Block, type Inline } from "../model/markdown";
-import { fonts, radius, space, type, useTheme } from "./theme";
+import { Fragment, useContext, type ReactNode } from "react";
+import { Linking, Pressable, Text, View } from "react-native";
+import { parseMarkdown, type Block, type Inline, type ListItem } from "../model/markdown";
+import { ReadOnly } from "./kit";
+import { fonts, radius, space, touch, type, useTheme } from "./theme";
 
-export function Markdown({ source, muted, testID }: { source: string; muted?: boolean; testID?: string }) {
+export function Markdown({ source, muted, testID, onToggle }: { source: string; muted?: boolean; testID?: string; onToggle?: (line: number) => void }) {
   const c = useTheme();
   const color = muted ? c.muted : c.text;
   const blocks = parseMarkdown(source);
   return (
     <View testID={testID} style={{ gap: space.s }}>
       {blocks.map((b, i) => (
-        <BlockView key={i} block={b} color={color} />
+        <BlockView key={i} block={b} color={color} onToggle={onToggle} />
       ))}
     </View>
   );
 }
 
-function BlockView({ block, color }: { block: Block; color: string }) {
+/** A drawn box: filled with a tick when done. Interactive boxes are larger and outlined in blue. */
+function CheckBox({ checked, live }: { checked: boolean; live: boolean }) {
+  const c = useTheme();
+  const size = live ? 22 : 16;
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 5,
+        borderWidth: 2,
+        borderColor: checked ? c.ok : live ? c.primary : c.border,
+        backgroundColor: checked ? c.ok : "transparent",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {checked ? <Text style={{ color: "#fff", fontSize: size - 6, lineHeight: size - 4, fontWeight: "900" }}>✓</Text> : null}
+    </View>
+  );
+}
+
+function CheckItem({ item, base, color, onToggle }: { item: ListItem; base: object; color: string; onToggle?: (line: number) => void }) {
+  const c = useTheme();
+  const readOnly = useContext(ReadOnly);
+  const checked = !!item.checked;
+  const text = (
+    <Text style={[base, { flex: 1, textDecorationLine: checked ? "line-through" : "none", color: checked ? c.muted : color }]}>
+      <Inlines nodes={item.children} color={checked ? c.muted : color} />
+    </Text>
+  );
+  if (!onToggle || item.line === undefined || readOnly) {
+    return (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.s }}>
+        <View style={{ width: 24, alignItems: "center" }}>
+          <CheckBox checked={checked} live={false} />
+        </View>
+        {text}
+      </View>
+    );
+  }
+  const line = item.line;
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      onPress={() => onToggle(line)}
+      style={({ pressed }) => ({ minHeight: touch - 8, flexDirection: "row", alignItems: "center", gap: space.s, borderRadius: radius, opacity: pressed ? 0.7 : 1 })}
+    >
+      <View style={{ width: 24, alignItems: "center" }}>
+        <CheckBox checked={checked} live />
+      </View>
+      {text}
+    </Pressable>
+  );
+}
+
+function BlockView({ block, color, onToggle }: { block: Block; color: string; onToggle?: (line: number) => void }) {
   const c = useTheme();
   const base = { color, fontFamily: fonts.text, ...type.body };
   switch (block.kind) {
@@ -39,16 +99,18 @@ function BlockView({ block, color }: { block: Block; color: string }) {
     case "list":
       return (
         <View style={{ gap: space.xs }}>
-          {block.items.map((it, i) => (
-            <View key={i} style={{ flexDirection: "row", gap: space.s }}>
-              <Text style={[base, { width: 24, textAlign: "center", color: it.checked === undefined ? color : it.checked ? c.ok : c.muted }]}>
-                {it.checked === undefined ? (block.ordered ? `${i + 1}.` : "•") : it.checked ? "☑" : "☐"}
-              </Text>
-              <Text style={[base, { flex: 1, textDecorationLine: it.checked ? "line-through" : "none", color: it.checked ? c.muted : color }]}>
-                <Inlines nodes={it.children} color={color} />
-              </Text>
-            </View>
-          ))}
+          {block.items.map((it, i) =>
+            it.checked !== undefined ? (
+              <CheckItem key={i} item={it} base={base} color={color} onToggle={onToggle} />
+            ) : (
+              <View key={i} style={{ flexDirection: "row", gap: space.s }}>
+                <Text style={[base, { width: 24, textAlign: "center", color }]}>{block.ordered ? `${i + 1}.` : "•"}</Text>
+                <Text style={[base, { flex: 1 }]}>
+                  <Inlines nodes={it.children} color={color} />
+                </Text>
+              </View>
+            ),
+          )}
         </View>
       );
     case "code":

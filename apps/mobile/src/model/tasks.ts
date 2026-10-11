@@ -14,6 +14,7 @@ import {
   type TaskStatus,
   type TaskStatusChange,
 } from "@vamo-virar/domain";
+import type { TaskMarks } from "@vamo-virar/sync";
 import type { StringKey } from "./i18n";
 
 export const STATUS_ORDER: readonly TaskStatus[] = ["awaiting_volunteer", "todo", "in_progress", "blocked", "done", "cancelled"];
@@ -160,6 +161,26 @@ export function isOverdue(task: Task, now: number): boolean {
   return isOpen(task) && task.due_at !== undefined && task.due_at < now;
 }
 
+const DAY = 86_400_000;
+const dayOf = (ms: number) => {
+  const d = new Date(ms);
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY;
+};
+
+/**
+ * The due date in words, relative to today: "vence amanhã", "em 5 dias",
+ * "atrasada há 2 dias". `soon` is today or tomorrow. Closed tasks keep the plain date.
+ */
+export function dueLabel(task: Task, now: number): { key: StringKey; n: number; late: boolean; soon: boolean } | null {
+  if (task.due_at === undefined) return null;
+  if (!isOpen(task)) return { key: "taskDue_", n: 0, late: false, soon: false };
+  const days = dayOf(task.due_at) - dayOf(now);
+  if (isOverdue(task, now)) return { key: days >= -1 ? "taskOverdueYesterday" : "taskOverdueDays", n: Math.max(1, -days), late: true, soon: false };
+  if (days <= 0) return { key: "taskDueToday", n: 0, late: false, soon: true };
+  if (days === 1) return { key: "taskDueTomorrow", n: 1, late: false, soon: true };
+  return { key: "taskDueInDays", n: days, late: false, soon: false };
+}
+
 // --- the timeline --------------------------------------------------------------
 
 export type TimelineItem = { kind: "comment"; seq: number; comment: TaskComment } | { kind: "status"; seq: number; change: TaskStatusChange };
@@ -188,3 +209,70 @@ export function scopeTitle(state: CommunityState, task: Task): string | undefine
   if (task.event_id === undefined) return undefined;
   return state.events[task.event_id]?.title ?? state.event_summaries[task.event_id]?.title;
 }
+
+// --- news ---------------------------------------------------------------------
+
+export type NewsReason = "assigned" | "comment" | "status" | "updated" | "pool";
+
+export interface TaskNews {
+  task: Task;
+  reason: NewsReason;
+  /** Who did it; absent when the log does not say (an edit, a handover). */
+  by?: string;
+  seq: number;
+}
+
+/** The last position in the log that touched the task, to mark it seen. */
+export function lastSeq(task: Task): number {
+  let n = Math.max(task.updated_seq, task.created_seq);
+  for (const c of task.comments) n = Math.max(n, c.seq, c.edited_seq ?? 0);
+  for (const h of task.history) n = Math.max(n, h.seq);
+  return n;
+}
+
+/**
+ * What happened on a task since this person last looked at it, by someone
+ * else. Tasks they are on or created report the newest comment or status
+ * change; a task they are not on reports only its arrival in the pool.
+ */
+export function taskNews(state: CommunityState, task: Task, me: MemberRecord | undefined, marks: TaskMarks): TaskNews | null {
+  if (!me || me.status !== "active" || !canSee(state, task, me)) return null;
+  const seen = marks.tasks[task.task_id] ?? marks.since;
+  const mine = me.member_id;
+  if (isOnTask(me, task) || task.created_by === mine) {
+    let news: TaskNews | null = null;
+    for (const c of task.comments) {
+      if (c.author !== mine && c.seq > seen && (!news || c.seq > news.seq)) news = { task, reason: "comment", by: c.author, seq: c.seq };
+    }
+    for (const h of task.history) {
+      if (h.by === mine || h.seq <= seen || (news && h.seq < news.seq)) continue;
+      news = { task, reason: task.assignee === mine && h.status === "todo" ? "assigned" : "status", by: h.by, seq: h.seq };
+    }
+    // Edits and handovers leave no line of their own: a newer touch that is not this person's comment or status change.
+    const own =
+      task.comments.some((c) => c.author === mine && (c.seq === task.updated_seq || c.edited_seq === task.updated_seq)) ||
+      task.history.some((h) => h.by === mine && h.seq === task.updated_seq);
+    if (!news && task.updated_seq > seen && !own) news = { task, reason: "updated", seq: task.updated_seq };
+    return news;
+  }
+  if (task.status === "awaiting_volunteer" && task.created_by !== mine && task.created_seq > seen) {
+    return { task, reason: "pool", by: task.created_by, seq: task.created_seq };
+  }
+  return null;
+}
+
+/** Every task with news for this person, newest first. */
+export function newsFor(state: CommunityState, me: MemberRecord | undefined, marks: TaskMarks): TaskNews[] {
+  return Object.values(state.tasks ?? {})
+    .map((task) => taskNews(state, task, me, marks))
+    .filter((n): n is TaskNews => n !== null)
+    .sort((a, b) => b.seq - a.seq);
+}
+
+export const NEWS_TEXT: Record<NewsReason, StringKey> = {
+  assigned: "taskNewsAssigned",
+  comment: "taskNewsComment",
+  status: "taskNewsStatus",
+  updated: "taskNewsUpdated",
+  pool: "taskNewsPool",
+};

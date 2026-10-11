@@ -11,10 +11,13 @@ import { canManage as canManageEvent } from "../../../model/events";
 import { canEdit, canManage, parseTagInput, PRIORITY_ORDER, PRIORITY_TEXT } from "../../../model/tasks";
 import { formatDateInput, parseLocal } from "../../../model/time";
 import { DisabledScope } from "../../../ui/community/Disabled";
+import { DateField } from "../../../ui/DateField";
 import { Banner, Body, Button, Field, Screen } from "../../../ui/kit";
 import { space } from "../../../ui/theme";
 import { AttachmentList } from "../../../ui/tasks/Attachments";
-import { Choices, Label } from "../../../ui/tasks/TaskBits";
+import { Choices, Label, PersonPicker } from "../../../ui/tasks/TaskBits";
+
+const DAY = 86_400_000;
 
 const COMMUNITY = "community";
 
@@ -51,6 +54,16 @@ export default function TaskForm() {
   }
   if (!existing && scopeOptions.length === 0) return <Screen><Body muted>{t("taskNoPermission")}</Body></Screen>;
   if (!existing && !scopeOptions.some((o) => o.value === scope)) setScope(scopeOptions[0]!.value);
+
+  // Common deadlines in one tap; the date field below takes any other.
+  const today = Date.now();
+  const event = scope !== COMMUNITY ? (state.events[scope] ?? undefined) : undefined;
+  const dueShortcuts = [
+    { value: "", label: t("taskDueClear") },
+    { value: formatDateInput(today + DAY), label: t("taskDueTomorrowShort") },
+    { value: formatDateInput(today + 7 * DAY), label: t("taskDueWeek") },
+    ...(event && event.starts_at > today ? [{ value: formatDateInput(event.starts_at), label: t("taskDueEventDay") }] : []),
+  ].filter((o, i, all) => all.findIndex((x) => x.value === o.value) === i);
 
   const people = Object.values(state.members)
     .filter((m) => m.status === "active")
@@ -108,17 +121,15 @@ export default function TaskForm() {
           <Label>{t("taskPriority")}</Label>
           <Choices<TaskPriority> testID="task-priority" value={priority} onChange={setPriority} options={[...PRIORITY_ORDER].reverse().map((p) => ({ value: p, label: t(PRIORITY_TEXT[p]) }))} />
         </View>
-        <Field testID="task-due" label={t("taskDue")} value={due} onChangeText={setDue} keyboardType="numbers-and-punctuation" placeholder="DD/MM/AAAA" />
+        <View style={{ gap: space.s }}>
+          <Label>{t("taskDueLabel")}</Label>
+          <Choices<string> testID="due" value={due.trim()} onChange={setDue} options={dueShortcuts} />
+          <DateField testID="task-due" value={due} onChange={setDue} />
+        </View>
         {!existing && manager ? (
           <View style={{ gap: space.xs }}>
-            <Label>{t("taskAssignee")}</Label>
+            <PersonPicker testID="task-assignee" label={t("taskAssignee")} people={people} value={assignee} onChange={setAssignee} me={me.member_id} none={t("taskAssigneeNone")} />
             <Body muted>{t("taskAssigneeHelp")}</Body>
-            <Choices<string | null>
-              testID="task-assignee"
-              value={assignee}
-              onChange={setAssignee}
-              options={[{ value: null, label: t("taskAssigneeNone") }, ...people.map((m) => ({ value: m.member_id, label: m.member_id === me.member_id ? `${m.profile?.display_name ?? "?"} (${t("taskYou")})` : (m.profile?.display_name ?? "?") }))]}
-            />
           </View>
         ) : null}
         <AttachmentList entry={entry} attachments={attachments} onChange={setAttachments} />

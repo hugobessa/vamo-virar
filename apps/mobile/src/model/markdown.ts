@@ -13,9 +13,16 @@ export type Inline =
 export type Block =
   | { kind: "heading"; level: 1 | 2 | 3; children: Inline[] }
   | { kind: "paragraph"; children: Inline[] }
-  | { kind: "list"; ordered: boolean; items: { checked?: boolean; children: Inline[] }[] }
+  | { kind: "list"; ordered: boolean; items: ListItem[] }
   | { kind: "code"; text: string }
   | { kind: "rule" };
+
+/** A check box item also carries its line in the source, so it can be toggled. */
+export interface ListItem {
+  checked?: boolean;
+  line?: number;
+  children: Inline[];
+}
 
 const HEADING = /^(#{1,3})\s+(.*)$/;
 const BULLET = /^\s*[-*+]\s+(.*)$/;
@@ -60,7 +67,7 @@ export function parseMarkdown(src: string): Block[] {
       const ordered = !BULLET.test(line);
       const last = blocks.at(-1);
       const list = last?.kind === "list" && last.ordered === ordered ? last : null;
-      const item = parseItem(li[1]!);
+      const item = parseItem(li[1]!, i);
       if (list) list.items.push(item);
       else blocks.push({ kind: "list", ordered, items: [item] });
       continue;
@@ -71,10 +78,36 @@ export function parseMarkdown(src: string): Block[] {
   return blocks;
 }
 
-function parseItem(text: string): { checked?: boolean; children: Inline[] } {
+function parseItem(text: string, line: number): ListItem {
   const c = CHECK.exec(text);
-  if (c) return { checked: c[1] !== " ", children: parseInline(c[2]!) };
+  if (c) return { checked: c[1] !== " ", line, children: parseInline(c[2]!) };
   return { children: parseInline(text) };
+}
+
+/** Ticks or unticks the check box on `line`; any other line leaves the text as it was. */
+export function toggleCheck(src: string, line: number): string {
+  const lines = src.replace(/\r\n?/g, "\n").split("\n");
+  const at = lines[line];
+  if (at === undefined) return src;
+  const m = /^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\]\s)/.exec(at);
+  if (!m) return src;
+  lines[line] = m[1] + (m[2] === " " ? "x" : " ") + at.slice(m[1]!.length + 1);
+  return lines.join("\n");
+}
+
+/** How many check boxes there are and how many are ticked. */
+export function checklistProgress(src: string): { done: number; total: number } {
+  let done = 0;
+  let total = 0;
+  for (const b of parseMarkdown(src)) {
+    if (b.kind !== "list") continue;
+    for (const it of b.items) {
+      if (it.checked === undefined) continue;
+      total++;
+      if (it.checked) done++;
+    }
+  }
+  return { done, total };
 }
 
 const LINK = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/;

@@ -4,7 +4,7 @@
 // the system's reduced-motion setting through `useReducedMotion`.
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Animated, LayoutAnimation, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
+import { ActivityIndicator, Animated, LayoutAnimation, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { tap, type Tap } from "../lib/haptics";
 import { BrandBox, FlagStripe } from "./brand";
@@ -51,10 +51,18 @@ export function Screen({ children, scroll = true, onRefresh }: { children: React
   );
 }
 
-export function Title({ children }: { children: ReactNode }) {
+/** `caps={false}` for titles people wrote themselves, which read better as typed. */
+export function Title({ children, caps = true }: { children: ReactNode; caps?: boolean }) {
   const c = useTheme();
   return (
-    <Text accessibilityRole="header" style={{ color: c.text, fontFamily: fonts.condensed, fontSize: 34, lineHeight: 36, fontWeight: "900", textTransform: "uppercase" }}>
+    <Text
+      accessibilityRole="header"
+      style={
+        caps
+          ? { color: c.text, fontFamily: fonts.condensed, fontSize: 34, lineHeight: 36, fontWeight: "900", textTransform: "uppercase" }
+          : { color: c.text, fontFamily: fonts.text, fontSize: 28, lineHeight: 34, fontWeight: "800", letterSpacing: -0.3 }
+      }
+    >
       {children}
     </Text>
   );
@@ -101,6 +109,7 @@ export function Button({
   testID,
   allowReadOnly,
   haptic,
+  compact,
 }: {
   label: string;
   onPress: () => void;
@@ -112,6 +121,8 @@ export function Button({
   allowReadOnly?: boolean;
   /** A short vibration when pressed (confirmations, approvals). */
   haptic?: Tap;
+  /** Smaller, for secondary actions next to content; still a full touch target. */
+  compact?: boolean;
 }) {
   const c = useTheme();
   const reduced = useReducedMotion();
@@ -141,8 +152,8 @@ export function Button({
       style={{ paddingBottom: buttonDepth, opacity: flat ? 1 : off ? 0.5 : 1 }}
     >
       <View pointerEvents="none" style={[styles.depth, { backgroundColor: depth }]} />
-      <Animated.View style={[styles.button, { backgroundColor: bg, borderColor: edge, transform: [{ translateY: sink }] }]}>
-        {busy ? <ActivityIndicator color={fg} /> : <Text style={{ color: fg, fontFamily: fonts.text, fontSize: 17, fontWeight: "700" }}>{label}</Text>}
+      <Animated.View style={[styles.button, compact ? styles.compact : null, { backgroundColor: bg, borderColor: edge, transform: [{ translateY: sink }] }]}>
+        {busy ? <ActivityIndicator color={fg} /> : <Text style={{ color: fg, fontFamily: fonts.text, fontSize: compact ? 15 : 17, fontWeight: "700" }}>{label}</Text>}
       </Animated.View>
     </Pressable>
   );
@@ -243,7 +254,8 @@ export function Chip({ label, tone = "neutral" }: { label: string; tone?: ChipTo
 }
 
 /** Tabs with a pill that slides to the selected option. */
-export function Segmented<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+/** `badge` puts a count next to an option's label, for things waiting there. */
+export function Segmented<T extends string>({ options, value, onChange }: { options: { value: T; label: string; badge?: number }[]; value: T; onChange: (v: T) => void }) {
   const c = useTheme();
   const reduced = useReducedMotion();
   const [width, setWidth] = useState(0);
@@ -267,11 +279,13 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
           <Pressable
             key={o.value}
             accessibilityRole="tab"
+            accessibilityLabel={o.badge ? `${o.label} (${o.badge})` : o.label}
             accessibilityState={{ selected: on }}
             onPress={() => onChange(o.value)}
-            style={{ flex: 1, minHeight: touch - 8, alignItems: "center", justifyContent: "center", borderRadius: radius - 4 }}
+            style={{ flex: 1, minHeight: touch - 8, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", borderRadius: radius - 4 }}
           >
             <Text style={{ color: c.text, fontWeight: on ? "700" : "500", fontSize: 16 }}>{o.label}</Text>
+            {o.badge ? <CountBadge n={o.badge} /> : null}
           </Pressable>
         );
       })}
@@ -410,8 +424,74 @@ export function Collapsible({ title, children, testID }: { title: string; childr
   );
 }
 
+/** A small round count, in the brand colour. */
+export function CountBadge({ n }: { n: number }) {
+  const c = useTheme();
+  return (
+    <View aria-hidden style={{ minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: c.brand, alignItems: "center", justifyContent: "center" }}>
+      <Text style={{ color: "#fff", fontFamily: fonts.text, fontSize: 12, fontWeight: "800" }}>{n > 99 ? "99+" : n}</Text>
+    </View>
+  );
+}
+
+/** A round "⋯" button that opens more options. */
+export function MoreButton({ label, onPress, testID }: { label: string; onPress: () => void; testID?: string }) {
+  const c = useTheme();
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => ({ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.chip : "transparent" })}
+    >
+      <Text style={{ color: c.muted, fontSize: 22, fontWeight: "900", lineHeight: 24 }}>⋯</Text>
+    </Pressable>
+  );
+}
+
+/** A panel that slides up from the bottom over a dimmed screen. Tapping outside closes it. */
+export function Sheet({ visible, onClose, title, children, testID }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode; testID?: string }) {
+  const c = useTheme();
+  const readOnly = useContext(ReadOnly);
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: "flex-end" }}>
+        <Pressable accessibilityLabel="Fechar" onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.4)" }]} />
+        <SafeAreaView edges={["bottom"]} testID={testID} style={{ backgroundColor: c.bg, borderTopLeftRadius: radius * 2, borderTopRightRadius: radius * 2, maxHeight: "85%" }}>
+          <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: c.border, marginTop: space.s }} />
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space.l, gap: space.m }}>
+            {title ? <Text style={{ color: c.text, fontFamily: fonts.text, ...type.h3 }}>{title}</Text> : null}
+            <ReadOnly.Provider value={readOnly}>{children}</ReadOnly.Provider>
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    </Modal>
+  );
+}
+
+/** One row of a menu inside a Sheet. `danger` rows are red. */
+export function MenuItem({ label, onPress, danger, testID, allowReadOnly }: { label: string; onPress: () => void; danger?: boolean; testID?: string; allowReadOnly?: boolean }) {
+  const c = useTheme();
+  const off = useContext(ReadOnly) && !allowReadOnly;
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: off }}
+      disabled={off}
+      onPress={onPress}
+      style={({ pressed }) => ({ minHeight: touch, justifyContent: "center", paddingHorizontal: space.m, borderRadius: radius, backgroundColor: pressed ? c.surface : "transparent", opacity: off ? 0.5 : 1 })}
+    >
+      <Text style={{ color: danger ? c.danger : c.text, fontFamily: fonts.text, fontSize: 17, fontWeight: "600" }}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   button: { minHeight: touch, borderRadius: radius, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: space.l },
+  compact: { minHeight: touch - 4, paddingHorizontal: space.m },
   depth: { position: "absolute", left: 0, right: 0, top: buttonDepth, bottom: 0, borderRadius: radius },
   input: { minHeight: touch, borderRadius: radius, borderWidth: 1, paddingHorizontal: space.m, fontSize: 17 },
   card: { borderRadius: radius, borderWidth: 1, padding: space.l, gap: space.s },

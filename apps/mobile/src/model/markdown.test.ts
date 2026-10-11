@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInline, parseMarkdown, plainText } from "./markdown";
+import { checklistProgress, parseInline, parseMarkdown, plainText, toggleCheck } from "./markdown";
 
 describe("markdown blocks", () => {
   it("reads headings, paragraphs, lists, check boxes, code and rules", () => {
@@ -46,5 +46,28 @@ describe("plain text", () => {
   it("flattens and truncates", () => {
     expect(plainText("# Oi\n\n- **a**\n- b")).toBe("Oi a b");
     expect(plainText("x".repeat(200), 10)).toBe("xxxxxxxxx…");
+  });
+});
+
+describe("check boxes", () => {
+  const src = ["Precisamos de:", "- [ ] caixa de som", "- [x] microfone", "* [ ] extensão de **10 m**", "", "```", "- [ ] não é item", "```"].join("\n");
+
+  it("knows the line of each box and ticks only that one", () => {
+    const list = parseMarkdown(src)[1];
+    expect(list).toMatchObject({ kind: "list", items: [{ checked: false, line: 1 }, { checked: true, line: 2 }, { checked: false, line: 3 }] });
+    expect(toggleCheck(src, 1).split("\n")[1]).toBe("- [x] caixa de som");
+    expect(toggleCheck(src, 2).split("\n")[2]).toBe("- [ ] microfone");
+    expect(toggleCheck(src, 3).split("\n")[3]).toBe("* [x] extensão de **10 m**");
+    expect(toggleCheck(toggleCheck(src, 1), 1)).toBe(src);
+  });
+
+  it("leaves lines that are not boxes alone", () => {
+    expect(toggleCheck(src, 0)).toBe(src);
+    expect(toggleCheck(src, 99)).toBe(src);
+  });
+
+  it("counts ticked boxes, not code", () => {
+    expect(checklistProgress(src)).toEqual({ done: 1, total: 3 });
+    expect(checklistProgress("sem caixas")).toEqual({ done: 0, total: 0 });
   });
 });
