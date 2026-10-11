@@ -8,11 +8,13 @@ import { EventsTab } from "../../../ui/community/EventsTab";
 import { MeTab } from "../../../ui/community/MeTab";
 import { DisabledScope } from "../../../ui/community/Disabled";
 import { PeopleTab } from "../../../ui/community/PeopleTab";
+import { TasksTab } from "../../../ui/community/TasksTab";
 import { Banner, Body, Screen, Segmented, Title } from "../../../ui/kit";
 import { fonts, space, useTheme } from "../../../ui/theme";
 import { WhatsAppButton } from "../../../ui/WhatsApp";
 
-type Tab = "events" | "people" | "me";
+type Tab = "events" | "tasks" | "people" | "me";
+const TABS: readonly Tab[] = ["events", "tasks", "people", "me"];
 
 /** "Tudo em dia" is a small green dot; anything else slides in as a banner. */
 function SyncStatus({ status }: { status: ReturnType<typeof syncStatusKey> }) {
@@ -30,10 +32,10 @@ function SyncStatus({ status }: { status: ReturnType<typeof syncStatusKey> }) {
 }
 
 export default function Community() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab: initialTab } = useLocalSearchParams<{ id: string; tab?: string }>();
   const { t, store } = useApp();
   const entry = useCommunity(id);
-  const [tab, setTab] = useState<Tab>("events");
+  const [tab, setTab] = useState<Tab>(TABS.includes(initialTab as Tab) ? (initialTab as Tab) : "events");
 
   useEffect(() => {
     if (id) void store.syncOne(id);
@@ -76,12 +78,13 @@ export default function Community() {
         }}
         options={[
           { value: "events", label: t("tabEvents") },
+          { value: "tasks", label: t("tabTasks") },
           { value: "people", label: t("tabPeople") },
           { value: "me", label: t("tabMe") },
         ]}
       />
       <DisabledScope entry={entry}>
-        {tab === "events" ? <EventsTab entry={entry} /> : tab === "people" ? <PeopleTab entry={entry} /> : <MeTab entry={entry} />}
+        {tab === "events" ? <EventsTab entry={entry} /> : tab === "tasks" ? <TasksTab entry={entry} /> : tab === "people" ? <PeopleTab entry={entry} /> : <MeTab entry={entry} />}
       </DisabledScope>
     </Screen>
   );

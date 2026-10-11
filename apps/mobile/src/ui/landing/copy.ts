@@ -125,7 +125,7 @@ export const copy = {
       { q: "E depois do dia 25?", a: "O app continua. Comitês viram coletivos, coletivos viram comunidades: a mesma ferramenta serve para o que vier depois." },
       {
         q: "Como o app protege crianças e adolescentes?",
-        a: "O app é só para maiores de 18 anos e não tem envio de fotos nem conversas privadas. Abuso e exploração sexual infantil são proibidos: denuncie no app, escreva para a gente e procure as autoridades.",
+        a: "O app é só para maiores de 18 anos, não tem conversas privadas nem galeria de fotos: arquivos só entram em tarefas da organização, que a coordenação e a moderação podem apagar. Abuso e exploração sexual infantil são proibidos: denuncie no app, escreva para a gente e procure as autoridades.",
         link: "childSafety",
         more: "Ler os Padrões de Segurança Infantil",
       },

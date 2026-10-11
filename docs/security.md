@@ -36,7 +36,16 @@ Regras de implementação para o código TypeScript (`packages/crypto`) e Rust
 - O banco SQLite local é criptografado em repouso (SQLCipher) com uma chave guardada
   no keystore.
 - Apague buffers de texto claro descriptografado quando for viável; nunca faça cache de texto claro
-  fora do banco criptografado.
+  fora do banco criptografado. Exceção única: para abrir um anexo com outro
+  app, o arquivo decifrado é gravado no diretório de cache do sistema só pelo
+  tempo de compartilhar, e apagado em seguida; nunca no diretório de
+  documentos nem em qualquer lugar que entre em backup.
+- Anexos de tarefas (protocolo §9.7) são cifrados com uma chave aleatória
+  própria por arquivo (XChaCha20-Poly1305, contexto `vv/blob/v1`), gerada
+  pelo CSPRNG, e a chave só viaja dentro da operação cifrada que referencia o
+  arquivo. Ao abrir, verifique o SHA-256 do texto cifrado contra o `blob_id`
+  antes do AEAD, e nunca mostre um arquivo que falhou em qualquer das duas
+  verificações.
 
 ## Nó
 
@@ -45,6 +54,11 @@ Regras de implementação para o código TypeScript (`packages/crypto`) e Rust
 - Logs: sem corpos de requisição, sem tokens, sem endereços IP por padrão
   (configurável para tratamento de abuso, desligado por padrão, retenção curta).
 - Limitação de taxa em `intake`, `auth/challenge` e postagens em caixas postais.
+- Blobs (anexos) são bytes opacos nomeados pelo próprio SHA-256: o nó
+  recalcula o hash ao receber, impõe `max_blob_bytes` por arquivo e uma cota
+  por comunidade, e nunca interpreta o conteúdo nem o serve com um tipo de
+  mídia além de `application/octet-stream`. Só admins e moderadores (escopo
+  `moderate`) listam e apagam blobs.
 - TLS obrigatório, exceto em `localhost`; o nó pode obter certificados via
   ACME ou ficar atrás de um proxy reverso.
 
@@ -56,6 +70,13 @@ Regras de implementação para o código TypeScript (`packages/crypto`) e Rust
 - Não peça a permissão de localização "sempre"; apenas "durante o uso" ou
   pontos de referência manuais.
 - O acesso ao calendário é somente leitura e usado apenas para a correspondência local.
+- Arquivos entram só pelo seletor de documentos do sistema (um arquivo por
+  vez, sem permissão ampla de armazenamento, câmera ou galeria) e saem só
+  pela folha de compartilhamento do sistema. O app nunca executa, interpreta
+  nem renderiza anexos por conta própria: nada de visualizador de PDF,
+  imagens inline ou HTML embutido.
+- Markdown em descrições e comentários é renderizado por um leitor próprio
+  (`model/markdown.ts`) que não aceita HTML e só segue links `http(s)`.
 
 ## Relatando vulnerabilidades
 

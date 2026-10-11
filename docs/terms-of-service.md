@@ -1,6 +1,6 @@
 # Termos de Uso — Vamo Virar
 
-**Última atualização:** 10 de outubro de 2026
+**Última atualização:** 11 de outubro de 2026
 
 Estes Termos de Uso ("Termos") regem o uso do aplicativo **Vamo Virar** ("o
 app"), desenvolvido por **Hugo Rafael Bessa de Andrade** (CPF 090.885.294-00) ("nós"). Ao
@@ -9,8 +9,9 @@ instalar ou usar o app, você concorda com estes Termos e com a
 
 ## 1. O que é o Vamo Virar
 
-O Vamo Virar é uma plataforma local-first para organizar eventos comunitários e
-coordenar quem participa deles. As comunidades são sincronizadas por **nós da
+O Vamo Virar é uma plataforma local-first para organizar eventos comunitários
+("ações"), coordenar quem participa deles e distribuir as tarefas de
+organização, com comentários e arquivos anexados. As comunidades são sincronizadas por **nós da
 comunidade**, servidores pequenos operados por pessoas ou organizações
 independentes (que podem ser você, sua comunidade ou um serviço de hospedagem).
 O app mostra, apenas a você, uma sugestão de disponibilidade com base na sua
@@ -30,12 +31,15 @@ agenda e nos seus lugares, que ficam no seu celular.
 ## 3. Comunidades, administradores e nós
 
 - Cada comunidade é gerida por seus **administradores**, que definem quem
-  entra, quem sai e as regras locais. Eles podem ver o conteúdo da comunidade e
-  remover membros.
+  entra, quem sai e as regras locais. Eles, e os moderadores que designarem,
+  podem ver o conteúdo da comunidade, remover membros e apagar ações,
+  tarefas, comentários e arquivos.
 - O **operador do nó** é independente de nós, os desenvolvedores do app. Ele é responsável pela
   disponibilidade, pelos backups, pelos registros e pelos limites do seu
-  servidor, e pode suspender ou encerrar a hospedagem conforme as regras
-  dele. Uma comunidade pode ser migrada para outro nó por seus administradores.
+  servidor (inclusive o espaço para arquivos anexados), e pode suspender ou
+  encerrar a hospedagem conforme as regras dele. Uma comunidade pode ser
+  migrada para outro nó por seus administradores; os arquivos anexados não
+  acompanham a migração automaticamente e precisam ser anexados de novo.
 - Não somos parte da relação entre você, sua comunidade e o operador do nó, e
   não moderamos o conteúdo das comunidades, que é cifrado e que não conseguimos
   ler.
@@ -50,13 +54,15 @@ Você concorda em **não** usar o app para:
 4. abusar, explorar, aliciar ou sexualizar crianças ou adolescentes, ou
    produzir, compartilhar ou pedir material de abuso sexual infantil (veja os
    [Padrões de Segurança Infantil](child-safety.md));
-5. enviar spam, abusar de convites ou sobrecarregar servidores, inclusive contornando limites de taxa;
-6. tentar acessar comunidades, chaves, dados ou sistemas sem autorização,
+5. enviar spam, abusar de convites ou sobrecarregar servidores, inclusive contornando limites de taxa ou de espaço;
+6. anexar arquivos que você não tem o direito de compartilhar, ou que
+   contenham vírus ou outro código malicioso;
+7. tentar acessar comunidades, chaves, dados ou sistemas sem autorização,
    ou comprometer a segurança do app ou dos servidores das comunidades (para relatar uma vulnerabilidade,
    veja [`security.md`](security.md));
-7. fazer engenharia reversa do app além do que a licença de código aberto
+8. fazer engenharia reversa do app além do que a licença de código aberto
    permite;
-8. se passar por outra pessoa ou falsificar informações.
+9. se passar por outra pessoa ou falsificar informações.
 
 Administradores podem remover quem violar essas regras de suas comunidades.
 Casos de abuso ou exploração infantil são levados às autoridades, como
@@ -64,14 +70,20 @@ descrito nos [Padrões de Segurança Infantil](child-safety.md).
 
 ## 5. Seu conteúdo
 
-- Você mantém todos os direitos sobre o conteúdo que cria (eventos, mensagens,
-  respostas).
+- Você mantém todos os direitos sobre o conteúdo que cria (ações, tarefas,
+  comentários, arquivos anexados, mensagens, respostas).
 - Você nos concede apenas a permissão técnica necessária para que o app cifre,
   armazene e sincronize esse conteúdo com os membros da comunidade e com o nó.
-- Você é responsável pelo que publica e compartilha. Lembre-se de que
+- Você é responsável pelo que publica e compartilha, inclusive pelos arquivos
+  que anexa. Lembre-se de que
   **os membros e administradores da comunidade veem o que você compartilha nela**, e
-  de que conteúdo já replicado em outros aparelhos **pode não ser possível
-  de apagar**.
+  de que conteúdo já replicado em outros aparelhos, inclusive arquivos que
+  outras pessoas abriram ou baixaram, **pode não ser possível de apagar**.
+- Os arquivos anexados ficam cifrados no nó da comunidade enquanto a tarefa
+  existir. Apagar a tarefa, ou a ação dela, faz o app pedir ao nó que os
+  descarte; tarefas feitas ou canceladas são descartadas depois de um prazo
+  definido pela comunidade (30 dias, por padrão). O operador do nó pode
+  limitar o espaço para arquivos e apagá-los conforme as regras dele.
 
 ## 6. Calendários, localização e sugestões de disponibilidade
 

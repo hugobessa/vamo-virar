@@ -12,6 +12,8 @@ comunidade, clientes iOS/Android. Números de seção (§) referem-se a `protoco
 | Quem é membro de qual comunidade | criptografado no log (plano de dados) | **alta** (organização política) |
 | Quem participa de qual evento | criptografado no log | alta |
 | Detalhes do evento (horário, local) | criptografado no log | média–alta |
+| Tarefas e comentários (quem faz o quê, discussões da organização) | criptografado no log | alta |
+| Anexos de tarefas (fotos, documentos) | blob no nó, cifrado com chave própria por arquivo; a chave fica no log | alta |
 | Conjunto de admins (chaves públicas por comunidade) | nó, em texto claro | baixa–média |
 | Nome/descrição da comunidade no diretório | público por escolha | baixa |
 | Chaves privadas | armazenamento seguro do dispositivo | crítica |
@@ -64,6 +66,11 @@ comunidade, clientes iOS/Android. Números de seção (§) referem-se a `protoco
 | Redirecionamento "moved" forjado (A1, A3) | Os dispositivos só se movem com uma entrada `migrate` assinada por um admin, que eles mesmos verificam; um `409 moved` isolado apenas mantém suas alterações na fila. Testado em `tests/offline` ("a node claiming the community moved…"). protocolo §11.3 |
 | `migrate` revela o endereço do novo nó | A lista de nós fica no cabeçalho de controle em texto claro (o nó antigo precisa aplicar o congelamento e responder com ela). O operador antigo, e membros removidos que ainda puxam dele, descobrem para onde a comunidade foi; nenhum dos dois ganha acesso lá (sem EAK atual). Aceito para a v0. |
 | Exposição da API de operador | Listener separado, bearer token, nenhum endpoint de conteúdo ou de chaves; as métricas são por cliente (tenant), nunca por comunidade, então serviços de monitoramento não recebem uma lista de comunidades. |
+| Anexos no nó (A1, A2) | O nó guarda bytes opacos nomeados pelo SHA-256 do texto cifrado e não tem a chave de nenhum arquivo. **Vê** tamanhos, horários de envio e de download e o total por comunidade; **consegue** reter ou apagar arquivos (o app diz "esse arquivo não está mais no servidor") e substituí-los por lixo, que falha na verificação de hash e de AEAD. Não sabe que arquivo pertence a que tarefa ou pessoa: os tokens de acesso são por comunidade, não por membro. protocolo §9.7, §15 |
+| Membro removido com cópia dos anexos (A4) | Os blobs não são recifrados na rotação de época: quem já tinha o texto cifrado e a chave (ambos no log até a sua época) continua lendo o que já podia ler. Depois do `rotate`, não obtém token para baixar nada, novo ou antigo. Mesmo alcance do histórico do log (cenário 7). |
+| Membro esgota a cota de arquivos (A5) | Cota por comunidade e limite por arquivo no nó; uploads órfãos (sem tarefa que os referencie) são recolhidos pelos aparelhos de admins e moderadores ao sincronizar. O nó não atribui uploads a membros, então um abusador só é identificado pelas tarefas que cria; admins podem removê-lo e rotacionar. Aceito para a v0. |
+| Anexo malicioso (malware, arquivo armadilha) (A5) | O app nunca abre, executa nem renderiza anexos: entrega os bytes à folha de compartilhamento do sistema, que os passa ao app que a pessoa escolher. O nome e o tipo mostrados vêm da tarefa (cifrada e assinada por quem anexou), não do nó. Moderação apaga tarefas e arquivos; denúncias chegam à coordenação. |
+| Rastreamento por links em Markdown (A5) | Descrições e comentários aceitam só links `http(s)`, abertos pelo navegador do sistema ao toque; nada é buscado automaticamente (sem pré-visualização, sem imagens remotas). |
 
 ## Não objetivos explícitos da v0
 

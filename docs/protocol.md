@@ -591,6 +591,7 @@ Policy {
     keep_attendee_list:          bool = false
     removed_member_detail_days:  u32 = 30    # depois, o perfil é descartado
     rejected_join_request_days:  u32 = 7
+    closed_task_detail_days:     u32?  = 30   # tarefas done/cancelled são apagadas depois (§9.7); só gravado se definido
   }
   min_client_version: text?
 }
@@ -776,6 +777,104 @@ apenas para os participantes confirmados, não uma operação no log.
 
 Todos os dados de localização do próprio membro (pontos de referência, raio,
 GPS atual) ficam apenas no dispositivo e nunca aparecem em nenhuma operação.
+
+### 9.7 Tarefas
+
+Itens de trabalho da organização ("quem leva o som?", "imprimir 500
+panfletos"), no escopo da comunidade ou de um evento. Vivem em
+`CommunityState.tasks` (§12.2); o mapa fica **ausente** quando não há
+tarefas, para que comunidades que nunca as usaram produzam o mesmo
+`state_hash` de antes.
+
+```
+Task {
+  task_id: bytes(16),
+  event_id?: bytes(16),          # ausente = tarefa da comunidade; pode apontar para um EventSummary
+  title: text(1..200),
+  description: text(..5000),     # Markdown
+  tags: [text(1..30)],           # minúsculas, sem repetição, ordenadas; ≤ 10
+  status: "awaiting_volunteer" | "todo" | "in_progress" | "blocked" | "done" | "cancelled",
+  priority: "low" | "normal" | "high" | "urgent" = "normal",
+  due_at?: u64,
+  assignee?: member_id,          # a pessoa responsável; ausente ⇔ status awaiting_volunteer (enquanto aberta)
+  volunteers: [member_id],       # quem ajuda; ordenado, nunca inclui assignee; ≤ 20
+  attachments: [Attachment],     # ≤ 10
+  comments: [Comment],           # em ordem de seq; ≤ 200
+  history: [{status, by, seq, note?}],   # as últimas 50 mudanças de status; a primeira é a criação
+  created_by, created_seq, updated_seq,
+  closed_at?: u64                # relógio de retenção quando ficou done ou cancelled
+}
+Attachment { blob_id: bytes(32), key: bytes(32), nonce: bytes(24), name: text(1..120), mime: text(1..100), size: u64 }
+Comment    { comment_id: bytes(16), author: member_id, body: text(1..2000), seq, edited_seq? }
+```
+
+**Quem manda numa tarefa ("gestão")**: admins e moderadores, sempre; numa
+tarefa de evento, também os `organizers` desse evento (enquanto o evento
+existir em `events`; depois de resumido, só a moderação). Tarefas da
+comunidade são só da coordenação e da moderação.
+
+**Quem vê e comenta**: a gestão, a pessoa responsável, quem ajuda e, numa
+tarefa de evento, quem está `confirmed` ou `reconfirm` nele. Uma tarefa
+`awaiting_volunteer` é vista por todo membro: é a fila de voluntariado. Isso
+é uma regra do reducer e da interface; criptograficamente todo membro com
+`K_epoch` lê tudo (§17.4).
+
+| type | body | quem | legal quando |
+|---|---|---|---|
+| `task.create` | `{task_id, event_id?, title, description?, tags?, priority?, due_at?, assignee?, volunteers?, attachments?}` | gestão do escopo | `task_id` não usado; `event_id`, se dado, existe (evento ou resumo); `assignee` e `volunteers` ativos. Nasce `todo` com `assignee`, senão `awaiting_volunteer` |
+| `task.update` | `{task_id, title?, description?, tags?, priority?, due_at?, attachments?, event_id?}` | gestão ou a pessoa responsável; mudar `event_id` exige gestão dos dois escopos | aberta. `null` em `due_at` ou `event_id` remove |
+| `task.assign` | `{task_id, member_id?}` | gestão: qualquer membro ativo, substituindo quem estava; qualquer membro: a si próprio, se não há responsável | aberta; o alvo não é já o responsável. Sai de `volunteers` se estava lá; `awaiting_volunteer` → `todo` |
+| `task.unassign` | `{task_id}` | gestão ou a própria pessoa responsável | aberta, com responsável. Volta a `awaiting_volunteer` |
+| `task.join` | `{task_id, member_id?}` | qualquer membro, a si próprio; gestão, qualquer membro ativo | aberta; não está na tarefa; `capacity_full` com 20 |
+| `task.leave` | `{task_id, member_id?}` | a própria pessoa, ou gestão | aberta; está em `volunteers` |
+| `task.status` | `{task_id, status, note?}` | ver abaixo | ver abaixo |
+| `task.comment` | `{task_id, comment_id, body}` | quem vê a tarefa | `comment_id` não usado; `capacity_full` com 200 |
+| `task.comment_edit` | `{task_id, comment_id, body}` | o autor do comentário | o comentário existe |
+| `task.comment_delete` | `{task_id, comment_id}` | o autor, ou a gestão | o comentário existe |
+| `task.remove` | `{task_id, reason?}` | gestão | a tarefa existe, em qualquer estado. Apaga tudo |
+
+Transições de `task.status` (a primeira válida vence, §8.3):
+
+- `todo`, `in_progress`, `blocked`: entre si, por quem está na tarefa
+  (responsável ou ajuda) ou pela gestão. Exigem responsável; sem um, a
+  tarefa é `awaiting_volunteer` e só `task.assign` a tira daí
+  (`awaiting_volunteer` nunca é alvo de `task.status` numa tarefa aberta).
+- `done`: por quem está na tarefa ou pela gestão; de `awaiting_volunteer`,
+  só pela gestão.
+- `cancelled`: de qualquer estado aberto, só pela gestão.
+- Reabrir (de `done` ou `cancelled`): só pela gestão, para `todo` se há
+  responsável, senão para `awaiting_volunteer`; outro alvo é
+  `illegal_transition`.
+
+Cada mudança aplicada entra em `history` com `by`, `seq` e a `note`
+opcional (≤ 500); a interface junta `history` e `comments` por `seq` numa
+linha do tempo. `done` e `cancelled` gravam `closed_at`; reabrir o apaga.
+
+**Cascatas.** `member.remove`, `member.block` e `member.leave` tiram a
+pessoa das tarefas abertas: de `volunteers`, e de `assignee` (a tarefa volta
+a `awaiting_volunteer`, com uma entrada em `history` em nome dela). Tarefas
+fechadas guardam quem fez. `event.remove` apaga as tarefas do evento. Quando
+um evento é resumido pela retenção, suas tarefas ficam, apontando para o
+resumo.
+
+**Retenção.** Uma tarefa `done` ou `cancelled` é apagada
+`retention.closed_task_detail_days` (padrão 30; o campo é opcional na
+política e só é gravado quando definido) depois de `closed_at`, pelo
+relógio de retenção (§12.2). Tarefas abertas ficam para sempre.
+
+**Anexos.** O dispositivo cifra cada arquivo com uma chave aleatória própria
+(XChaCha20-Poly1305, `aad = "vv/blob/v1"`, texto claro ≤ 10 MiB) e o envia
+ao nó como blob opaco nomeado por `SHA-256(texto cifrado)` (§15,
+`/blobs`). `key` e `nonce` viajam só dentro da operação cifrada, então o nó
+vê tamanhos e nada mais, e a rotação de época não precisa recifrar
+arquivos. Nada no nó sabe que blob pertence a que tarefa: o dispositivo de
+quem apaga uma tarefa (ou o evento dela) deixa os blobs para trás, e
+dispositivos de admins e moderadores os recolhem ao sincronizar, apagando o
+que o estado não referencia mais (ignorando uploads com menos de uma hora,
+cuja operação pode ainda estar a caminho). Os blobs não fazem parte do
+corpo de restauração da §11.3: ao mudar de nó, o dispositivo que faz a
+mudança copia os blobs referenciados pelo estado **[LATER]**; até lá, os
+anexos de uma comunidade que mudou de nó precisam ser enviados de novo.
 
 ---
 
@@ -1063,6 +1162,7 @@ CommunityState {
   members: [MemberRecord],                 # ativos + removidos recentemente (para exibir o motivo)
   events: [Event + participations],        # agendados, e concluídos dentro da janela de detalhe
   event_summaries: [EventSummary],         # concluídos além da janela de detalhe, conforme a retenção
+  tasks?: [Task],                          # §9.7; ausente quando não há nenhuma
   rejected_recent: [(seq, op_id, author, type, reason)]   # últimos 100, para retorno ao autor
 }
 EventSummary { event_id, title, starts_at, status, confirmed_count, attended_count, attendees? }
@@ -1203,6 +1303,10 @@ autenticadas enviam `Authorization: Bearer <token>` da §3.1.
 | `GET /c/{cid}/export` | control | o corpo de restauração da §11.3 para esta comunidade; funciona mesmo movida ou suspensa |
 | `POST /c/{cid}/invites` | control | `{hash, expires_at, max_uses}` |
 | `GET /c/{cid}/directory` / `PUT` | — / control | `DirectoryEntry` assinada e opaca (§11.2) |
+| `PUT /c/{cid}/blobs/{blob_id}` | community | corpo: bytes opacos (`application/octet-stream`); `{blob_id}` é o SHA-256 do corpo, em hex (senão `malformed`) → `{blob_id, size}`; idempotente. `too_large` acima de `max_blob_bytes` (padrão 11 MiB); `quota_exceeded` (507) acima da cota de blobs da comunidade; `disabled`, `suspended` e `moved` como em `POST …/ops` (§9.7) |
+| `GET /c/{cid}/blobs/{blob_id}` | community | → os bytes guardados, ou `404 not_found` |
+| `GET /c/{cid}/blobs` | moderate | → `{blobs: [{blob_id, size, at}], total_bytes}`, para recolher órfãos (§9.7) |
+| `DELETE /c/{cid}/blobs/{blob_id}` | moderate | apaga; idempotente |
 | `PUT /c/{cid}/cursor` | community | §6.5 **[LATER]** |
 | `PUT /c/{cid}/push` | mailbox | §14 **[LATER]** |
 | `GET /c/{cid}/stream?token=&mailbox_token=` (WebSocket) | community (+ mailbox) | CBOR servidor → cliente: `{head_seq}`, `{mailbox}`, `{resync: true}` |
@@ -1252,6 +1356,7 @@ vv/ctrl-sig/v1       vv/log-entry/v1   vv/key-env/v1
 vv/join/v1           vv/join-req/v1    vv/invite/v1
 vv/state/v1          vv/directory/v1   vv/snapshot-sig/v1
 vv/snapshot-access/v1  vv/probe-reply/v1  vv/mail/<kind>/v1
+vv/blob/v1
 ```
 
 ---

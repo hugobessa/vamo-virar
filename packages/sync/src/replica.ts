@@ -14,6 +14,8 @@ import {
   memberIdOf,
   restoreSnapshot,
   stateHash,
+  TASK_LIMITS,
+  type Attachment,
   type CommunityState,
   type Entry,
   type MemberRecord,
@@ -32,10 +34,12 @@ import {
   Keyring,
   LogVerifier,
   mailboxId,
+  openBlob,
   openJoinRequest,
   openKeyEnvelope,
   openSnapshot,
   rotateEpoch,
+  sealBlob,
   sealJoinRequest,
   sealKeyEnvelope,
   sealOp,
@@ -860,6 +864,66 @@ export class Replica {
       reason: m.reason,
       ...(m.details !== undefined ? { details: m.details } : {}),
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Attachments (§9.7): files sealed on the device, stored on the node as blobs
+  // -------------------------------------------------------------------------
+
+  /**
+   * Seals a file under a fresh key and uploads it. The returned record goes
+   * into a `task.create` or `task.update` body; nothing is referenced until
+   * that op lands, so an upload the person abandons is an orphan that
+   * `tidyBlobs` drops later.
+   */
+  async uploadAttachment(bytes: Uint8Array, name: string, mime: string): Promise<Attachment> {
+    if (!name.trim()) throw new Error("attachment needs a name");
+    const sealed = sealBlob(bytes, this.rng);
+    const stored = await this.client.putBlob(this.data.cid, this.currentAccess(), sealed.ct);
+    return {
+      blob_id: toHex(stored.blobId),
+      key: toHex(sealed.key),
+      nonce: toHex(sealed.nonce),
+      name: name.trim().slice(0, TASK_LIMITS.attachmentName),
+      mime: mime.trim().slice(0, TASK_LIMITS.attachmentMime) || "application/octet-stream",
+      size: bytes.length,
+    };
+  }
+
+  /** Fetches and opens an attachment. Null when the node no longer has it. */
+  async downloadAttachment(att: Attachment): Promise<Uint8Array | null> {
+    const ct = await this.client.getBlob(this.data.cid, this.currentAccess(), fromHex(att.blob_id));
+    if (!ct) return null;
+    const plain = openBlob({ key: fromHex(att.key), nonce: fromHex(att.nonce), blobId: fromHex(att.blob_id) }, ct);
+    if (!plain) throw new Error("attachment failed verification");
+    return plain;
+  }
+
+  /** Blob ids referenced by the current state: everything else on the node is an orphan. */
+  private referencedBlobs(): Set<string> {
+    const out = new Set<string>();
+    for (const task of Object.values(this.data.state?.tasks ?? {})) for (const a of task.attachments) out.add(a.blob_id);
+    return out;
+  }
+
+  /**
+   * Admin or moderator: drops blobs that no task references any more (the
+   * task or its event was removed, retention dropped it, or an upload was
+   * abandoned). Uploads from the last hour are left alone: their task op may
+   * still be on its way. Returns how many were deleted.
+   */
+  async tidyBlobs(graceMs = 3_600_000): Promise<number> {
+    if (!this.canModerate || !this.data.state) return 0;
+    const { blobs } = await this.client.listBlobs(this.data.cid, this.data.keys.signing, this.staffScope);
+    const keep = this.referencedBlobs();
+    const cutoff = Date.now() - graceMs;
+    let n = 0;
+    for (const b of blobs) {
+      if (keep.has(toHex(b.blobId)) || b.at > cutoff) continue;
+      await this.client.deleteBlob(this.data.cid, this.data.keys.signing, b.blobId, this.staffScope);
+      n++;
+    }
+    return n;
   }
 
   /** Any member: reports another member to the community's admins and moderators. */
