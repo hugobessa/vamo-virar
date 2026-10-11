@@ -1,6 +1,6 @@
 # Política de Privacidade — Vamo Virar
 
-**Última atualização:** 10 de outubro de 2026
+**Última atualização:** 11 de outubro de 2026
 
 Esta política explica quais dados o aplicativo **Vamo Virar** ("o app") trata,
 onde eles ficam e quais são os seus direitos. O Vamo Virar foi desenhado para
@@ -24,9 +24,9 @@ das comunidades** e não operamos nenhum servidor central de contas.
 
 - Sua **agenda**, sua **localização** e sua **disponibilidade** ficam **só no seu
   celular**. O app apenas responde "consigo ir?" a quem perguntou.
-- O que é compartilhado com uma comunidade (membros, eventos, participações)
-  é **cifrado de ponta a ponta** antes de sair do aparelho. O nó guarda apenas
-  texto cifrado.
+- O que é compartilhado com uma comunidade (membros, eventos, participações,
+  tarefas, comentários e arquivos anexados) é **cifrado de ponta a ponta**
+  antes de sair do aparelho. O nó guarda apenas texto cifrado.
 - Não usamos **analytics, publicidade, rastreadores nem relatórios de falha**
   de terceiros que enviem dados para fora do seu aparelho.
 - Não vendemos nem compartilhamos dados pessoais.
@@ -53,6 +53,12 @@ Quando você cria ou entra numa comunidade, o app envia ao nó, **já cifrados**
 
 - sua participação na comunidade e seu nome ou apelido de exibição, conforme você informar;
 - eventos criados, convites, confirmações de presença e voluntariado;
+- tarefas de organização: título, descrição, etiquetas, prazo, quem é
+  responsável e quem ajuda, as mudanças de situação e os comentários;
+- arquivos anexados a tarefas (fotos, documentos; até 10 MB cada). Cada
+  arquivo é cifrado no seu celular com uma chave própria antes de ser
+  enviado, e essa chave só viaja dentro do conteúdo cifrado da tarefa. O nó
+  guarda o arquivo cifrado e conhece apenas o tamanho dele;
 - respostas a perguntas de organizadores do tipo "quem poderia vir?", que contêm
   apenas **"posso", "talvez" ou "não posso"** (nunca horários, locais ou
   distâncias), seladas para quem perguntou. As respostas automáticas vêm
@@ -61,8 +67,12 @@ Quando você cria ou entra numa comunidade, o app envia ao nó, **já cifrados**
 Esse conteúdo só pode ser lido por membros da comunidade que tenham as chaves.
 **Os outros membros da comunidade e os administradores veem o que você
 decide compartilhar nela** (por exemplo, que você é membro e se vai a um
-evento). Considere isso antes de entrar em comunidades que tratem de assuntos
-sensíveis.
+evento). O app mostra cada tarefa, com seus comentários e arquivos, a quem
+está nela, a quem participa da ação a que ela pertence e à coordenação e à
+moderação; tarefas à espera de voluntário aparecem para todos os membros.
+Tecnicamente, porém, todo membro da comunidade tem as chaves para ler tudo o
+que ela contém. Considere isso antes de entrar em comunidades que tratem de
+assuntos sensíveis.
 
 ### 3.3 Dados que o nó consegue ver (metadados)
 
@@ -70,6 +80,9 @@ Mesmo sem ler o conteúdo, o nó e quem o opera conseguem observar:
 
 - o **endereço IP** e o horário das conexões, o tamanho e a frequência das mensagens
   e a atividade das caixas postais;
+- o tamanho de cada arquivo anexado, quando foi enviado e quando foi baixado,
+  e o espaço total que a comunidade ocupa (sem saber a que tarefa ou pessoa
+  cada arquivo pertence);
 - o identificador da comunidade e as **chaves públicas dos administradores**
   (em texto claro);
 - o nome e a descrição da comunidade, **apenas se** a comunidade optar por listá-los
@@ -113,7 +126,12 @@ dados pessoais além do que as lojas nos informam em relatórios agregados.
 | Localização aproximada, apenas durante o uso | Botão "usar onde estou agora" | Você pode cadastrar lugares manualmente |
 
 O app **não** solicita localização precisa, nem em segundo plano, e não pede
-acesso a contatos, câmera ou microfone.
+acesso a contatos, câmera ou microfone. Para anexar um arquivo a uma tarefa,
+o app abre o seletor de arquivos do sistema e recebe apenas o arquivo que você
+escolher; ele não tem acesso aos seus outros arquivos nem às suas fotos. Um
+arquivo que você abre a partir de uma tarefa é decifrado no seu celular e
+guardado na pasta de cache do app para ser aberto ou compartilhado; o sistema
+pode apagá-lo a qualquer momento.
 
 ## 5. Bases legais (LGPD)
 
@@ -138,9 +156,15 @@ comunidade que você escolher.
   (por padrão, após 30 dias). Itens de caixas postais expiram automaticamente.
   Entradas de controle (administradores, mudanças de chaves) são mantidas, pois
   permitem reconstruir a comunidade.
+- **Arquivos anexados, no nó:** ficam enquanto a tarefa existir. Quando a
+  tarefa ou a ação dela é apagada, e quando uma tarefa feita ou cancelada
+  passa do prazo de retenção definido pela comunidade (30 dias, por padrão),
+  os aparelhos da coordenação e da moderação pedem ao nó que descarte os
+  arquivos que nada mais referencia. Ao sair da comunidade, os arquivos que
+  você anexou continuam nela.
 - **Por limitações técnicas:** o conteúdo cifrado já replicado em
-  dispositivos de outros membros ou em backups do nó **não pode ser apagado
-  por nós**.
+  dispositivos de outros membros ou em backups do nó, e arquivos que outros
+  membros abriram ou baixaram, **não podem ser apagados por nós**.
 
 ## 7. Compartilhamento
 

@@ -42,6 +42,9 @@ const BY_MESSAGE: [RegExp, string][] = [
   [/^report details are too long/, "O texto da denúncia está longo demais."],
   [/^member\.(block|unblock) /, "Não foi possível fazer isso. Talvez outra pessoa da coordenação já tenha feito."],
   [/^this device does not hold the intake key/, "Este celular não consegue ler os pedidos de entrada. Peça a outra pessoa da coordenação."],
+  [/^attachment is too large/, "O arquivo passa de 10 MB."],
+  [/^attachment needs a name/, "O arquivo precisa de um nome."],
+  [/^attachment failed verification/, "Esse arquivo não confere com o que foi anexado."],
 ];
 
 /** A Portuguese sentence for any error; never the raw English text. */

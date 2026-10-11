@@ -201,6 +201,56 @@ try {
     await shot(bia, "12-going");
   });
 
+  await step("Ana creates a task for the event", async () => {
+    await ana.reload();
+    await seen(ana, "Plenária no Derby").first().click({ timeout: 15000 });
+    await byId(ana, "event-new-task").last().click();
+    await byId(ana, "task-title").fill("Levar a caixa de som");
+    await byId(ana, "task-tags").fill("som, Logística");
+    await shot(ana, "12a-new-task");
+    await byId(ana, "task-save").click();
+    await seen(ana, "Levar a caixa de som").first().waitFor({ timeout: 15000 });
+    await shot(ana, "12b-event-with-task");
+    // The sync status lives on the community screen.
+    await ana.goto(appUrl);
+    await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
+    await ana.getByText("Tudo em dia").last().waitFor({ timeout: 15000 });
+  });
+
+  await step("Bia takes the task from the board, comments and starts it", async () => {
+    await bia.goto(appUrl);
+    await bia.getByText("Coletivo Recife").first().click({ timeout: 15000 });
+    await bia.getByRole("tab", { name: "Tarefas" }).last().click();
+    await seen(bia, "Esperando voluntário · 1").first().waitFor({ timeout: 15000 });
+    await shot(bia, "12c-board");
+    await seen(bia, "Levar a caixa de som").first().click();
+    await byId(bia, "self-take").last().click();
+    await seen(bia, "A fazer").first().waitFor({ timeout: 15000 });
+    await byId(bia, "comment-text").last().fill("Pego a caixa com o **Zé** na quinta.");
+    await byId(bia, "comment-send").last().click();
+    await seen(bia, "Zé").first().waitFor({ timeout: 15000 });
+    await byId(bia, "status-in_progress").last().click();
+    await seen(bia, "Em andamento").first().waitFor({ timeout: 15000 });
+    await shot(bia, "12d-task-taken");
+    await bia.goto(appUrl);
+    await bia.getByText("Coletivo Recife").first().click({ timeout: 15000 });
+    await bia.getByText("Tudo em dia").last().waitFor({ timeout: 15000 });
+  });
+
+  await step("Ana sees Bia on the task", async () => {
+    await ana.reload();
+    await ana.getByRole("tab", { name: "Tarefas" }).last().click();
+    await seen(ana, "Em andamento · 1").first().waitFor({ timeout: 20000 });
+    await seen(ana, "Levar a caixa de som").first().click();
+    await seen(ana, "Pego a caixa com o").first().waitFor({ timeout: 15000 });
+    await shot(ana, "12e-task-as-admin");
+    // Back to the action page, where the next steps expect Ana to be.
+    await ana.goto(appUrl);
+    await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
+    await seen(ana, "Plenária no Derby").first().click({ timeout: 15000 });
+    await ana.getByTestId("ask-who-can-come").last().waitFor({ timeout: 15000 });
+  });
+
   await step("Calendar settings explain what is read and work without any calendar", async () => {
     await bia.goto(appUrl);
     await byId(bia, "go-settings").click();

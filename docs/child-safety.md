@@ -1,6 +1,6 @@
 # Padrões de Segurança Infantil — Vamo Virar
 
-**Última atualização:** 10 de outubro de 2026
+**Última atualização:** 11 de outubro de 2026
 
 Estes são os padrões publicados do aplicativo **Vamo Virar** ("o app"),
 desenvolvido por **Hugo Rafael Bessa de Andrade** ("nós"), contra o **abuso e a
@@ -17,8 +17,9 @@ o número de emergência local. O app não é um serviço de emergência.
 
 ## 1. O que é proibido
 
-Nas comunidades, nos eventos, nos perfis, nas mensagens de entrada, nas
-denúncias e em qualquer outra parte do app, é proibido:
+Nas comunidades, nas ações (eventos), nas tarefas e seus comentários e
+arquivos anexados, nos perfis, nas mensagens de entrada, nas denúncias e em
+qualquer outra parte do app, é proibido:
 
 1. produzir, compartilhar, pedir, armazenar ou indicar onde encontrar
    **material de abuso sexual infantil** (em inglês, _CSAM_), inclusive
@@ -48,23 +49,32 @@ coordenação da comunidade ou escreva para nós (seção 5).
 
 ## 3. Como o app é feito para reduzir riscos
 
-- **Sem fotos, vídeos nem arquivos.** O app não permite enviar imagens,
-  vídeos, áudios nem anexos de nenhum tipo: só texto curto, como nomes e
-  dados de eventos.
+- **Arquivos só dentro das tarefas da organização.** Não há galeria, álbum,
+  envio de fotos entre pessoas nem compartilhamento de mídia solto. O único
+  lugar onde um arquivo (uma foto, um documento) pode ser anexado é uma
+  **tarefa** de trabalho da comunidade: "imprimir os panfletos", "levar o
+  som". Só a coordenação, a moderação e quem organiza a ação criam tarefas;
+  quem anexa um arquivo precisa estar na tarefa (ser a pessoa responsável ou
+  quem a criou e a gere). Cada arquivo tem no máximo 10 MB, e a coordenação e
+  a moderação podem apagar qualquer tarefa, comentário ou arquivo.
 - **Sem conversas privadas.** Não há bate-papo nem mensagens diretas entre
-  pessoas.
+  pessoas. Os comentários numa tarefa são vistos por todo mundo que está
+  nela, por quem participa da ação e pela coordenação e a moderação da
+  comunidade: nunca por só duas pessoas.
 - **Sem busca de desconhecidos.** Não há lista pública de pessoas nem de
   comunidades no app. Só se entra numa comunidade com um link de convite
   (que vale uma vez e por 7 dias), e quem coordena aprova cada pedido.
 - **Coordenação e moderação em cada comunidade.** Cada comunidade tem
   administradores e pode ter moderadores, que recebem as denúncias e podem
-  remover eventos, bloquear pessoas e desativar a comunidade.
+  remover ações, tarefas, comentários e arquivos, bloquear pessoas e
+  desativar a comunidade.
 - **Sem localização em tempo real.** O app não compartilha a localização de
   ninguém com outras pessoas.
 
-O conteúdo das comunidades é **cifrado de ponta a ponta**: nós não
-conseguimos lê-lo, e quem opera o servidor da comunidade também não. Por isso,
-**as denúncias são essenciais**: é por elas que ficamos sabendo de um caso.
+O conteúdo das comunidades, arquivos anexados incluídos, é **cifrado de
+ponta a ponta**: nós não conseguimos lê-lo, e quem opera o servidor da
+comunidade também não. Por isso, **as denúncias são essenciais**: é por elas
+que ficamos sabendo de um caso.
 
 ## 4. Como denunciar no app
 
@@ -146,7 +156,9 @@ infantil ligados ao app, com prioridade sobre qualquer outro assunto:
 **Coordenação e moderação** de uma comunidade, ao receber uma denúncia de
 abuso ou exploração infantil, devem:
 
-- remover o evento envolvido (**Apagar evento**);
+- remover a ação envolvida (**Apagar ação**), o que apaga também as tarefas
+  dela, ou a tarefa (**Apagar tarefa**), o comentário ou o arquivo envolvido;
+  ao apagar, o app pede ao servidor que descarte os arquivos;
 - bloquear a pessoa (**Bloquear**, na aba **Pessoas**), que sai da comunidade
   e não pode voltar;
 - desativar a comunidade quando ela existir para esse fim;
@@ -177,13 +189,16 @@ atualização.
 Rafael Bessa de Andrade, has **zero tolerance for child sexual abuse and
 exploitation (CSAE)**, including child sexual abuse material (CSAM),
 grooming, sextortion and trafficking. The app is for adults (18+). It has no
-photo, video or file sharing, no private messaging and no public directory of
-people. Communities are invite-only, and admins approve every new member.
+private messaging, no media gallery and no public directory of people. Files
+(up to 10 MB each) can only be attached to a community's work tasks, which
+only admins, moderators and the organizers of an action can create; comments
+on a task are seen by everyone on it and by the community's admins and
+moderators. Communities are invite-only, and admins approve every new member.
 
 - **In-app reporting:** People tab → find the person → **Denunciar**
   (Report) → **Coloca pessoas em risco** (Puts people at risk). Reports go to
-  the community's admins and moderators, who can delete events, block members
-  and disable the community.
+  the community's admins and moderators, who can delete actions, tasks,
+  comments and files, block members and disable the community.
 - **Child safety point of contact:**
   [vamovirar@bessa.me](mailto:vamovirar@bessa.me?subject=Child%20safety)
   (subject "Child safety"). Never send images or copies of abuse material.

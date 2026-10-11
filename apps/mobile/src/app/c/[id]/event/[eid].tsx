@@ -3,7 +3,7 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { confirm } from "../../../../lib/confirm";
-import { useApp, useCommunity } from "../../../../lib/context";
+import { useApp, useCommunity, useNow } from "../../../../lib/context";
 import {
   ACTION_TEXT,
   byStatus,
@@ -17,7 +17,9 @@ import {
   type OrgAction,
 } from "../../../../model/events";
 import { fill } from "../../../../model/i18n";
+import { tasksOfEvent } from "../../../../model/tasks";
 import { formatWhen } from "../../../../model/time";
+import { TaskCard } from "../../../../ui/tasks/TaskBits";
 import { AvailabilityChip } from "../../../../ui/AvailabilityChip";
 import { StarBurst } from "../../../../ui/brand";
 import { ProbeQuestion, ProbeResults } from "../../../../ui/ProbeSections";
@@ -29,6 +31,7 @@ import { WhatsAppButton, WhatsAppEditor } from "../../../../ui/WhatsApp";
 export default function EventScreen() {
   const { id, eid } = useLocalSearchParams<{ id: string; eid: string }>();
   const { t, store, locale } = useApp();
+  const now = useNow();
   const entry = useCommunity(id);
   const [inviting, setInviting] = useState(false);
   // null: not edited yet, show what is recorded.
@@ -150,6 +153,34 @@ export default function EventScreen() {
         {list("confirmedList", byStatus(state, ev, ["confirmed", "reconfirm"]), [])}
         {list("volunteersList", byStatus(state, ev, ["volunteered"]), ["approve", "reject"])}
         {list("invitedList", byStatus(state, ev, ["invited"]), ["revoke"])}
+
+        {(() => {
+          // The action's own to-do list: open tasks first; managers add more here.
+          const tasks = tasksOfEvent(state, ev.event_id, me).filter((x) => x.status !== "done" && x.status !== "cancelled");
+          if (tasks.length === 0 && !(manage && ev.status === "scheduled")) return null;
+          return (
+            <>
+              <Heading>{t("taskEventSection")}</Heading>
+              {tasks.slice(0, 5).map((task, i) => (
+                <Enter key={task.task_id} delay={i * 40}>
+                  <TaskCard task={task} state={state} now={now} showScope={false} onPress={() => router.push({ pathname: "/c/[id]/task/[tid]", params: { id: entry.id, tid: task.task_id } })} />
+                </Enter>
+              ))}
+              <View style={{ flexDirection: "row", gap: space.s }}>
+                {manage && ev.status === "scheduled" ? (
+                  <View style={{ flex: 1 }}>
+                    <Button testID="event-new-task" kind="secondary" label={t("newTask")} onPress={() => router.push({ pathname: "/c/[id]/task-form", params: { id: entry.id, eid: ev.event_id } })} />
+                  </View>
+                ) : null}
+                {tasks.length > 0 ? (
+                  <View style={{ flex: 1 }}>
+                    <Button kind="secondary" label={t("taskSeeBoard")} allowReadOnly onPress={() => router.push({ pathname: "/c/[id]", params: { id: entry.id, tab: "tasks" } })} />
+                  </View>
+                ) : null}
+              </View>
+            </>
+          );
+        })()}
 
         {manage && ev.status === "scheduled" ? (
           <>

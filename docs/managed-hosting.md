@@ -53,12 +53,14 @@ name = "coletivo-recife"
 token_sha256 = "9f2c…"               # de `community-node tenant-token`
 max_communities = 3
 max_log_bytes = 268435456             # 256 MiB de log por comunidade
+max_blob_bytes_total = 1073741824     # 1 GiB de anexos por comunidade
 
 [[tenants]]
 name = "free-tier"
 token_sha256 = "41ab…"
 max_communities = 1
 max_log_bytes = 16777216
+max_blob_bytes_total = 67108864       # 64 MiB de anexos por comunidade
 ```
 
 `community-node tenant-token` imprime um novo token aleatório para o cliente
@@ -77,10 +79,15 @@ movê-la é a operação do protocolo descrita abaixo.
 |---|---|---|
 | `max_communities` | criação e restauração com o token daquele cliente | `507 quota_exceeded`; o app mostra o erro |
 | `max_log_bytes` | cada comunidade que o cliente provisionou | as operações são recusadas uma a uma com `quota_exceeded`; elas **ficam nas caixas de saída dos membros** e o app avisa que a comunidade ficou sem espaço |
+| `max_blob_bytes_total` | cada comunidade que o cliente provisionou (sem valor no cliente, vale o `max_blob_bytes_total` do nó, 512 MiB por padrão) | o envio do anexo responde `507 quota_exceeded`; o app avisa e um admin ou moderador apaga anexos órfãos para liberar espaço |
 
 O tamanho do log conta as entradas de log armazenadas. Um snapshot de um admin permite que o nó
 compacte o log anterior a ele (após `compaction_grace_secs`), o que libera
 cota; por esse motivo, uploads de snapshot são aceitos mesmo acima da cota.
+Os anexos (arquivos cifrados, `max_blob_bytes` por arquivo) têm a sua própria
+cota e só saem dela quando são apagados; eles não entram na exportação nem na
+restauração, então depois de uma mudança de nó precisam ser anexados de novo
+(a cópia automática pelo dispositivo de um admin é **[LATER]**, protocolo §9.7).
 As caixas postais têm limites próprios (`max_mailbox_items`, TTLs) e não
 contam. `migrate` é sempre aceito, então uma comunidade acima da cota pode sair.
 
@@ -91,12 +98,12 @@ Servida apenas quando `operator_listen` está definido, somente nesse endereço,
 
 | Método e caminho | O que faz |
 |---|---|
-| `GET /operator/v1/communities` | Cada comunidade: id, cliente, created_at, head_seq, época, bytes e contagens de log/snapshot/caixa postal, pedidos de entrada pendentes, suspensa, moved_to, modo de entrada |
-| `GET /operator/v1/tenants` | Por cliente: comunidades, bytes de log e os limites configurados |
+| `GET /operator/v1/communities` | Cada comunidade: id, cliente, created_at, head_seq, época, bytes e contagens de log/anexos/snapshot/caixa postal, pedidos de entrada pendentes, suspensa, moved_to, modo de entrada |
+| `GET /operator/v1/tenants` | Por cliente: comunidades, bytes de log e de anexos e os limites configurados |
 | `POST /operator/v1/communities/{id}/suspend` | Escritas são recusadas com `403 suspended`; leituras, exportação e `migrate` continuam funcionando |
 | `POST /operator/v1/communities/{id}/resume` | Desfaz uma suspensão |
 | `GET /operator/v1/communities/{id}/export` | O payload de restauração da comunidade (`application/cbor`), por exemplo para devolvê-lo ao encerrar uma conta |
-| `DELETE /operator/v1/communities/{id}?confirm={id}` | Apaga todas as linhas da comunidade e encerra suas sessões. Irreversível |
+| `DELETE /operator/v1/communities/{id}?confirm={id}` | Apaga todas as linhas da comunidade (log, snapshots, caixas postais, anexos) e encerra suas sessões. Irreversível |
 | `GET /operator/v1/metrics` | Formato de texto do Prometheus |
 
 ```sh
@@ -107,7 +114,7 @@ curl -s -H "Authorization: Bearer $T" -X POST http://127.0.0.1:9787/operator/v1/
 
 As métricas são agregadas **por cliente, nunca por comunidade**
 (`vv_communities`, `vv_communities_suspended`, `vv_communities_moved`,
-`vv_log_bytes`, `vv_snapshot_bytes`, `vv_mailbox_items`,
+`vv_log_bytes`, `vv_blob_bytes`, `vv_snapshot_bytes`, `vv_mailbox_items`,
 `vv_mailbox_bytes`, `vv_intake_items` com um rótulo `tenant`, além de
 `vv_sessions` e `vv_schema_version`), de modo que enviá-las a um serviço de
 monitoramento não publica uma lista de comunidades.

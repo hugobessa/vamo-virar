@@ -120,6 +120,20 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE communities ADD COLUMN disabled_at INTEGER;
     ALTER TABLE communities ADD COLUMN disabled_by BLOB;
     "#,
+    // 4 — encrypted blobs (file attachments, §15): opaque bytes named by
+    // their SHA-256, plus a running total per community for the quota.
+    r#"
+    CREATE TABLE IF NOT EXISTS blobs (
+      cid     BLOB NOT NULL REFERENCES communities(cid),
+      blob_id BLOB NOT NULL,                  -- SHA-256 of body
+      size    INTEGER NOT NULL,
+      at      INTEGER NOT NULL,
+      body    BLOB NOT NULL,
+      PRIMARY KEY (cid, blob_id)
+    );
+    CREATE INDEX IF NOT EXISTS blobs_by_time ON blobs (cid, at, blob_id);
+    ALTER TABLE communities ADD COLUMN blob_bytes INTEGER NOT NULL DEFAULT 0;
+    "#,
 ];
 
 pub const SCHEMA_VERSION: usize = MIGRATIONS.len();
@@ -170,6 +184,10 @@ pub struct Community {
     pub moved_to: Vec<String>,
     /// Bytes of log entries currently stored, for quotas and usage.
     pub log_bytes: u64,
+    /// Bytes of blobs (file attachments, §15) currently stored, for quotas
+    /// and usage. Kept in step with the `blobs` table by `insert_blob` and
+    /// `delete_blob`.
+    pub blob_bytes: u64,
     /// Set by an accepted `disable` (§11.5): when (node time) and by whom.
     /// Writes are refused; housekeeping deletes the community 30 days later.
     pub disabled: Option<(u64, [u8; 32])>,
@@ -194,6 +212,7 @@ impl Community {
             suspended: false,
             moved_to: Vec::new(),
             log_bytes: 0,
+            blob_bytes: 0,
         }
     }
 }
@@ -284,7 +303,7 @@ impl Store {
 pub fn community(c: &Connection, cid: &Cid) -> rusqlite::Result<Option<Community>> {
     c.query_row(
         "SELECT crk, epoch, rotated_at, admin_set, head_seq, head_hash, head_at, compacted_through, intake_mode,
-                tenant, suspended, moved_to, log_bytes, mod_set, disabled_at, disabled_by
+                tenant, suspended, moved_to, log_bytes, mod_set, disabled_at, disabled_by, blob_bytes
          FROM communities WHERE cid = ?1",
         [cid],
         |r| {
@@ -308,6 +327,7 @@ pub fn community(c: &Connection, cid: &Cid) -> rusqlite::Result<Option<Community
                     (Some(at), Some(by)) => Some((at, blob32(by)?)),
                     _ => None,
                 },
+                blob_bytes: r.get(16)?,
             })
         },
     )
@@ -318,8 +338,8 @@ pub fn insert_community(c: &Connection, cm: &Community, now: u64) -> rusqlite::R
     c.execute(
         "INSERT INTO communities
            (cid, crk, epoch, rotated_at, admin_set, head_seq, head_hash, head_at, compacted_through, intake_mode, created_at,
-            tenant, suspended, moved_to, log_bytes, mod_set, disabled_at, disabled_by)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            tenant, suspended, moved_to, log_bytes, mod_set, disabled_at, disabled_by, blob_bytes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
         params![
             cm.cid,
             cm.crk,
@@ -338,7 +358,8 @@ pub fn insert_community(c: &Connection, cm: &Community, now: u64) -> rusqlite::R
             cm.log_bytes,
             encode_keys(&cm.mod_set),
             cm.disabled.map(|(at, _)| at),
-            cm.disabled.map(|(_, by)| by.to_vec())
+            cm.disabled.map(|(_, by)| by.to_vec()),
+            cm.blob_bytes
         ],
     )?;
     Ok(())
@@ -348,7 +369,8 @@ pub fn update_community(c: &Connection, cm: &Community) -> rusqlite::Result<()> 
     c.execute(
         "UPDATE communities SET epoch = ?2, rotated_at = ?3, admin_set = ?4, head_seq = ?5, head_hash = ?6,
            head_at = ?7, compacted_through = ?8, intake_mode = ?9, tenant = ?10, suspended = ?11,
-           moved_to = ?12, log_bytes = ?13, mod_set = ?14, disabled_at = ?15, disabled_by = ?16
+           moved_to = ?12, log_bytes = ?13, mod_set = ?14, disabled_at = ?15, disabled_by = ?16,
+           blob_bytes = ?17
          WHERE cid = ?1",
         params![
             cm.cid,
@@ -366,7 +388,8 @@ pub fn update_community(c: &Connection, cm: &Community) -> rusqlite::Result<()> 
             cm.log_bytes,
             encode_keys(&cm.mod_set),
             cm.disabled.map(|(at, _)| at),
-            cm.disabled.map(|(_, by)| by.to_vec())
+            cm.disabled.map(|(_, by)| by.to_vec()),
+            cm.blob_bytes
         ],
     )?;
     Ok(())
@@ -474,6 +497,91 @@ pub fn disabled_before(c: &Connection, cutoff: u64) -> rusqlite::Result<Vec<Cid>
     rows.collect()
 }
 
+// ---------------------------------------------------------------------------
+// Blobs (§15): opaque encrypted files named by the SHA-256 of their bytes.
+// ---------------------------------------------------------------------------
+
+/// One row of `GET /c/{cid}/blobs`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlobInfo {
+    pub blob_id: [u8; 32],
+    pub size: u64,
+    pub at: u64,
+}
+
+pub fn blob(c: &Connection, cid: &Cid, blob_id: &[u8; 32]) -> rusqlite::Result<Option<Vec<u8>>> {
+    c.query_row(
+        "SELECT body FROM blobs WHERE cid = ?1 AND blob_id = ?2",
+        params![cid, blob_id],
+        |r| r.get(0),
+    )
+    .optional()
+}
+
+pub fn blob_size(c: &Connection, cid: &Cid, blob_id: &[u8; 32]) -> rusqlite::Result<Option<u64>> {
+    c.query_row(
+        "SELECT size FROM blobs WHERE cid = ?1 AND blob_id = ?2",
+        params![cid, blob_id],
+        |r| r.get(0),
+    )
+    .optional()
+}
+
+/// Stores a blob and adds its size to the community's running total. The
+/// caller checks the quota first, inside the same transaction, so the check
+/// and the insert are atomic.
+pub fn insert_blob(
+    c: &Connection,
+    cid: &Cid,
+    blob_id: &[u8; 32],
+    body: &[u8],
+    now: u64,
+) -> rusqlite::Result<()> {
+    let size = body.len() as u64;
+    c.execute(
+        "INSERT INTO blobs (cid, blob_id, size, at, body) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![cid, blob_id, size, now, body],
+    )?;
+    c.execute(
+        "UPDATE communities SET blob_bytes = blob_bytes + ?2 WHERE cid = ?1",
+        params![cid, size],
+    )?;
+    Ok(())
+}
+
+/// Removes a blob and frees its quota. Returns the size freed, or `None`
+/// when there was no such blob.
+pub fn delete_blob(c: &Connection, cid: &Cid, blob_id: &[u8; 32]) -> rusqlite::Result<Option<u64>> {
+    let Some(size) = blob_size(c, cid, blob_id)? else {
+        return Ok(None);
+    };
+    c.execute(
+        "DELETE FROM blobs WHERE cid = ?1 AND blob_id = ?2",
+        params![cid, blob_id],
+    )?;
+    c.execute(
+        "UPDATE communities SET blob_bytes = MAX(0, blob_bytes - ?2) WHERE cid = ?1",
+        params![cid, size],
+    )?;
+    Ok(Some(size))
+}
+
+/// Every blob of a community, oldest first (ties broken by id), so admins
+/// can reconcile against the community state and delete orphans.
+pub fn blobs(c: &Connection, cid: &Cid) -> rusqlite::Result<Vec<BlobInfo>> {
+    let mut st = c.prepare_cached(
+        "SELECT blob_id, size, at FROM blobs WHERE cid = ?1 ORDER BY at, blob_id",
+    )?;
+    let rows = st.query_map([cid], |r| {
+        Ok(BlobInfo {
+            blob_id: blob32(r.get(0)?)?,
+            size: r.get(1)?,
+            at: r.get(2)?,
+        })
+    })?;
+    rows.collect()
+}
+
 /// Removes every row of a community. Irreversible; the operator API asks for confirmation.
 pub fn delete_community(c: &Connection, cid: &Cid) -> rusqlite::Result<bool> {
     for table in [
@@ -485,6 +593,7 @@ pub fn delete_community(c: &Connection, cid: &Cid) -> rusqlite::Result<bool> {
         "intake",
         "invites",
         "directory",
+        "blobs",
     ] {
         c.execute(&format!("DELETE FROM {table} WHERE cid = ?1"), [cid])?;
     }

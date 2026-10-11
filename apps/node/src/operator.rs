@@ -97,6 +97,7 @@ pub struct Usage {
     pub head_seq: u64,
     pub epoch: u32,
     pub log_bytes: u64,
+    pub blob_bytes: u64,
     pub snapshot_bytes: u64,
     pub mailbox_items: u64,
     pub mailbox_bytes: u64,
@@ -109,7 +110,7 @@ pub struct Usage {
 pub fn usage(c: &rusqlite::Connection) -> rusqlite::Result<Vec<Usage>> {
     let mut st = c.prepare(
         "SELECT c.cid, c.tenant, c.created_at, c.head_seq, c.epoch, c.log_bytes, c.suspended,
-                c.moved_to, c.intake_mode,
+                c.moved_to, c.intake_mode, c.blob_bytes,
                 (SELECT COALESCE(SUM(length(env)), 0) FROM snapshots s WHERE s.cid = c.cid),
                 (SELECT COUNT(*) FROM mailbox m WHERE m.cid = c.cid),
                 (SELECT COALESCE(SUM(length(ct)), 0) FROM mailbox m WHERE m.cid = c.cid),
@@ -128,10 +129,11 @@ pub fn usage(c: &rusqlite::Connection) -> rusqlite::Result<Vec<Usage>> {
             suspended: r.get(6)?,
             moved_to: store::decode_urls(r.get(7)?),
             intake_mode: r.get(8)?,
-            snapshot_bytes: r.get(9)?,
-            mailbox_items: r.get(10)?,
-            mailbox_bytes: r.get(11)?,
-            intake_items: r.get(12)?,
+            blob_bytes: r.get(9)?,
+            snapshot_bytes: r.get(10)?,
+            mailbox_items: r.get(11)?,
+            mailbox_bytes: r.get(12)?,
+            intake_items: r.get(13)?,
         })
     })?;
     rows.collect()
@@ -150,6 +152,7 @@ async fn list(State(app): State<Shared>, headers: HeaderMap) -> Result<Response,
                 "head_seq": u.head_seq,
                 "epoch": u.epoch,
                 "log_bytes": u.log_bytes,
+                "blob_bytes": u.blob_bytes,
                 "snapshot_bytes": u.snapshot_bytes,
                 "mailbox_items": u.mailbox_items,
                 "mailbox_bytes": u.mailbox_bytes,
@@ -172,13 +175,18 @@ async fn tenants(State(app): State<Shared>, headers: HeaderMap) -> Result<Respon
         .iter()
         .map(|t| {
             let mine = rows.iter().filter(|u| u.tenant.as_deref() == Some(&t.name));
-            let (count, bytes) = mine.fold((0u64, 0u64), |(n, b), u| (n + 1, b + u.log_bytes));
+            let (count, bytes, blob_bytes) = mine.fold((0u64, 0u64, 0u64), |(n, b, bb), u| {
+                (n + 1, b + u.log_bytes, bb + u.blob_bytes)
+            });
+            let max_blob_bytes_total = app.config.max_blob_bytes_total(Some(&t.name));
             json!({
                 "name": t.name,
                 "communities": count,
                 "max_communities": t.max_communities,
                 "log_bytes": bytes,
                 "max_log_bytes_per_community": t.max_log_bytes,
+                "blob_bytes": blob_bytes,
+                "max_blob_bytes_total_per_community": max_blob_bytes_total,
             })
         })
         .collect();
@@ -309,6 +317,11 @@ pub fn render_metrics(app: &App) -> rusqlite::Result<String> {
     gauge("vv_log_bytes", "Bytes of stored log entries.", &|u| {
         u.log_bytes
     });
+    gauge(
+        "vv_blob_bytes",
+        "Bytes of stored blobs (file attachments).",
+        &|u| u.blob_bytes,
+    );
     gauge("vv_snapshot_bytes", "Bytes of stored snapshots.", &|u| {
         u.snapshot_bytes
     });

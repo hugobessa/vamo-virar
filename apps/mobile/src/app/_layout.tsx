@@ -25,6 +25,8 @@ function Nav() {
       <Stack.Screen name="c/[id]/index" options={{ title: "" }} />
       <Stack.Screen name="c/[id]/new-event" options={{ title: t("newEvent"), presentation: "modal" }} />
       <Stack.Screen name="c/[id]/event/[eid]" options={{ title: "" }} />
+      <Stack.Screen name="c/[id]/task-form" options={{ title: t("newTask"), presentation: "modal" }} />
+      <Stack.Screen name="c/[id]/task/[tid]" options={{ title: "" }} />
     </Stack>
   );
 }

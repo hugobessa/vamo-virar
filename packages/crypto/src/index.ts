@@ -1,3 +1,4 @@
+export * from "./blob.js";
 export * from "./envelope.js";
 export * from "./hpke.js";
 export * from "./intake.js";

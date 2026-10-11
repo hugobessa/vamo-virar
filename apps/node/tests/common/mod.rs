@@ -240,6 +240,37 @@ pub async fn call_raw(
     (status, value)
 }
 
+/// Like `call_raw`, but returns the response body untouched plus its
+/// `content-type`, for endpoints that answer with raw bytes (blobs).
+pub async fn call_bytes(
+    app: &Arc<App>,
+    method: &str,
+    uri: &str,
+    token: Option<&str>,
+    body: Option<Vec<u8>>,
+    headers: &[(&str, &str)],
+) -> (StatusCode, Option<String>, Vec<u8>) {
+    let mut req = Request::builder().method(method).uri(uri);
+    if let Some(t) = token {
+        req = req.header("authorization", format!("Bearer {t}"));
+    }
+    for (k, v) in headers {
+        req = req.header(*k, *v);
+    }
+    let req = req
+        .body(body.map(Body::from).unwrap_or_else(Body::empty))
+        .unwrap();
+    let res = service(app.clone()).oneshot(req).await.unwrap();
+    let status = res.status();
+    let content_type = res
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    (status, content_type, bytes.to_vec())
+}
+
 pub async fn create(app: &Arc<App>, f: &mut Fixture) -> (StatusCode, Value) {
     let g = f.genesis();
     call_raw(

@@ -32,6 +32,14 @@ pub struct Config {
     pub compaction_grace_secs: u64,
     pub session_ttl_secs: u64,
     pub max_batch: usize,
+    /// Largest blob (an encrypted file attachment, §15) one upload may
+    /// carry. Devices cap plaintext at 10 MiB; this leaves room for the
+    /// AEAD overhead.
+    pub max_blob_bytes: usize,
+    /// Bytes of blobs one community may hold, for communities whose tenant
+    /// sets no `max_blob_bytes_total` of its own (and for communities
+    /// provisioned with the node's own token).
+    pub max_blob_bytes_total: u64,
     pub max_mailbox_items: u32,
     pub max_mailbox_ttl_secs: u64,
     pub intake_per_ip_per_hour: u32,
@@ -67,6 +75,9 @@ pub struct Tenant {
     /// Bytes of log entries one community may hold. Snapshots let the node
     /// compact the log, which frees quota.
     pub max_log_bytes: Option<u64>,
+    /// Bytes of blobs (file attachments) one community may hold. Unset:
+    /// the node's `max_blob_bytes_total`. Deleting blobs frees quota.
+    pub max_blob_bytes_total: Option<u64>,
 }
 
 impl Config {
@@ -76,6 +87,9 @@ impl Config {
             && self.operator_token.as_deref().is_none_or(|t| t.len() < 16)
         {
             return Err("operator_listen needs operator_token (at least 16 characters)".into());
+        }
+        if self.max_blob_bytes == 0 {
+            return Err("max_blob_bytes must be at least 1".into());
         }
         let mut names = std::collections::HashSet::new();
         for t in &self.tenants {
@@ -104,6 +118,13 @@ impl Config {
     pub fn max_log_bytes(&self, tenant: Option<&str>) -> Option<u64> {
         self.tenant(tenant).and_then(|t| t.max_log_bytes)
     }
+
+    /// The blob quota for a community: the tenant's, or the node's default.
+    pub fn max_blob_bytes_total(&self, tenant: Option<&str>) -> u64 {
+        self.tenant(tenant)
+            .and_then(|t| t.max_blob_bytes_total)
+            .unwrap_or(self.max_blob_bytes_total)
+    }
 }
 
 /// Constant-time comparison for secrets.
@@ -122,6 +143,8 @@ impl Default for Config {
             compaction_grace_secs: 30 * 24 * 3600,
             session_ttl_secs: 3600,
             max_batch: 100,
+            max_blob_bytes: 11 * 1024 * 1024,
+            max_blob_bytes_total: 512 * 1024 * 1024,
             max_mailbox_items: 1000,
             max_mailbox_ttl_secs: 30 * 24 * 3600,
             intake_per_ip_per_hour: 20,

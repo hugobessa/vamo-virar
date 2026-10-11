@@ -20,6 +20,13 @@ export type PolicyParse =
 
 const DAYS_MAX = 36_500;
 
+/** `retention.closed_task_detail_days` when the policy does not set it (§9.7). */
+export const DEFAULT_CLOSED_TASK_DAYS = 30;
+
+export function closedTaskDays(policy: Policy): number {
+  return policy.retention.closed_task_detail_days ?? DEFAULT_CLOSED_TASK_DAYS;
+}
+
 export function parsePolicy(v: unknown): PolicyParse {
   if (!isObject(v) || !isObject(v.retention)) return { ok: false, reason: "malformed" };
   const r = v.retention;
@@ -32,6 +39,7 @@ export function parsePolicy(v: unknown): PolicyParse {
     typeof r.keep_attendee_list !== "boolean" ||
     !isInt(r.removed_member_detail_days, 0, DAYS_MAX) ||
     !isInt(r.rejected_join_request_days, 0, DAYS_MAX) ||
+    (r.closed_task_detail_days !== undefined && !isInt(r.closed_task_detail_days, 0, DAYS_MAX)) ||
     (v.min_client_version !== undefined && !isText(v.min_client_version, 32, 1))
   ) {
     return { ok: false, reason: "malformed" };
@@ -51,6 +59,7 @@ export function parsePolicy(v: unknown): PolicyParse {
       rejected_join_request_days: r.rejected_join_request_days,
     },
   };
+  if (r.closed_task_detail_days !== undefined) policy.retention.closed_task_detail_days = r.closed_task_detail_days;
   if (v.min_client_version !== undefined) policy.min_client_version = v.min_client_version;
   return { ok: true, policy };
 }

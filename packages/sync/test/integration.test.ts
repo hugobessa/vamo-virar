@@ -337,6 +337,52 @@ describe.skipIf(!HAVE_NODE)("against a real node", () => {
     expect(canon(bia.canonical)).toBe(canon(ana.canonical));
   }, 30_000);
 
+  it("tasks with attachments: sealed files round-trip through the node; moderators drop orphaned blobs", async () => {
+    const ana = await Replica.found(node.client(), { name: "C15", displayName: "Ana" });
+    const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia, "organizer");
+    const caio = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
+    await admit(ana, caio);
+    await syncAll(ana, bia, caio);
+
+    // Bia attaches a file to a task of her event. The node stores ciphertext it cannot open.
+    const ev = toHex(new Uint8Array(16).fill(5));
+    bia.submit("event.create", eventBody(ev, "Panfletagem"));
+    const file = new TextEncoder().encode("arte do panfleto ".repeat(2000));
+    const att = await bia.uploadAttachment(file, "arte.pdf", "application/pdf");
+    expect(att.size).toBe(file.length);
+    const task = toHex(new Uint8Array(16).fill(6));
+    bia.submit("task.create", { task_id: task, event_id: ev, title: "Imprimir panfletos", tags: ["Panfleto"], attachments: [att] } as never);
+    await syncAll(ana, bia, caio);
+    const stored = caio.canonical!.tasks![task]!;
+    expect(stored.status).toBe("awaiting_volunteer");
+    expect(stored.tags).toEqual(["panfleto"]);
+    expect(stored.attachments[0]!.name).toBe("arte.pdf");
+
+    // Caio takes the task, opens the file, and it is exactly what Bia attached.
+    caio.submit("task.assign", { task_id: task });
+    await syncAll(caio, bia);
+    expect(bia.canonical!.tasks![task]!.assignee).toBe(caio.memberId);
+    expect(await caio.downloadAttachment(stored.attachments[0]!)).toEqual(file);
+    const raw = await node.client().getBlob(caio.cid, caio.keys.signing /* any community token */, new Uint8Array(32)).catch(() => "no");
+    expect(raw).toBe("no"); // a member key is not an access key: no token, no blob
+
+    // An abandoned upload is an orphan: only admins and moderators see the list and may drop it.
+    const orphan = await bia.uploadAttachment(new TextEncoder().encode("rascunho"), "rascunho.txt", "text/plain");
+    await expect(bia.tidyBlobs(0)).resolves.toBe(0); // Bia is an organizer, not moderation
+    expect(await ana.tidyBlobs(0)).toBe(1);
+    expect(await ana.downloadAttachment(orphan)).toBeNull();
+    expect(await ana.downloadAttachment(att)).toEqual(file);
+
+    // Removing the task leaves its blob behind; the next tidy collects it.
+    ana.submit("task.remove", { task_id: task });
+    await syncAll(ana, caio);
+    expect(await ana.tidyBlobs(0)).toBe(1);
+    expect(await caio.downloadAttachment(att)).toBeNull();
+    expect(caio.canonical!.tasks).toBeUndefined();
+    expect(canon(caio.canonical)).toBe(canon(ana.canonical));
+  }, 30_000);
+
   it("an admin drops a moderator who left from the node's moderator set", async () => {
     const ana = await Replica.found(node.client(), { name: "C14", displayName: "Ana" });
     const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });

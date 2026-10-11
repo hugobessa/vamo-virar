@@ -19,7 +19,10 @@ do ar ou for perdido, a comunidade fica parada até você montar outro, mas
 ninguém consegue ler os dados que estavam nele.
 
 O servidor é leve: gasta poucos MB de memória e quase nada de processador.
-Um único servidor aguenta várias comunidades.
+Um único servidor aguenta várias comunidades. O que cresce é o disco: além
+das mensagens cifradas, cada comunidade pode guardar até 512 MB de arquivos
+anexados a tarefas (dá para mudar esse limite na configuração; veja
+`max_blob_bytes_total` em [deploy.md](deploy.md)).
 
 ## Escolha onde rodar
 

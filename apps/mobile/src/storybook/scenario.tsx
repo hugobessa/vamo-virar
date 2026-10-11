@@ -4,7 +4,7 @@
 // and `expo-router` for the stand-ins in this folder (see .storybook/main.ts),
 // so the real screens in src/app render without a node, keys or a calendar.
 
-import type { CommunityState, Event, MemberRecord, Participation, ParticipationStatus, Role } from "@vamo-virar/domain";
+import type { CommunityState, Event, MemberRecord, Participation, ParticipationStatus, Role, Task } from "@vamo-virar/domain";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { action } from "storybook/actions";
 import { translator } from "../model/i18n";
@@ -41,6 +41,59 @@ function event(o: Pick<Event, "event_id" | "title" | "starts_at"> & Partial<Even
 }
 
 export type Me = "ana" | "bia" | "caio" | "duda" | "edu";
+
+function task(o: Pick<Task, "task_id" | "title"> & Partial<Task>): Task {
+  const status = o.status ?? (o.assignee ? "todo" : "awaiting_volunteer");
+  return {
+    description: "",
+    tags: [],
+    priority: "normal",
+    volunteers: [],
+    attachments: [],
+    comments: [],
+    history: [{ status, by: "ana", seq: 10 }],
+    created_by: "ana",
+    created_seq: 10,
+    updated_seq: 10,
+    ...o,
+    status,
+  };
+}
+
+/** The committee's to-do list: a pool task, work in progress, something blocked, something done. */
+function tasks(): Task[] {
+  return [
+    task({
+      task_id: "t1",
+      title: "Imprimir 500 panfletos",
+      event_id: "e1",
+      description: "Na gráfica da Rua da Hora, pedir o papel reciclado.\n\n- [x] Arte aprovada\n- [ ] Pagar sinal\n- [ ] Buscar na sexta",
+      tags: ["panfleto", "gráfica"],
+      priority: "high",
+      due_at: NOW + D - 8 * H,
+      assignee: "bia",
+      volunteers: ["caio"],
+      status: "in_progress",
+      attachments: [
+        { blob_id: "a".repeat(64), key: "b".repeat(64), nonce: "c".repeat(48), name: "arte-panfleto.pdf", mime: "application/pdf", size: 843_210 },
+      ],
+      comments: [
+        { comment_id: "c1", author: "caio", body: "Posso buscar na gráfica, passo lá de moto.", seq: 12 },
+        { comment_id: "c2", author: "bia", body: "Fechado! Sinal **pago**, retirada sexta às 14h.", seq: 15, edited_seq: 16 },
+      ],
+      history: [
+        { status: "todo", by: "ana", seq: 10 },
+        { status: "in_progress", by: "bia", seq: 14, note: "arte na gráfica" },
+      ],
+      updated_seq: 16,
+    }),
+    task({ task_id: "t2", title: "Levar a caixa de som", event_id: "e1", tags: ["som"], priority: "urgent", due_at: NOW + D - 6 * H }),
+    task({ task_id: "t3", title: "Combinar o ponto de encontro com a comissão de frente", event_id: "e2", assignee: "bia", status: "blocked", history: [{ status: "todo", by: "bia", seq: 10 }, { status: "blocked", by: "bia", seq: 11, note: "esperando resposta do sindicato" }] }),
+    task({ task_id: "t4", title: "Conferir as faixas", event_id: "e2", tags: ["arte"] }),
+    task({ task_id: "t5", title: "Prestar contas da vaquinha", description: "Planilha no drive do comitê.", tags: ["financeiro"], assignee: "ana", due_at: NOW + 6 * D }),
+    task({ task_id: "t6", title: "Reservar o espaço da plenária", event_id: "e4", assignee: "ana", status: "done", closed_at: NOW - 2 * D, history: [{ status: "todo", by: "ana", seq: 4 }, { status: "done", by: "ana", seq: 9 }] }),
+  ];
+}
 
 /** A community with one admin (Ana), one organizer (Bia) and three members. */
 export function communityState(): CommunityState {
@@ -115,6 +168,7 @@ export function communityState(): CommunityState {
     clock: { seq: 20, now: NOW },
     members: Object.fromEntries(members.map((m) => [m.member_id, m])),
     events: Object.fromEntries(events.map((e) => [e.event_id, e])),
+    tasks: Object.fromEntries(tasks().map((t) => [t.task_id, t])),
     event_summaries: {
       old1: { event_id: "old1", title: "Primeira reunião", starts_at: NOW - 200 * D, status: "completed", confirmed_count: 9, attended_count: 7 },
     },
@@ -191,6 +245,14 @@ export function makeEntry(o: EntryOptions = {}) {
         ]
       : [],
     reportMember: async (...a: unknown[]) => action("replica.reportMember")(...a),
+    uploadAttachment: async (bytes: Uint8Array, name: string, mime: string) => {
+      action("replica.uploadAttachment")(name, mime, bytes.length);
+      return { blob_id: "d".repeat(64), key: "e".repeat(64), nonce: "f".repeat(48), name, mime, size: bytes.length };
+    },
+    downloadAttachment: async (att: { name: string }) => {
+      action("replica.downloadAttachment")(att.name);
+      return new TextEncoder().encode("conteúdo de exemplo");
+    },
     dismissReport: action("replica.dismissReport"),
     blockMember: async (id: string) => action("replica.blockMember")(id),
     makeModerator: async (id: string) => action("replica.makeModerator")(id),

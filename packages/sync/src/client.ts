@@ -2,6 +2,7 @@
 // Uses only `fetch` and `WebSocket`, available in React Native and Node ≥ 22.
 
 import {
+  blobIdOf,
   envelopeToCbor,
   logEntryFromCbor,
   logEntryToCbor,
@@ -61,6 +62,13 @@ export interface IntakeItem {
   at: number;
 }
 
+export interface BlobInfo {
+  blobId: Uint8Array;
+  size: number;
+  /** Node receive time (ms). */
+  at: number;
+}
+
 type Obj = { [k: string]: CborValue | undefined };
 
 interface Session {
@@ -105,14 +113,16 @@ export class NodeClient {
     const init: RequestInit = { method, headers: { ...headers } };
     if (body !== undefined) {
       init.body = (body instanceof Uint8Array ? body : encode(body)) as unknown as BodyInit;
-      (init.headers as Record<string, string>)["content-type"] = "application/cbor";
+      const h = init.headers as Record<string, string>;
+      if (!h["content-type"]) h["content-type"] = "application/cbor";
     }
     const res = await this.fetchImpl(this.baseUrl + path, init);
     const bytes = new Uint8Array(await res.arrayBuffer());
     let value: CborValue = null;
     if (bytes.length > 0) {
       const ct = res.headers.get("content-type") ?? "";
-      value = ct.includes("cbor") ? decode(bytes) : textOf(bytes);
+      // Blobs come back as they were stored: opaque bytes.
+      value = ct.includes("cbor") ? decode(bytes) : ct.includes("octet-stream") ? bytes : textOf(bytes);
     }
     if (!res.ok) {
       const v = (value && typeof value === "object" && !(value instanceof Uint8Array) && !Array.isArray(value) ? value : {}) as Obj;
@@ -130,11 +140,12 @@ export class NodeClient {
     scope: AuthScope,
     key: SigningKeyPair,
     body?: CborValue | Uint8Array,
+    headers: Record<string, string> = {},
   ): Promise<CborValue> {
     for (let attempt = 0; ; attempt++) {
       const token = await this.token(cid, scope, key);
       try {
-        return await this.raw(method, path, body, { authorization: `Bearer ${token}` });
+        return await this.raw(method, path, body, { ...headers, authorization: `Bearer ${token}` });
       } catch (e) {
         if (attempt === 0 && e instanceof NodeError && e.status === 401) {
           this.sessions.delete(sessionKey(cid, scope, key));
@@ -303,6 +314,41 @@ export class NodeClient {
         uses_left: i.uses_left as number,
       })),
     };
+  }
+
+  // --- blobs (§15): opaque bytes named by their SHA-256, for task attachments ---
+
+  /** Stores `ct` under its hash; uploading the same bytes twice is harmless. */
+  async putBlob(cid: Uint8Array, eak: SigningKeyPair, ct: Uint8Array): Promise<{ blobId: Uint8Array; size: number }> {
+    const id = blobIdOf(ct);
+    const res = (await this.authed("PUT", `/v1/c/${toHex(cid)}/blobs/${toHex(id)}`, cid, "community", eak, ct, {
+      "content-type": "application/octet-stream",
+    })) as Obj;
+    return { blobId: res.blob_id as Uint8Array, size: res.size as number };
+  }
+
+  /** The stored bytes, or null when the node no longer has them. */
+  async getBlob(cid: Uint8Array, eak: SigningKeyPair, blobId: Uint8Array): Promise<Uint8Array | null> {
+    try {
+      const v = await this.authed("GET", `/v1/c/${toHex(cid)}/blobs/${toHex(blobId)}`, cid, "community", eak);
+      return v instanceof Uint8Array ? v : new Uint8Array(0);
+    } catch (e) {
+      if (e instanceof NodeError && e.status === 404) return null;
+      throw e;
+    }
+  }
+
+  /** Admins and moderators: everything stored, so orphans can be found and dropped. */
+  async listBlobs(cid: Uint8Array, staff: SigningKeyPair, scope: StaffScope = "control"): Promise<{ blobs: BlobInfo[]; totalBytes: number }> {
+    const res = (await this.authed("GET", `/v1/c/${toHex(cid)}/blobs`, cid, scope, staff)) as Obj;
+    return {
+      blobs: (res.blobs as Obj[]).map((b) => ({ blobId: b.blob_id as Uint8Array, size: b.size as number, at: b.at as number })),
+      totalBytes: res.total_bytes as number,
+    };
+  }
+
+  async deleteBlob(cid: Uint8Array, staff: SigningKeyPair, blobId: Uint8Array, scope: StaffScope = "control"): Promise<void> {
+    await this.authed("DELETE", `/v1/c/${toHex(cid)}/blobs/${toHex(blobId)}`, cid, scope, staff);
   }
 
   async registerInvite(cid: Uint8Array, admin: SigningKeyPair, hash: Uint8Array, expiresAt: number, maxUses: number): Promise<void> {
