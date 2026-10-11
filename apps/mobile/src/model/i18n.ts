@@ -1,17 +1,23 @@
 // User-facing text. The app is in Portuguese only. Words like "node",
 // "epoch", "key", "operation" never appear here (architecture.md, Phase 5).
+//
+// Vocabulary: a community marks "ações" (a panfletagem, a bandeiraço, a
+// mutirão), the word campaign committees and collectives already use.
 
 const pt = {
   appName: "Vamo Virar",
   // Welcome
-  welcomeTitle: "Organize sua comunidade",
-  welcomeBody: "Crie eventos, convide pessoas e veja quem pode participar. Sua agenda e sua localização ficam só no seu celular.",
+  welcomeTitle: "Organize a virada",
+  welcomeBody: "Marque ações, convide gente e veja na hora quem pode ir. Sua agenda e sua localização ficam só no seu celular.",
   welcomePoint1: "Sua agenda fica só no seu celular",
   welcomePoint2: "Tudo cifrado de ponta a ponta",
   welcomePoint3: "O servidor é pequeno e dá para trocar",
   createCommunity: "Criar uma comunidade",
   joinCommunity: "Entrar com um convite",
   yourCommunities: "Suas comunidades",
+  homeNext: "Próxima ação",
+  homeNoNext: "Nenhuma ação marcada",
+  homeToAnswer: "para responder",
   // Create and join forms
   createIntro: "Leva um minuto. Você convida as pessoas depois.",
   joinIntro: "Quem organiza vê o seu pedido e decide. Nada da sua agenda é enviado.",
@@ -27,7 +33,7 @@ const pt = {
   whatsappInvalid: "Esse link não é de um grupo do WhatsApp. Ele começa com https://chat.whatsapp.com/",
   whatsappOpen: "Abrir o grupo do WhatsApp",
   whatsappCommunityTitle: "Grupo do WhatsApp da comunidade",
-  whatsappEventTitle: "Grupo do WhatsApp do evento",
+  whatsappEventTitle: "Grupo do WhatsApp da ação",
   whatsappRemove: "Tirar o link",
   yourName: "Seu nome",
   yourNameHelp: "É assim que as outras pessoas vão ver você.",
@@ -49,18 +55,29 @@ const pt = {
   rejectedTitle: "Pedido não aceito",
   rejectedBody: "A organização não aceitou seu pedido.",
   // Community tabs
-  tabEvents: "Eventos",
+  tabEvents: "Ações",
   tabPeople: "Pessoas",
   tabMe: "Eu",
-  // Events
-  upcoming: "Próximos",
+  // Events ("ações")
+  upcoming: "Próximas",
   past: "Anteriores",
-  noEvents: "Nenhum evento ainda.",
-  newEvent: "Novo evento",
+  noEvents: "Nenhuma ação marcada ainda.",
+  noEventsBody: "Panfletagem, bandeiraço, caminhada, plenária: marque a primeira e pergunte quem pode ir.",
+  noEventsCta: "Marcar a primeira ação",
+  newEvent: "Nova ação",
+  templatesLabel: "Que tipo de ação?",
+  tplPanfletagem: "Panfletagem",
+  tplBandeiraco: "Bandeiraço",
+  tplCaminhada: "Caminhada",
+  tplAdesivaco: "Adesivaço",
+  tplPlenaria: "Plenária",
+  tplCorpoACorpo: "Corpo a corpo",
   eventTitle: "Título",
   eventDescription: "Descrição (opcional)",
   date: "Data (DD/MM/AAAA)",
   startTime: "Início (HH:MM)",
+  dateLabel: "Data",
+  timeLabel: "Início",
   durationHours: "Duração (horas)",
   placeName: "Local",
   placeArea: "Cidade ou região",
@@ -70,11 +87,13 @@ const pt = {
   today: "Hoje",
   tomorrow: "Amanhã",
   invalidDate: "Confira a data e o horário.",
-  invalidTitle: "Dê um título ao evento.",
+  invalidTitle: "Dê um título à ação.",
   people: "pessoas",
   spotsLeft: "vagas",
-  cancelled: "Cancelado",
-  completed: "Realizado",
+  confirmedProgress: "{n} de {cap} confirmadas",
+  remaining: "faltam {n}",
+  cancelled: "Cancelada",
+  completed: "Realizada",
   // Participation
   volunteer: "Quero participar",
   accept: "Aceitar",
@@ -87,7 +106,7 @@ const pt = {
   statusInvited: "Você foi convidada(o)",
   statusVolunteered: "Você se ofereceu",
   statusConfirmed: "Você vai",
-  statusReconfirm: "O evento mudou — confirme de novo",
+  statusReconfirm: "A ação mudou — confirme de novo",
   statusDeclined: "Você não pode",
   statusWithdrawn: "Você desistiu",
   statusNotSelected: "Não foi dessa vez",
@@ -96,11 +115,11 @@ const pt = {
   volunteersList: "Se ofereceram",
   invitedList: "Convidadas",
   inviteSomeone: "Convidar alguém",
-  cancelEvent: "Cancelar evento",
-  completeEvent: "Marcar como realizado",
+  cancelEvent: "Cancelar ação",
+  completeEvent: "Marcar como realizada",
   recordAttendance: "Quem compareceu",
-  removeEvent: "Apagar evento",
-  removeEventConfirm: "Apagar este evento para todo mundo? Somem os detalhes e quem ia participar. Não dá para desfazer. Para só avisar que não vai acontecer, use Cancelar evento.",
+  removeEvent: "Apagar ação",
+  removeEventConfirm: "Apagar esta ação para todo mundo? Somem os detalhes e quem ia participar. Não dá para desfazer. Para só avisar que não vai acontecer, use Cancelar ação.",
   // People
   joinRequests: "Pedidos para entrar",
   noRequests: "Nenhum pedido agora.",
@@ -113,7 +132,7 @@ const pt = {
   roleModerator: "Moderação",
   roleOrganizer: "Organiza",
   roleMember: "Participa",
-  makeOrganizer: "Pode organizar eventos",
+  makeOrganizer: "Pode organizar ações",
   makeAdmin: "Colocar na coordenação",
   makeModerator: "Colocar na moderação",
   removeModerator: "Tirar da moderação",
@@ -150,7 +169,7 @@ const pt = {
   disabledBySomeone: "Alguém",
   disabledChip: "Marcada para exclusão",
   disableTitle: "Desativar a comunidade",
-  disableHelp: "Ninguém mais consegue mudar nada: eventos, pessoas, pedidos e denúncias param. Depois de 30 dias, a comunidade é apagada do servidor para sempre. Até lá, outra pessoa da coordenação pode reativá-la.",
+  disableHelp: "Ninguém mais consegue mudar nada: ações, pessoas, pedidos e denúncias param. Depois de 30 dias, a comunidade é apagada do servidor para sempre. Até lá, outra pessoa da coordenação pode reativá-la.",
   disableButton: "Desativar e marcar para exclusão",
   disableConfirm: "Desativar a comunidade? Todo mundo deixa de poder mudar qualquer coisa, e ela será apagada em 30 dias se ninguém da coordenação reativar. Só outra pessoa da coordenação pode reativar.",
   enableTitle: "Reativar a comunidade",
@@ -180,7 +199,7 @@ const pt = {
   why_other: "Não foi possível fazer isso.",
   // Calendars (Phase 6)
   calendarsTitle: "Sua agenda",
-  calendarsPrivacy: "O app olha só os horários em que você está ocupada(o), para dizer se você pode ir a um evento. Títulos e detalhes não são lidos, e nada da sua agenda sai do celular.",
+  calendarsPrivacy: "O app olha só os horários em que você está ocupada(o), para dizer se você pode ir a uma ação. Títulos e detalhes não são lidos, e nada da sua agenda sai do celular.",
   connectPhoneCalendar: "Usar a agenda do celular",
   connectGoogle: "Conectar Google Agenda",
   connectMicrosoft: "Conectar Outlook",
@@ -195,9 +214,12 @@ const pt = {
   availFree: "Você está livre nesse horário",
   availMaybe: "Talvez: você tem algo perto ou a confirmar",
   availBusy: "Você tem um compromisso nesse horário",
+  availFreeShort: "Você está livre",
+  availMaybeShort: "Talvez",
+  availBusyShort: "Agenda ocupada",
   // Places and "who could come" (Phase 7)
   placesTitle: "Seus lugares",
-  placesHelp: "Diga de onde você costuma sair. O app usa isso só no seu celular para ver se um evento é perto de você.",
+  placesHelp: "Diga de onde você costuma sair. O app usa isso só no seu celular para ver se uma ação é perto de você.",
   addPlace: "Adicionar lugar",
   placeLabel: "Nome (ex.: Casa, Trabalho)",
   radiusKm: "Até quantos km você vai (raio)",
@@ -225,6 +247,7 @@ const pt = {
   probeIgnore: "Não responder",
   probeSuggestion: "Pelo que seu celular sabe:",
   probeOnlyAnswer: "Só sua resposta é enviada, nada da sua agenda ou localização.",
+  probeSent: "Resposta enviada. Só o veredito saiu do celular.",
   // Recovery (Phase 8)
   recoveryTitle: "Código de recuperação",
   recoveryHelp: "Se todos os celulares da coordenação forem perdidos, este código devolve a coordenação a alguém da comunidade. Anote em papel e guarde fora do celular. Quem tiver o código pode assumir a comunidade.",
@@ -266,4 +289,9 @@ export function allStrings(): string[] {
 export function reasonKey(reason: string): StringKey {
   const k = `why_${reason}` as StringKey;
   return k in pt ? k : "why_other";
+}
+
+/** Fills `{name}` placeholders in a string. */
+export function fill(s: string, values: Record<string, string | number>): string {
+  return s.replace(/\{(\w+)\}/g, (m, k: string) => (k in values ? String(values[k]) : m));
 }

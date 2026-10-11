@@ -113,7 +113,7 @@ try {
 
   await step("Ana opens the app and sees the welcome screen", async () => {
     await ana.goto(appUrl);
-    await ana.getByText("Organize sua comunidade").waitFor();
+    await ana.getByText("Organize a virada").waitFor();
     await shot(ana, "01-welcome");
   });
 
@@ -147,7 +147,7 @@ try {
   });
 
   await step("Ana accepts Bia", async () => {
-    await ana.getByRole("tab", { name: "Eventos" }).click();
+    await ana.getByRole("tab", { name: "Ações" }).click();
     await ana.getByRole("tab", { name: "Pessoas" }).click(); // reloads requests
     await ana.getByText("Bia").first().waitFor({ timeout: 10000 });
     await shot(ana, "06-request");
@@ -158,12 +158,12 @@ try {
   await step("Bia is in", async () => {
     await bia.goto(appUrl);
     await bia.getByText("Coletivo Recife").first().click({ timeout: 15000 });
-    await bia.getByRole("tab", { name: "Eventos" }).waitFor({ timeout: 15000 });
+    await bia.getByRole("tab", { name: "Ações" }).waitFor({ timeout: 15000 });
     await shot(bia, "07-bia-in");
   });
 
   await step("Ana creates an event", async () => {
-    await ana.getByRole("tab", { name: "Eventos" }).click();
+    await ana.getByRole("tab", { name: "Ações" }).click();
     await byId(ana, "new-event").click();
     await byId(ana, "event-title").fill("Plenária no Derby");
     await byId(ana, "event-place").fill("Praça do Derby");
@@ -253,6 +253,7 @@ try {
     await ana.goto(appUrl);
     await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
     await ana.getByRole("tab", { name: "Eu" }).last().click();
+    await byId(ana, "advanced").last().click(); // the server card sits under "Avançado"
     await byId(ana, "move-address").last().fill(api2Url);
     await byId(ana, "move-setup-code").last().fill(TOKEN);
     await shot(ana, "18-move");

@@ -1,7 +1,19 @@
 import type { Preview } from "@storybook/react-native-web-vite";
+import { useEffect } from "react";
 import { View } from "react-native";
 import { PhoneFrame } from "../src/storybook/Phone";
-import { SchemeOverride, themes } from "../src/ui/theme";
+import { ReducedMotionOverride, SchemeOverride, themes } from "../src/ui/theme";
+
+/** Mirrors the toolbar's motion choice onto <html>, where the landing page's CSS reads it. */
+function MotionFlag({ on }: { on: boolean }) {
+  useEffect(() => {
+    document.documentElement.dataset["vvMotion"] = on ? "on" : "off";
+    return () => {
+      delete document.documentElement.dataset["vvMotion"];
+    };
+  }, [on]);
+  return null;
+}
 
 const preview: Preview = {
   globalTypes: {
@@ -29,8 +41,20 @@ const preview: Preview = {
         dynamicTitle: true,
       },
     },
+    motion: {
+      description: "Movimento (simula a preferência de menos movimento do sistema)",
+      toolbar: {
+        title: "Movimento",
+        icon: "play",
+        items: [
+          { value: "on", title: "Movimento ligado" },
+          { value: "off", title: "Menos movimento" },
+        ],
+        dynamicTitle: true,
+      },
+    },
   },
-  initialGlobals: { scheme: "light", frame: "phone" },
+  initialGlobals: { scheme: "light", frame: "phone", motion: "on" },
   parameters: {
     layout: "fullscreen",
     controls: { expanded: true },
@@ -40,12 +64,16 @@ const preview: Preview = {
     (Story, ctx) => {
       const scheme = ctx.globals["scheme"] === "dark" ? "dark" : "light";
       const frame = ctx.globals["frame"] === "bare" ? "bare" : "phone";
+      const reduced = ctx.globals["motion"] === "off";
       return (
         <PhoneFrame.Provider value={frame}>
           <SchemeOverride.Provider value={scheme}>
-            <View style={{ minHeight: "100vh" as unknown as number, backgroundColor: ctx.parameters["transparent"] ? "transparent" : themes[scheme].bg }}>
-              <Story />
-            </View>
+            <ReducedMotionOverride.Provider value={reduced}>
+              <MotionFlag on={!reduced} />
+              <View style={{ minHeight: "100vh" as unknown as number, backgroundColor: ctx.parameters["transparent"] ? "transparent" : themes[scheme].bg }}>
+                <Story />
+              </View>
+            </ReducedMotionOverride.Provider>
           </SchemeOverride.Provider>
         </PhoneFrame.Provider>
       );

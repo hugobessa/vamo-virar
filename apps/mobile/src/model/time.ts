@@ -1,5 +1,6 @@
 // Date and time entry that works the same on every platform: plain text
-// fields in the person's local time, validated here.
+// fields in the person's local time, validated here. Native screens offer
+// the system pickers on top (ui/DateTimeFields), writing the same strings.
 
 export function pad(n: number): string {
   return n < 10 ? `0${n}` : String(n);
@@ -8,6 +9,11 @@ export function pad(n: number): string {
 export function formatDateInput(ms: number): string {
   const d = new Date(ms);
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+export function formatTimeInput(ms: number): string {
+  const d = new Date(ms);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** Parses "DD/MM/YYYY" + "HH:MM" in the device's local time zone. */
@@ -47,4 +53,56 @@ export function formatWhen(startsAt: number, endsAt: number, locale: string, tz:
   } catch {
     return new Date(startsAt).toISOString();
   }
+}
+
+/** "10:00 – 13:00" in the event's time zone. */
+export function formatHours(startsAt: number, endsAt: number, locale: string, tz: string): string {
+  try {
+    const f = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone: tz });
+    return `${f.format(new Date(startsAt))} – ${f.format(new Date(endsAt))}`;
+  } catch {
+    return "";
+  }
+}
+
+/** The calendar day (YYYY-MM-DD) of an instant in a time zone, for grouping. */
+export function dayKey(ms: number, tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: tz }).format(new Date(ms));
+    return parts; // en-CA formats as YYYY-MM-DD
+  } catch {
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * The parts of a date block on an event card: "11" over "dom." and a heading
+ * for the day ("Hoje", "Amanhã", or "dom., 11 de out."). `today` and
+ * `tomorrow` are the words to use for those two days.
+ */
+export function dateBlock(ms: number, now: number, locale: string, tz: string, words: { today: string; tomorrow: string }): { day: string; weekday: string; heading: string } {
+  try {
+    const d = new Date(ms);
+    const day = new Intl.DateTimeFormat(locale, { day: "numeric", timeZone: tz }).format(d);
+    const weekday = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: tz }).format(d);
+    const key = dayKey(ms, tz);
+    const long = new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short", timeZone: tz }).format(d);
+    const heading = key === dayKey(now, tz) ? words.today : key === dayKey(now + 86_400_000, tz) ? words.tomorrow : long;
+    return { day, weekday, heading };
+  } catch {
+    const iso = new Date(ms).toISOString();
+    return { day: iso.slice(8, 10), weekday: "", heading: iso.slice(0, 10) };
+  }
+}
+
+/** Groups events by calendar day, in the order given. */
+export function groupByDay<T extends { starts_at: number; tz: string }>(events: T[]): { key: string; first: T; items: T[] }[] {
+  const groups: { key: string; first: T; items: T[] }[] = [];
+  for (const e of events) {
+    const key = dayKey(e.starts_at, e.tz);
+    const g = groups[groups.length - 1];
+    if (g && g.key === key) g.items.push(e);
+    else groups.push({ key, first: e, items: [e] });
+  }
+  return groups;
 }
