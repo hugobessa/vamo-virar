@@ -167,6 +167,15 @@ export class AppStore {
     }
   }
 
+  /** Records that this person looked at a task up to `seq` (for the news badge). Only on this device. */
+  markTaskSeen(id: string, taskId: string, seq: number): void {
+    const e = this.entries.get(id);
+    if (!e) return;
+    const before = e.replica.taskMarks.tasks[taskId];
+    e.replica.markTaskSeen(taskId, seq);
+    if (e.replica.taskMarks.tasks[taskId] !== before) void this.persist(e);
+  }
+
   /** Runs an admin action, then persists. Errors propagate to the screen. */
   async admin<T>(id: string, f: (r: Replica) => Promise<T>): Promise<T> {
     const e = this.entries.get(id);

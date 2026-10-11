@@ -184,6 +184,8 @@ export interface EntryOptions {
   me?: Me;
   /** Replica status: "active", "joining" (waiting for approval), "rejected". */
   status?: string;
+  /** Log position marks start from: tasks touched after it show as news. Default: nothing is news. */
+  taskNewsSince?: number;
   connectivity?: "ok" | "offline";
   /** Changes made on this phone that the server has not seen yet. */
   pending?: number;
@@ -245,6 +247,8 @@ export function makeEntry(o: EntryOptions = {}) {
         ]
       : [],
     reportMember: async (...a: unknown[]) => action("replica.reportMember")(...a),
+    // Everything up to the last task counts as seen, so stories show news only when they ask for it.
+    taskMarks: { since: o.taskNewsSince ?? Number.MAX_SAFE_INTEGER, tasks: {} as Record<string, number> },
     uploadAttachment: async (bytes: Uint8Array, name: string, mime: string) => {
       action("replica.uploadAttachment")(name, mime, bytes.length);
       return { blob_id: "d".repeat(64), key: "e".repeat(64), nonce: "f".repeat(48), name, mime, size: bytes.length };
@@ -393,6 +397,7 @@ export function buildStore(s: Scenario) {
     submit: action("store.submit"),
     syncOne: async () => {},
     clearRejections: action("store.clearRejections"),
+    markTaskSeen: action("store.markTaskSeen"),
     admin: async (id: string, f: (r: MockEntry["replica"]) => Promise<unknown>) => f((s.entries.find((e) => e.id === id) ?? s.entries[0]!).replica),
     create: async (input: unknown) => {
       action("store.create")(input);

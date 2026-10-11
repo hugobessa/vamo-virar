@@ -24,6 +24,8 @@ export const QuadroComoAdmin: Story = board();
 export const QuadroComoOrganizadora: Story = board({ me: "bia" });
 /** Caio is a member: the pool, the tasks he helps with, and e1's tasks (he volunteered there, not confirmed). */
 export const QuadroComoMembro: Story = board({ me: "caio" });
+/** Caio follows a few tasks and things moved since he last looked: news on top, dots on the cards. */
+export const QuadroComNovidades: Story = board({ me: "caio", taskNewsSince: 0 });
 /** No tasks yet: the admin is invited to create the first. */
 export const QuadroVazio: Story = (() => {
   const state = communityState();

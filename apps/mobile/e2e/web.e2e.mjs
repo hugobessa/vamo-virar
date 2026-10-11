@@ -230,6 +230,7 @@ try {
     await byId(bia, "comment-send").last().click();
     await seen(bia, "Zé").first().waitFor({ timeout: 15000 });
     await byId(bia, "status-in_progress").last().click();
+    await byId(bia, "status-confirm").last().click();
     await seen(bia, "Em andamento").first().waitFor({ timeout: 15000 });
     await shot(bia, "12d-task-taken");
     await bia.goto(appUrl);

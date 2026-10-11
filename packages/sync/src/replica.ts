@@ -121,6 +121,17 @@ export interface ReplicaData {
    * reached the new node. Only signed log entries set it, never a node's say-so.
    */
   pendingMove?: string[];
+  /**
+   * This device's "last looked at" mark per task, for the news badge. Never
+   * synced. `since` stands in for tasks without a mark: the log position when
+   * marks started, so an update does not flag every old task as new.
+   */
+  taskMarks?: TaskMarks;
+}
+
+export interface TaskMarks {
+  since: number;
+  tasks: Record<string, number>;
 }
 
 export interface IncomingProbe {
@@ -968,6 +979,21 @@ export class Replica {
     if (reports.length > REPORTS_MAX) reports.shift();
     this.changed();
     return true;
+  }
+
+  /** Where this device last looked at each task (see `ReplicaData.taskMarks`). */
+  get taskMarks(): TaskMarks {
+    return (this.data.taskMarks ??= { since: this.data.state?.clock.seq ?? 0, tasks: {} });
+  }
+
+  /** Records that this person has seen a task up to `seq`. Marks of tasks that are gone are dropped. */
+  markTaskSeen(taskId: string, seq: number): void {
+    const marks = this.taskMarks;
+    if ((marks.tasks[taskId] ?? marks.since) >= seq) return;
+    const tasks = this.view?.tasks ?? {};
+    marks.tasks = Object.fromEntries(Object.entries(marks.tasks).filter(([id]) => id in tasks));
+    marks.tasks[taskId] = seq;
+    this.changed();
   }
 
   /** Admin or moderator: reports received on this device, newest first. */

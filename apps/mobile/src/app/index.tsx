@@ -5,6 +5,7 @@ import { useApp, useNow } from "../lib/context";
 import { insecureStorage } from "../lib/storage";
 import { upcoming } from "../model/events";
 import { fill } from "../model/i18n";
+import { newsFor } from "../model/tasks";
 import { dateBlock, formatHours } from "../model/time";
 import { Display, Star, Wordmark } from "../ui/brand";
 import { Banner, Body, Button, Card, Chip, Enter, Heading, Screen } from "../ui/kit";
@@ -82,6 +83,7 @@ export default function Home() {
             // Things waiting for this person: questions from the organizers and open invitations.
             const toAnswer =
               e.replica.incomingProbes.length + (view ? Object.values(view.events).filter((ev) => ev.status === "scheduled" && ev.participations[e.replica.memberId]?.status === "invited").length : 0);
+            const taskNews = view && status === "active" ? newsFor(view, view.members[e.replica.memberId], e.replica.taskMarks).length : 0;
             return (
               <Enter key={e.id} delay={i * motion.stagger}>
                 <Card accent testID={`community-${e.id}`} onPress={() => router.push({ pathname: "/c/[id]", params: { id: e.id } })}>
@@ -92,6 +94,7 @@ export default function Home() {
                   {status === "active" && view ? (
                     <Body muted>{next && when ? `${t("homeNext")}: ${next.title} · ${when.heading}, ${formatHours(next.starts_at, next.ends_at, locale, next.tz).split(" – ")[0]}` : t("homeNoNext")}</Body>
                   ) : null}
+                  {taskNews > 0 ? <Chip label={taskNews === 1 ? t("homeTaskNewsOne") : fill(t("homeTaskNewsMany"), { n: taskNews })} tone="warn" /> : null}
                   {status === "joining" ? <Chip label={t("waitingTitle")} tone="warn" /> : null}
                   {status === "rejected" ? <Chip label={t("rejectedTitle")} tone="danger" /> : null}
                   {status === "removed" ? <Chip label={t("syncRemoved")} tone="danger" /> : null}

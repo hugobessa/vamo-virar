@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 import { useApp, useCommunity } from "../../../lib/context";
 import { reasonKey } from "../../../model/i18n";
 import { syncStatusKey } from "../../../model/sync-status";
+import { newsFor } from "../../../model/tasks";
 import { EventsTab } from "../../../ui/community/EventsTab";
 import { MeTab } from "../../../ui/community/MeTab";
 import { DisabledScope } from "../../../ui/community/Disabled";
@@ -78,7 +79,7 @@ export default function Community() {
         }}
         options={[
           { value: "events", label: t("tabEvents") },
-          { value: "tasks", label: t("tabTasks") },
+          { value: "tasks", label: t("tabTasks"), badge: newsFor(state, state.members[r.memberId], r.taskMarks).length },
           { value: "people", label: t("tabPeople") },
           { value: "me", label: t("tabMe") },
         ]}
