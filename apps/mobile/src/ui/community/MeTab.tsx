@@ -6,7 +6,7 @@ import type { CommunityEntry } from "../../lib/store";
 import { fromHex, toHex } from "@vamo-virar/protocol";
 import { Text } from "react-native";
 import { NodeClient } from "@vamo-virar/sync";
-import { Banner, Body, Button, Card, Field, Heading } from "../kit";
+import { Banner, Body, Button, Card, Collapsible, Field, Heading } from "../kit";
 import { useTheme } from "../theme";
 import { errorText } from "../../model/errors";
 import { WhatsAppEditor } from "../WhatsApp";
@@ -39,46 +39,6 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
             onPress={() => store.submit(entry.id, "member.profile", { profile: { ...me.profile, display_name: name.trim() } })}
           />
           <Button kind="secondary" label={t("calendarsTitle")} allowReadOnly onPress={() => router.push("/settings")} />
-          {recovery ? (
-            <Card>
-              <Heading>{t("recoveryTitle")}</Heading>
-              <Body muted>{t("recoveryHelp")}</Body>
-              {showCode ? (
-                <Text selectable testID="recovery-code" style={{ color: c.text, fontFamily: "monospace", fontSize: 16 }}>
-                  {toHex(recovery).match(/.{4}/g)!.join(" ")}
-                </Text>
-              ) : null}
-              <Button kind="secondary" label={showCode ? t("recoveryHide") : t("recoveryShow")} allowReadOnly onPress={() => setShowCode(!showCode)} />
-            </Card>
-          ) : null}
-          {!r.isAdmin ? (
-            <Card>
-              <Heading>{t("recoverTitle")}</Heading>
-              <Body muted>{t("recoverHelp")}</Body>
-              <Field label={t("recoverCode")} value={code} onChangeText={setCode} autoCapitalize="none" autoCorrect={false} />
-              <Button
-                kind="secondary"
-                label={t("recoverButton")}
-                allowReadOnly
-                disabled={code.replace(/\s/g, "").length !== 64}
-                onPress={async () => {
-                  setRecoverMsg(null);
-                  try {
-                    const seed = fromHex(code.replace(/\s/g, "").toLowerCase());
-                    await store.admin(entry.id, async (rep) => {
-                      await rep.recoverAdmins(seed, [rep.memberId]);
-                      await rep.rotateIntakeKey();
-                    });
-                    setCode("");
-                    setRecoverMsg({ tone: "ok", text: t("recoverDone") });
-                  } catch (e) {
-                    setRecoverMsg({ tone: "danger", text: errorText(e) });
-                  }
-                }}
-              />
-              {recoverMsg ? <Banner tone={recoverMsg.tone} text={recoverMsg.text} /> : null}
-            </Card>
-          ) : null}
           {r.isAdmin ? (
             <WhatsAppEditor
               key={r.view?.community.whatsapp ?? ""}
@@ -88,8 +48,51 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
               onSave={(link) => store.submit(entry.id, "community.update", { whatsapp: link })}
             />
           ) : null}
-          {r.isAdmin ? <MoveCard entry={entry} /> : null}
-          {r.isAdmin ? <DisableCard entry={entry} /> : null}
+          {/* Recovery, moving servers and disabling the community are rare: folded away under "Avançado". */}
+          <Collapsible title={t("advanced")} testID="advanced">
+            {recovery ? (
+              <Card>
+                <Heading>{t("recoveryTitle")}</Heading>
+                <Body muted>{t("recoveryHelp")}</Body>
+                {showCode ? (
+                  <Text selectable testID="recovery-code" style={{ color: c.text, fontFamily: "monospace", fontSize: 16 }}>
+                    {toHex(recovery).match(/.{4}/g)!.join(" ")}
+                  </Text>
+                ) : null}
+                <Button kind="secondary" label={showCode ? t("recoveryHide") : t("recoveryShow")} allowReadOnly onPress={() => setShowCode(!showCode)} />
+              </Card>
+            ) : null}
+            {!r.isAdmin ? (
+              <Card>
+                <Heading>{t("recoverTitle")}</Heading>
+                <Body muted>{t("recoverHelp")}</Body>
+                <Field label={t("recoverCode")} value={code} onChangeText={setCode} autoCapitalize="none" autoCorrect={false} />
+                <Button
+                  kind="secondary"
+                  label={t("recoverButton")}
+                  allowReadOnly
+                  disabled={code.replace(/\s/g, "").length !== 64}
+                  onPress={async () => {
+                    setRecoverMsg(null);
+                    try {
+                      const seed = fromHex(code.replace(/\s/g, "").toLowerCase());
+                      await store.admin(entry.id, async (rep) => {
+                        await rep.recoverAdmins(seed, [rep.memberId]);
+                        await rep.rotateIntakeKey();
+                      });
+                      setCode("");
+                      setRecoverMsg({ tone: "ok", text: t("recoverDone") });
+                    } catch (e) {
+                      setRecoverMsg({ tone: "danger", text: errorText(e) });
+                    }
+                  }}
+                />
+                {recoverMsg ? <Banner tone={recoverMsg.tone} text={recoverMsg.text} /> : null}
+              </Card>
+            ) : null}
+            {r.isAdmin ? <MoveCard entry={entry} /> : null}
+            {r.isAdmin ? <DisableCard entry={entry} /> : null}
+          </Collapsible>
           <Button
             kind="danger"
             label={t("leave")}

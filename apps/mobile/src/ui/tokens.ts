@@ -55,6 +55,10 @@ const light = {
   bandNumber: palette.greenDark,
   /** Outline of device mockups. */
   frame: palette.ink,
+  /** Depth edge under a primary button; it collapses when pressed. */
+  primaryDepth: "#001F7D",
+  /** Depth edge under an accent button. */
+  accentDepth: "#C9A600",
 };
 
 export type Theme = { [K in keyof typeof light]: string };
@@ -86,6 +90,8 @@ const dark: Theme = {
   onBandYellow: "#F3F2F3",
   bandNumber: palette.yellow,
   frame: "#3A3A45",
+  primaryDepth: "#4E6BC9",
+  accentDepth: "#C9A600",
 };
 
 export const themes = { light, dark } as const;

@@ -116,7 +116,7 @@ npm run build-storybook -w @vamo-virar/mobile  # versão estática em apps/mobil
 ```
 
 As telas reais do app (`src/app`) também estão no Storybook, em "Telas", com
-dados de exemplo (comunidade "Horta da Vila", pessoas e eventos inventados).
+dados de exemplo (comunidade "Comitê Casa Amarela", pessoas e ações inventadas).
 O Storybook troca `lib/context`, `lib/storage`, `lib/matching`, `lib/confirm`
 e o `expo-router` por versões de teste em `apps/mobile/src/storybook`, então
 nada precisa de servidor, chaves ou agenda. Navegação e ações aparecem no

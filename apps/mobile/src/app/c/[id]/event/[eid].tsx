@@ -1,6 +1,6 @@
 import { canModerate } from "@vamo-virar/domain";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { confirm } from "../../../../lib/confirm";
 import { useApp, useCommunity } from "../../../../lib/context";
@@ -8,6 +8,7 @@ import {
   ACTION_TEXT,
   byStatus,
   canManage,
+  confirmedCount,
   invitable,
   orgActionsFor,
   selfActions,
@@ -15,11 +16,13 @@ import {
   statusOf,
   type OrgAction,
 } from "../../../../model/events";
+import { fill } from "../../../../model/i18n";
 import { formatWhen } from "../../../../model/time";
 import { AvailabilityChip } from "../../../../ui/AvailabilityChip";
+import { StarBurst } from "../../../../ui/brand";
 import { ProbeQuestion, ProbeResults } from "../../../../ui/ProbeSections";
 import { DisabledScope } from "../../../../ui/community/Disabled";
-import { Body, Button, Card, Chip, Heading, Screen, Title } from "../../../../ui/kit";
+import { Body, Button, Card, Chip, Enter, Heading, Progress, Screen, Title } from "../../../../ui/kit";
 import { space } from "../../../../ui/theme";
 import { WhatsAppButton, WhatsAppEditor } from "../../../../ui/WhatsApp";
 
@@ -34,6 +37,14 @@ export default function EventScreen() {
   const ev = state?.events[eid ?? ""];
   const meRec = entry && state ? state.members[entry.replica.memberId] : undefined;
   const moderate = !!state && !!meRec && canModerate(state, meRec);
+  const mine = ev && entry ? statusOf(ev, entry.replica.memberId) : "none";
+  // Stars fly when this person becomes confirmed, whoever confirmed it.
+  const [burst, setBurst] = useState(0);
+  const wasConfirmed = useRef(mine === "confirmed");
+  useEffect(() => {
+    if (mine === "confirmed" && !wasConfirmed.current) setBurst((n) => n + 1);
+    wasConfirmed.current = mine === "confirmed";
+  }, [mine]);
   // Moderation: deletes the event for everyone, details and history included.
   const removeButton = (eventId: string) =>
     moderate && entry ? (
@@ -69,8 +80,8 @@ export default function EventScreen() {
   }
   const r = entry.replica;
   const me = state.members[r.memberId];
-  const mine = statusOf(ev, r.memberId);
   const manage = canManage(state, ev, me);
+  const confirmed = confirmedCount(ev);
   const submit = (type: string, body: Record<string, unknown>) => store.submit(entry.id, type, { event_id: ev.event_id, ...body } as never);
 
   const orgButtons = (memberId: string, only: OrgAction[]) =>
@@ -81,6 +92,7 @@ export default function EventScreen() {
           key={a}
           testID={`${a}-${memberId}`}
           kind={a === "approve" ? "primary" : "secondary"}
+          haptic={a === "approve" ? "confirm" : undefined}
           label={t(ACTION_TEXT[a])}
           onPress={() => submit(`participation.${a}`, { member_id: memberId })}
         />
@@ -90,11 +102,13 @@ export default function EventScreen() {
     people.length === 0 ? null : (
       <>
         <Heading>{t(label)}</Heading>
-        {people.map((m) => (
-          <Card key={m.member_id}>
-            <Body>{m.profile?.display_name ?? "?"}</Body>
-            <View style={{ gap: space.s }}>{orgButtons(m.member_id, actions)}</View>
-          </Card>
+        {people.map((m, i) => (
+          <Enter key={m.member_id} delay={i * space.xs * 10}>
+            <Card>
+              <Body>{m.profile?.display_name ?? "?"}</Body>
+              <View style={{ gap: space.s }}>{orgButtons(m.member_id, actions)}</View>
+            </Card>
+          </Enter>
         ))}
       </>
     );
@@ -107,14 +121,30 @@ export default function EventScreen() {
         <Body>{formatWhen(ev.starts_at, ev.ends_at, locale, ev.tz)}</Body>
         <Body muted>{ev.location.label}</Body>
         {ev.description ? <Body>{ev.description}</Body> : null}
+        {ev.status === "scheduled" && ev.capacity !== undefined ? (
+          <Progress
+            value={confirmed}
+            max={ev.capacity}
+            tone={confirmed >= ev.capacity ? "warn" : "ok"}
+            label={`${fill(t("confirmedProgress"), { n: confirmed, cap: ev.capacity })}${confirmed < ev.capacity ? ` · ${fill(t("remaining"), { n: ev.capacity - confirmed })}` : ""}`}
+          />
+        ) : null}
         {ev.whatsapp ? <WhatsAppButton testID="event-whatsapp-open" link={ev.whatsapp} /> : null}
         {ev.status !== "scheduled" ? <Chip label={t(ev.status === "cancelled" ? "cancelled" : "completed")} tone={ev.status === "cancelled" ? "danger" : "neutral"} /> : null}
+        <StarBurst trigger={burst} />
         {mine !== "none" ? <Chip label={t(STATUS_TEXT[mine])} tone={mine === "confirmed" ? "ok" : "warn"} /> : null}
         {ev.status === "scheduled" ? <AvailabilityChip ev={ev} /> : null}
 
         <ProbeQuestion entry={entry} ev={ev} />
         {selfActions(state, ev, me).map((a, i) => (
-          <Button key={a} testID={`self-${a}`} kind={i === 0 ? "primary" : "secondary"} label={t(ACTION_TEXT[a])} onPress={() => submit(`participation.${a}`, {})} />
+          <Button
+            key={a}
+            testID={`self-${a}`}
+            kind={i === 0 ? "primary" : "secondary"}
+            haptic={a === "accept" || a === "volunteer" ? "confirm" : "light"}
+            label={t(ACTION_TEXT[a])}
+            onPress={() => submit(`participation.${a}`, {})}
+          />
         ))}
 
         {list("confirmedList", byStatus(state, ev, ["confirmed", "reconfirm"]), [])}
@@ -133,11 +163,13 @@ export default function EventScreen() {
             />
             <Button testID="toggle-invite" kind="secondary" label={t("inviteSomeone")} onPress={() => setInviting(!inviting)} />
             {inviting
-              ? invitable(state, ev).map((m) => (
-                  <Card key={m.member_id}>
-                    <Body>{m.profile?.display_name ?? "?"}</Body>
-                    {orgButtons(m.member_id, ["invite"])}
-                  </Card>
+              ? invitable(state, ev).map((m, i) => (
+                  <Enter key={m.member_id} delay={i * 40}>
+                    <Card>
+                      <Body>{m.profile?.display_name ?? "?"}</Body>
+                      {orgButtons(m.member_id, ["invite"])}
+                    </Card>
+                  </Enter>
                 ))
               : null}
             <Button testID="complete-event" kind="secondary" label={t("completeEvent")} onPress={() => submit("event.complete", {})} />
@@ -161,6 +193,7 @@ export default function EventScreen() {
                 <Button
                   key={m.member_id}
                   kind={on ? "primary" : "secondary"}
+                  haptic="light"
                   label={`${on ? "✓ " : ""}${m.profile?.display_name ?? "?"}`}
                   onPress={() => {
                     const next = new Set(attended);
