@@ -61,7 +61,8 @@
 .vv-band + .vv-band { clip-path: polygon(0 var(--vv-cut), 100% 0, 100% 100%, 0 100%); margin-top: calc(-1 * var(--vv-cut)); padding-top: var(--vv-cut); }
 
 /* --- Marquee of actions ------------------------------------------------------ */
-.vv-marquee { overflow: hidden; width: 100%; }
+/* Clip only at the sides: the sheared boxes' lifted corners and depth edges must stay whole. */
+.vv-marquee { width: 100%; clip-path: inset(-100px 0); }
 .vv-marquee-track { display: flex; width: max-content; animation: vv-marquee 36s linear infinite; }
 .vv-marquee:hover .vv-marquee-track, .vv-marquee:focus-within .vv-marquee-track { animation-play-state: paused; }
 @keyframes vv-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
