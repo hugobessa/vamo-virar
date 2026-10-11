@@ -195,7 +195,8 @@ export function Marquee({ items }: { items: readonly string[] }) {
   const tones = ["red", "green", "yellow", "blue", "white"] as const;
   const row = (prefix: string) =>
     items.map((t, i) => (
-      <View key={`${prefix}${t}`} style={{ paddingHorizontal: space.l, paddingVertical: space.m }}>
+      // The shear lifts a box's corners by about a tenth of its width; the vertical padding leaves room for that.
+      <View key={`${prefix}${t}`} style={{ paddingHorizontal: space.l, paddingVertical: space.xl + 8, justifyContent: "center" }}>
         <BrandBox tone={tones[i % tones.length] ?? "red"} size="md">
           {t}
         </BrandBox>

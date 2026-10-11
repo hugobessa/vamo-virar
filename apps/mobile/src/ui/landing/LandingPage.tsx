@@ -461,8 +461,9 @@ export function LandingPage({ links = defaultLinks }: { links?: LandingLinks }) 
     <View nativeID="topo" style={{ overflow: "hidden" }}>
       <Header />
       <Hero />
+      {/* The band's top is cut on a diagonal, so the strip keeps clear of it. */}
       <Band bg={c.surface}>
-        <View style={{ paddingVertical: space.m }}>
+        <View style={{ paddingTop: space.l, paddingBottom: space.xl }}>
           <Marquee items={ACTIONS} />
         </View>
       </Band>
