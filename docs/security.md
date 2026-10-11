@@ -77,6 +77,14 @@ Regras de implementação para o código TypeScript (`packages/crypto`) e Rust
   imagens inline ou HTML embutido.
 - Markdown em descrições e comentários é renderizado por um leitor próprio
   (`model/markdown.ts`) que não aceita HTML e só segue links `http(s)`.
+- A descrição de tarefas é escrita num editor de texto rico nativo
+  (`react-native-enriched-html`; no navegador, um `contenteditable`; nunca uma
+  WebView). O que se guarda e sincroniza continua sendo Markdown: o HTML do
+  editor existe só no aparelho de quem escreve, é gerado pelo próprio app a
+  partir do Markdown (com o texto escapado) e convertido de volta por um
+  conversor próprio (`model/richtext.ts`) que só reconhece o subconjunto que o
+  leitor aceita e descarta o resto. HTML vindo de outra pessoa nunca é
+  renderizado.
 
 ## Relatando vulnerabilidades
 

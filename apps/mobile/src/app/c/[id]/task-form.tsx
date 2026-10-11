@@ -9,6 +9,7 @@ import { View } from "react-native";
 import { useApp, useCommunity } from "../../../lib/context";
 import { canManage as canManageEvent } from "../../../model/events";
 import { canEdit, canManage, parseTagInput, PRIORITY_ORDER, PRIORITY_TEXT } from "../../../model/tasks";
+import { normalizeMarkdown } from "../../../model/richtext";
 import { formatDateInput, parseLocal } from "../../../model/time";
 import { DisabledScope } from "../../../ui/community/Disabled";
 import { DateField } from "../../../ui/DateField";
@@ -82,7 +83,8 @@ export default function TaskForm() {
     if (existing) {
       const body: Record<string, unknown> = { task_id: existing.task_id };
       if (title.trim() !== existing.title) body.title = title.trim();
-      if (description.trim() !== existing.description) body.description = description.trim();
+      // The editor rewrites Markdown in its own way; only a real change to the text counts.
+      if (description.trim() !== existing.description && description.trim() !== normalizeMarkdown(existing.description)) body.description = description.trim();
       if (tagList.join() !== existing.tags.join()) body.tags = tagList;
       if (priority !== existing.priority) body.priority = priority;
       if ((dueAt ?? undefined) !== existing.due_at) body.due_at = dueAt;
@@ -110,7 +112,7 @@ export default function TaskForm() {
       <Stack.Screen options={{ title: t(existing ? "editTask" : "newTask") }} />
       <DisabledScope entry={entry}>
         <Field testID="task-title" label={t("taskTitle")} value={title} onChangeText={setTitle} />
-        <RichTextEditor testID="task-description" label={t("taskDescription")} markdown={description} placeholder="Escreva os detalhes…" />
+        <RichTextEditor testID="task-description" label={t("taskDescription")} value={description} onChange={setDescription} placeholder={t("taskDescriptionPlaceholder")} />
         {scopeOptions.length > 1 && (!existing || manager) ? (
           <View style={{ gap: space.xs }}>
             <Label>{t("taskScope")}</Label>

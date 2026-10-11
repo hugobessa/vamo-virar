@@ -71,3 +71,19 @@ describe("check boxes", () => {
     expect(checklistProgress("sem caixas")).toEqual({ done: 0, total: 0 });
   });
 });
+
+describe("escapes", () => {
+  it("keeps escaped punctuation as text", () => {
+    expect(parseInline("2 \\* 3 \\* 4")).toEqual([{ kind: "text", text: "2 * 3 * 4" }]);
+    expect(parseInline("\\*não é itálico\\*")).toEqual([{ kind: "text", text: "*não é itálico*" }]);
+    expect(parseMarkdown("\\# não é título")).toEqual([{ kind: "paragraph", children: [{ kind: "text", text: "# não é título" }] }]);
+  });
+
+  it("does not close a mark on an escaped one", () => {
+    expect(parseInline("**a \\** b**")).toEqual([{ kind: "strong", children: [{ kind: "text", text: "a ** b" }] }]);
+  });
+
+  it("leaves other backslashes alone", () => {
+    expect(parseInline("C:\\pasta\\novo")).toEqual([{ kind: "text", text: "C:\\pasta\\novo" }]);
+  });
+});

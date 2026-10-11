@@ -120,6 +120,19 @@ const MARKS = [
   ["_", "em"],
 ] as const;
 
+/** Punctuation a backslash turns into plain text, so typed `*` or `#` never becomes formatting. */
+export const ESCAPABLE = "\\`*_[]#+-.!()>";
+
+/** Like indexOf, skipping matches that start with an escaped character. */
+function indexOfUnescaped(s: string, needle: string, from: number): number {
+  for (let i = s.indexOf(needle, from); i >= 0; i = s.indexOf(needle, i + 1)) {
+    let slashes = 0;
+    while (i - 1 - slashes >= 0 && s[i - 1 - slashes] === "\\") slashes++;
+    if (slashes % 2 === 0) return i;
+  }
+  return -1;
+}
+
 /** A node starting at the head of `rest`, with how much it consumed; null when none applies. */
 function matchInline(rest: string, atWordStart: boolean): { node: Inline; length: number } | null {
   if (rest.startsWith("`")) {
@@ -128,7 +141,7 @@ function matchInline(rest: string, atWordStart: boolean): { node: Inline; length
   }
   for (const [mark, kind] of MARKS) {
     if (!rest.startsWith(mark) || rest.length <= mark.length * 2 || rest[mark.length] === " ") continue;
-    const end = rest.indexOf(mark, mark.length);
+    const end = indexOfUnescaped(rest, mark, mark.length);
     if (end > mark.length && rest[end - 1] !== " ") {
       return { node: { kind, children: parseInline(rest.slice(mark.length, end)) }, length: end + mark.length };
     }
@@ -140,11 +153,19 @@ function matchInline(rest: string, atWordStart: boolean): { node: Inline; length
   return null;
 }
 
-/** Inline marks. Unbalanced markers are plain text, so nothing a person types disappears. */
+/**
+ * Inline marks. Unbalanced markers are plain text, so nothing a person types
+ * disappears; a backslash before punctuation keeps it literal.
+ */
 export function parseInline(src: string): Inline[] {
   const out: Inline[] = [];
   let text = "";
   for (let i = 0; i < src.length; ) {
+    if (src[i] === "\\" && i + 1 < src.length && ESCAPABLE.includes(src[i + 1]!)) {
+      text += src[i + 1];
+      i += 2;
+      continue;
+    }
     const m = matchInline(src.slice(i), i === 0 || /[\s(]/.test(src[i - 1]!));
     if (m) {
       if (text) out.push({ kind: "text", text });
