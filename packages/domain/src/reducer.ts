@@ -6,8 +6,9 @@
 //   op changes only bookkeeping (clock, op_ids, rejected_recent).
 // - Iteration over records is in sorted-key order.
 
-import { DEFAULT_POLICY, parsePolicy } from "./policy.js";
+import { closedTaskDays, DEFAULT_POLICY, parsePolicy } from "./policy.js";
 import type {
+  Attachment,
   CommunityState,
   ControlHeader,
   DecodedOp,
@@ -23,12 +24,33 @@ import type {
   Profile,
   RejectReason,
   Role,
+  Task,
+  TaskPriority,
+  TaskStatus,
 } from "./types.js";
 import { clone, isHex, isInt, isObject, isText, isWhatsAppLink, memberIdOf, sortedKeys } from "./util.js";
 
 const DAY_MS = 86_400_000;
 const REJECTED_RECENT_MAX = 100;
 const MAX_EVENT_ORGANIZERS = 50;
+
+/** Task limits (§9.7). Exported so the app can stop the user before the reducer would. */
+export const TASK_LIMITS = {
+  title: 200,
+  description: 5000,
+  tags: 10,
+  tag: 30,
+  volunteers: 20,
+  attachments: 10,
+  attachmentName: 120,
+  attachmentMime: 100,
+  /** Plaintext bytes per attachment; the node caps the ciphertext a little above this. */
+  attachmentBytes: 10 * 1024 * 1024,
+  comments: 200,
+  comment: 2000,
+  note: 500,
+  history: 50,
+} as const;
 
 /** Thrown for a log that cannot start a community. Not a per-op rejection. */
 export class GenesisError extends Error {}
@@ -318,6 +340,17 @@ const HANDLERS: Record<string, Handler> = {
   "participation.approve": participation("approve"),
   "participation.reject": participation("reject"),
   "participation.withdraw": participation("withdraw"),
+  "task.create": taskCreate,
+  "task.update": taskUpdate,
+  "task.assign": taskAssign,
+  "task.unassign": taskUnassign,
+  "task.join": taskJoin,
+  "task.leave": taskLeave,
+  "task.status": taskStatus,
+  "task.comment": taskComment,
+  "task.comment_edit": taskCommentEdit,
+  "task.comment_delete": taskCommentDelete,
+  "task.remove": taskRemove,
 };
 
 export const DATA_OP_TYPES: readonly string[] = Object.keys(HANDLERS);
@@ -504,6 +537,12 @@ function endMembership(s: CommunityState, m: MemberRecord, status: "removed" | "
     }
     ev.organizers = ev.organizers.filter((id) => id !== m.member_id);
   }
+  // Open tasks lose them too: the task goes back to the volunteer pool.
+  for (const id of sortedKeys(s.tasks ?? {})) {
+    const task = s.tasks![id]!;
+    if (!isOpenTask(task)) continue;
+    dropFromTask(s, task, m.member_id);
+  }
 }
 
 function memberRole(s: CommunityState, op: DecodedOp, author: MemberRecord): void {
@@ -630,6 +669,11 @@ function eventRemove(s: CommunityState, op: DecodedOp, author: MemberRecord): vo
   if (!s.events[b.event_id] && !s.event_summaries[b.event_id]) reject("unknown_target");
   delete s.events[b.event_id];
   delete s.event_summaries[b.event_id];
+  // Its tasks go with it; the remover's device drops their blobs (§9.7).
+  for (const id of sortedKeys(s.tasks ?? {})) {
+    if (s.tasks![id]!.event_id === b.event_id) delete s.tasks![id];
+  }
+  pruneTasks(s);
 }
 
 function scheduledEvent(s: CommunityState, eventId: unknown): Event {
@@ -771,6 +815,384 @@ function confirmedCount(ev: Event): number {
 }
 
 // ---------------------------------------------------------------------------
+// Tasks (§9.7)
+// ---------------------------------------------------------------------------
+
+const TASK_STATUSES: readonly TaskStatus[] = ["awaiting_volunteer", "todo", "in_progress", "blocked", "done", "cancelled"];
+const TASK_PRIORITIES: readonly TaskPriority[] = ["low", "normal", "high", "urgent"];
+/** Statuses that mean "someone is on it": they require an assignee. */
+const ASSIGNED_STATUSES = new Set<TaskStatus>(["todo", "in_progress", "blocked"]);
+const CLOSED_STATUSES = new Set<TaskStatus>(["done", "cancelled"]);
+
+function isOpenTask(task: Task): boolean {
+  return !CLOSED_STATUSES.has(task.status);
+}
+
+/**
+ * Who runs a task: admins and moderators everywhere; for a task inside an
+ * event, that event's organizers too. Community-level tasks belong to the
+ * coordination team alone.
+ */
+export function canManageTask(s: CommunityState, m: MemberRecord, task: Task): boolean {
+  if (canModerate(s, m)) return true;
+  if (task.event_id === undefined) return false;
+  const ev = s.events[task.event_id];
+  return ev !== undefined && canManageEvent(s, m, ev);
+}
+
+/** Assignee or helper: the people doing the work. */
+export function isOnTask(m: MemberRecord, task: Task): boolean {
+  return task.assignee === m.member_id || task.volunteers.includes(m.member_id);
+}
+
+/**
+ * Who may read and discuss a task: its managers, the people on it, and, for
+ * a task inside an event, everyone taking part in that event. Any member
+ * may see a task waiting for a volunteer; that is the point of the pool.
+ */
+export function canSeeTask(s: CommunityState, m: MemberRecord, task: Task): boolean {
+  if (m.status !== "active") return false;
+  if (task.status === "awaiting_volunteer") return true;
+  if (canManageTask(s, m, task) || isOnTask(m, task)) return true;
+  if (task.event_id === undefined) return false;
+  const p = s.events[task.event_id]?.participations[m.member_id];
+  return p?.status === "confirmed" || p?.status === "reconfirm";
+}
+
+function requireTaskManager(s: CommunityState, m: MemberRecord, task: Task): void {
+  if (!canManageTask(s, m, task)) reject("not_authorized");
+}
+
+function liveTask(s: CommunityState, taskId: unknown): Task {
+  if (!isHex(taskId, 16)) reject("malformed");
+  const task = s.tasks?.[taskId];
+  if (!task) reject("unknown_target");
+  return task;
+}
+
+function openTask(s: CommunityState, taskId: unknown): Task {
+  const task = liveTask(s, taskId);
+  if (!isOpenTask(task)) reject("illegal_transition");
+  return task;
+}
+
+/** Drops the `tasks` map when empty so untouched communities hash as before. */
+function pruneTasks(s: CommunityState): void {
+  if (s.tasks && Object.keys(s.tasks).length === 0) delete s.tasks;
+}
+
+function touchTask(task: Task, seq: number): void {
+  task.updated_seq = seq;
+}
+
+function setTaskStatus(s: CommunityState, task: Task, status: TaskStatus, by: MemberId, seq: number, note?: string): void {
+  task.status = status;
+  if (CLOSED_STATUSES.has(status)) task.closed_at = s.clock.now;
+  else delete task.closed_at;
+  const change: Task["history"][number] = { status, by, seq };
+  if (note !== undefined) change.note = note;
+  task.history.push(change);
+  if (task.history.length > TASK_LIMITS.history) task.history.shift();
+  touchTask(task, seq);
+}
+
+/** Removes a member from an open task; without an assignee it waits for a volunteer again. */
+function dropFromTask(s: CommunityState, task: Task, memberId: MemberId): void {
+  const seq = s.clock.seq;
+  if (task.volunteers.includes(memberId)) {
+    task.volunteers = task.volunteers.filter((id) => id !== memberId);
+    touchTask(task, seq);
+  }
+  if (task.assignee === memberId) {
+    delete task.assignee;
+    if (task.status !== "awaiting_volunteer") setTaskStatus(s, task, "awaiting_volunteer", memberId, seq);
+    else touchTask(task, seq);
+  }
+}
+
+interface TaskFields {
+  title?: string;
+  description?: string;
+  tags?: string[];
+  priority?: TaskPriority;
+  due_at?: number;
+  attachments?: Attachment[];
+}
+
+function parseTaskFields(b: Record<string, unknown>, create: boolean): TaskFields {
+  const f: TaskFields = {};
+  if (create && b.title === undefined) reject("malformed");
+  if (b.title !== undefined) f.title = isText(b.title, TASK_LIMITS.title, 1) ? b.title : reject("malformed");
+  if (b.description !== undefined) {
+    f.description = isText(b.description, TASK_LIMITS.description) ? b.description : reject("malformed");
+  }
+  if (b.tags !== undefined) f.tags = parseTags(b.tags) ?? reject("malformed");
+  if (b.priority !== undefined) {
+    f.priority = TASK_PRIORITIES.includes(b.priority as TaskPriority) ? (b.priority as TaskPriority) : reject("malformed");
+  }
+  if (b.due_at !== undefined && b.due_at !== null) f.due_at = isInt(b.due_at) ? b.due_at : reject("malformed");
+  if (b.attachments !== undefined) f.attachments = parseAttachments(b.attachments) ?? reject("malformed");
+  return f;
+}
+
+/** Tags are free text: trimmed, lowercased, unique, sorted. Empty after trimming is malformed. */
+function parseTags(v: unknown): string[] | undefined {
+  if (!Array.isArray(v) || v.length > TASK_LIMITS.tags) return undefined;
+  const out = new Set<string>();
+  for (const t of v) {
+    if (!isText(t, TASK_LIMITS.tag, 1)) return undefined;
+    const norm = t.trim().toLowerCase();
+    if (norm.length === 0 || norm.includes("\n")) return undefined;
+    out.add(norm);
+  }
+  return [...out].sort();
+}
+
+function parseAttachments(v: unknown): Attachment[] | undefined {
+  if (!Array.isArray(v) || v.length > TASK_LIMITS.attachments) return undefined;
+  const out: Attachment[] = [];
+  const seen = new Set<string>();
+  for (const a of v) {
+    if (
+      !isObject(a) ||
+      !isHex(a.blob_id, 32) ||
+      !isHex(a.key, 32) ||
+      !isHex(a.nonce, 24) ||
+      !isText(a.name, TASK_LIMITS.attachmentName, 1) ||
+      !isText(a.mime, TASK_LIMITS.attachmentMime, 1) ||
+      !isInt(a.size, 0, TASK_LIMITS.attachmentBytes)
+    ) {
+      return undefined;
+    }
+    if (seen.has(a.blob_id)) return undefined;
+    seen.add(a.blob_id);
+    out.push({ blob_id: a.blob_id, key: a.key, nonce: a.nonce, name: a.name, mime: a.mime, size: a.size });
+  }
+  return out;
+}
+
+function parseMemberList(v: unknown, max: number): MemberId[] | undefined {
+  if (!Array.isArray(v) || v.length > max || !v.every((id) => isHex(id, 32))) return undefined;
+  return [...new Set(v as MemberId[])].sort();
+}
+
+function requireActiveMembers(s: CommunityState, ids: MemberId[]): void {
+  for (const id of ids) if (s.members[id]?.status !== "active") reject("unknown_target");
+}
+
+/** The scope a new or moved task lands in; the author must manage it. */
+function requireScopeManager(s: CommunityState, author: MemberRecord, eventId: EventId | undefined): void {
+  if (canModerate(s, author)) return;
+  if (eventId === undefined) reject("not_authorized");
+  const ev = s.events[eventId];
+  if (!ev) reject(s.event_summaries[eventId] ? "not_authorized" : "unknown_target");
+  if (!canManageEvent(s, author, ev)) reject("not_authorized");
+}
+
+function taskCreate(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
+  const b = body(op);
+  if (!isHex(b.task_id, 16)) reject("malformed");
+  if (b.event_id !== undefined && !isHex(b.event_id, 16)) reject("malformed");
+  const eventId = b.event_id as EventId | undefined;
+  if (eventId !== undefined && !s.events[eventId] && !s.event_summaries[eventId]) reject("unknown_target");
+  if (s.tasks?.[b.task_id]) reject("already_exists");
+  const f = parseTaskFields(b, true);
+  if (b.assignee !== undefined && !isHex(b.assignee, 32)) reject("malformed");
+  const volunteers = b.volunteers === undefined ? [] : (parseMemberList(b.volunteers, TASK_LIMITS.volunteers) ?? reject("malformed"));
+  const assignee = b.assignee as MemberId | undefined;
+  if (assignee !== undefined && volunteers.includes(assignee)) reject("malformed");
+  requireScopeManager(s, author, eventId);
+  requireActiveMembers(s, assignee === undefined ? volunteers : [assignee, ...volunteers]);
+
+  const status: TaskStatus = assignee === undefined ? "awaiting_volunteer" : "todo";
+  const task: Task = {
+    task_id: b.task_id,
+    title: f.title!,
+    description: f.description ?? "",
+    tags: f.tags ?? [],
+    status,
+    priority: f.priority ?? "normal",
+    volunteers,
+    attachments: f.attachments ?? [],
+    comments: [],
+    history: [{ status, by: author.member_id, seq: e.seq }],
+    created_by: author.member_id,
+    created_seq: e.seq,
+    updated_seq: e.seq,
+  };
+  if (eventId !== undefined) task.event_id = eventId;
+  if (f.due_at !== undefined) task.due_at = f.due_at;
+  if (assignee !== undefined) task.assignee = assignee;
+  (s.tasks ??= {})[task.task_id] = task;
+}
+
+/** Fields, tags, priority, due date and attachments: the manager or the assignee. */
+function taskUpdate(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
+  const b = body(op);
+  const task = openTask(s, b.task_id);
+  const f = parseTaskFields(b, false);
+  if (b.event_id !== undefined && b.event_id !== null && !isHex(b.event_id, 16)) reject("malformed");
+  const movesScope = b.event_id !== undefined && (b.event_id ?? undefined) !== task.event_id;
+  if (movesScope) {
+    // Moving a task between scopes needs authority over both.
+    requireTaskManager(s, author, task);
+    const to = (b.event_id ?? undefined) as EventId | undefined;
+    if (to !== undefined && !s.events[to] && !s.event_summaries[to]) reject("unknown_target");
+    requireScopeManager(s, author, to);
+  } else if (!canManageTask(s, author, task) && task.assignee !== author.member_id) {
+    reject("not_authorized");
+  }
+  if (f.title !== undefined) task.title = f.title;
+  if (f.description !== undefined) task.description = f.description;
+  if (f.tags !== undefined) task.tags = f.tags;
+  if (f.priority !== undefined) task.priority = f.priority;
+  if (f.due_at !== undefined) task.due_at = f.due_at;
+  if (b.due_at === null) delete task.due_at;
+  if (f.attachments !== undefined) task.attachments = f.attachments;
+  if (movesScope) {
+    if (b.event_id === null) delete task.event_id;
+    else task.event_id = b.event_id as EventId;
+  }
+  touchTask(task, e.seq);
+}
+
+/**
+ * Managers assign anyone (replacing the current assignee); any member may
+ * take a task that has no assignee. The task moves from the pool to `todo`.
+ */
+function taskAssign(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
+  const b = body(op);
+  const task = openTask(s, b.task_id);
+  const target: MemberId = b.member_id === undefined ? author.member_id : isHex(b.member_id, 32) ? b.member_id : reject("malformed");
+  if (target === author.member_id) {
+    if (task.assignee !== undefined && task.assignee !== target && !canManageTask(s, author, task)) reject("not_authorized");
+  } else {
+    requireTaskManager(s, author, task);
+  }
+  if (s.members[target]?.status !== "active") reject("unknown_target");
+  if (task.assignee === target) reject("illegal_transition");
+  task.assignee = target;
+  task.volunteers = task.volunteers.filter((id) => id !== target);
+  if (task.status === "awaiting_volunteer") setTaskStatus(s, task, "todo", author.member_id, e.seq);
+  else touchTask(task, e.seq);
+}
+
+/** The assignee steps down, or a manager clears the assignee: back to the pool. */
+function taskUnassign(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
+  const b = body(op);
+  const task = openTask(s, b.task_id);
+  if (task.assignee === undefined) reject("illegal_transition");
+  if (task.assignee !== author.member_id) requireTaskManager(s, author, task);
+  delete task.assignee;
+  setTaskStatus(s, task, "awaiting_volunteer", author.member_id, e.seq);
+}
+
+/** Joins as a helper: oneself on any open task, or a manager adding someone. */
+function taskJoin(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
+  const b = body(op);
+  const task = openTask(s, b.task_id);
+  const target: MemberId = b.member_id === undefined ? author.member_id : isHex(b.member_id, 32) ? b.member_id : reject("malformed");
+  if (target !== author.member_id) requireTaskManager(s, author, task);
+  if (s.members[target]?.status !== "active") reject("unknown_target");
+  if (task.assignee === target || task.volunteers.includes(target)) reject("illegal_transition");
+  if (task.volunteers.length >= TASK_LIMITS.volunteers) reject("capacity_full");
+  task.volunteers = [...task.volunteers, target].sort();
+  touchTask(task, e.seq);
+}
+
+function taskLeave(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
+  const b = body(op);
+  const task = openTask(s, b.task_id);
+  const target: MemberId = b.member_id === undefined ? author.member_id : isHex(b.member_id, 32) ? b.member_id : reject("malformed");
+  if (target !== author.member_id) requireTaskManager(s, author, task);
+  if (!task.volunteers.includes(target)) reject("illegal_transition");
+  task.volunteers = task.volunteers.filter((id) => id !== target);
+  touchTask(task, e.seq);
+}
+
+/**
+ * Status changes. The people on the task move it between `todo`,
+ * `in_progress`, `blocked` and `done`; managers also cancel, mark a task
+ * from the pool as done, and reopen. A reopened task returns to `todo` if
+ * it still has an assignee, otherwise to the pool; a task with no assignee
+ * cannot be "in progress".
+ */
+function taskStatus(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
+  const b = body(op);
+  if (!TASK_STATUSES.includes(b.status as TaskStatus)) reject("malformed");
+  if (b.note !== undefined && !isText(b.note, TASK_LIMITS.note)) reject("malformed");
+  const to = b.status as TaskStatus;
+  const task = liveTask(s, b.task_id);
+  const from = task.status;
+  const manager = canManageTask(s, author, task);
+  if (to === from) reject("illegal_transition");
+
+  if (CLOSED_STATUSES.has(from)) {
+    // Reopen (managers only), to the status the assignee situation implies.
+    if (!manager) reject("not_authorized");
+    const expected: TaskStatus = task.assignee === undefined ? "awaiting_volunteer" : "todo";
+    if (to !== expected) reject("illegal_transition");
+  } else if (to === "cancelled") {
+    if (!manager) reject("not_authorized");
+  } else if (to === "awaiting_volunteer") {
+    // Only `task.unassign` (or losing the assignee) sends a task back to the pool.
+    reject("illegal_transition");
+  } else if (ASSIGNED_STATUSES.has(to)) {
+    if (task.assignee === undefined) reject("illegal_transition");
+    if (!manager && !isOnTask(author, task)) reject("not_authorized");
+  } else {
+    // done
+    if (from === "awaiting_volunteer" ? !manager : !manager && !isOnTask(author, task)) reject("not_authorized");
+  }
+  setTaskStatus(s, task, to, author.member_id, e.seq, b.note as string | undefined);
+}
+
+function taskComment(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
+  const b = body(op);
+  if (!isHex(b.comment_id, 16) || !isText(b.body, TASK_LIMITS.comment, 1)) reject("malformed");
+  const task = liveTask(s, b.task_id);
+  if (!canSeeTask(s, author, task)) reject("not_authorized");
+  if (task.comments.some((c) => c.comment_id === b.comment_id)) reject("already_exists");
+  if (task.comments.length >= TASK_LIMITS.comments) reject("capacity_full");
+  task.comments.push({ comment_id: b.comment_id, author: author.member_id, body: b.body, seq: e.seq });
+  touchTask(task, e.seq);
+}
+
+function taskCommentEdit(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
+  const b = body(op);
+  if (!isHex(b.comment_id, 16) || !isText(b.body, TASK_LIMITS.comment, 1)) reject("malformed");
+  const task = liveTask(s, b.task_id);
+  const c = task.comments.find((x) => x.comment_id === b.comment_id);
+  if (!c) reject("unknown_target");
+  if (c.author !== author.member_id) reject("not_authorized");
+  c.body = b.body;
+  c.edited_seq = e.seq;
+  touchTask(task, e.seq);
+}
+
+/** The author, or whoever manages the task (moderation). */
+function taskCommentDelete(s: CommunityState, op: DecodedOp, author: MemberRecord, e: Entry): void {
+  const b = body(op);
+  if (!isHex(b.comment_id, 16)) reject("malformed");
+  const task = liveTask(s, b.task_id);
+  const c = task.comments.find((x) => x.comment_id === b.comment_id);
+  if (!c) reject("unknown_target");
+  if (c.author !== author.member_id) requireTaskManager(s, author, task);
+  task.comments = task.comments.filter((x) => x.comment_id !== b.comment_id);
+  touchTask(task, e.seq);
+}
+
+/** Deletes a task outright, whatever its status. The remover's device drops its blobs. */
+function taskRemove(s: CommunityState, op: DecodedOp, author: MemberRecord): void {
+  const b = body(op);
+  if (b.reason !== undefined && !isText(b.reason, 500)) reject("malformed");
+  const task = liveTask(s, b.task_id);
+  requireTaskManager(s, author, task);
+  delete s.tasks![task.task_id];
+  pruneTasks(s);
+}
+
+// ---------------------------------------------------------------------------
 // Retention (§12.2): runs after every entry, driven by the node-time clock.
 // ---------------------------------------------------------------------------
 
@@ -791,6 +1213,16 @@ function sweepRetention(s: CommunityState): void {
     if (m.status === "active" || m.profile === null || m.ended_at === undefined) continue;
     if (now - m.ended_at < r.removed_member_detail_days * DAY_MS) continue;
     m.profile = null;
+  }
+
+  if (s.tasks) {
+    const days = closedTaskDays(s.community.policy);
+    for (const id of sortedKeys(s.tasks)) {
+      const task = s.tasks[id]!;
+      if (task.closed_at === undefined || now - task.closed_at < days * DAY_MS) continue;
+      delete s.tasks[id];
+    }
+    pruneTasks(s);
   }
 }
 

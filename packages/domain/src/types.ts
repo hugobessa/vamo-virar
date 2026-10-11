@@ -8,6 +8,8 @@ export type Hex = string;
 export type MemberId = Hex; // SHA-256("vv/member-id/v1" || msk), §2.2
 export type EventId = Hex; // 16 random bytes
 export type OpId = Hex; // 16 random bytes
+export type TaskId = Hex; // 16 random bytes
+export type CommentId = Hex; // 16 random bytes
 
 // ---------------------------------------------------------------------------
 // Log entries (input to the reducer)
@@ -84,6 +86,12 @@ export interface RetentionPolicy {
   keep_attendee_list: boolean;
   removed_member_detail_days: number;
   rejected_join_request_days: number;
+  /**
+   * Days a done or cancelled task (§9.7) is kept before it is dropped.
+   * Absent means `DEFAULT_CLOSED_TASK_DAYS`; it is only stored when set, so
+   * policies written before tasks existed hash as before.
+   */
+  closed_task_detail_days?: number;
 }
 
 export interface Policy {
@@ -180,6 +188,76 @@ export interface EventSummary {
   attendees?: MemberId[];
 }
 
+// ---------------------------------------------------------------------------
+// Tasks (§9.7): committee work items, scoped to the community or to one event.
+// ---------------------------------------------------------------------------
+
+export type TaskStatus = "awaiting_volunteer" | "todo" | "in_progress" | "blocked" | "done" | "cancelled";
+export type TaskPriority = "low" | "normal" | "high" | "urgent";
+
+/**
+ * A file stored on the node as an opaque blob (§15, `/blobs`). The device
+ * encrypts it under a fresh random key before upload; the key travels only
+ * inside the (encrypted) task op, so the node sees sizes and nothing else.
+ */
+export interface Attachment {
+  /** SHA-256 of the ciphertext, which is also how the node names the blob. */
+  blob_id: Hex;
+  /** 32-byte XChaCha20-Poly1305 key, unique to this file. */
+  key: Hex;
+  /** 24-byte nonce. */
+  nonce: Hex;
+  name: string;
+  mime: string;
+  /** Plaintext size in bytes. */
+  size: number;
+}
+
+export interface TaskComment {
+  comment_id: CommentId;
+  author: MemberId;
+  /** Markdown. */
+  body: string;
+  seq: number;
+  edited_seq?: number;
+}
+
+/** One line of a task's status history, oldest first. */
+export interface TaskStatusChange {
+  status: TaskStatus;
+  by: MemberId;
+  seq: number;
+  note?: string;
+}
+
+export interface Task {
+  task_id: TaskId;
+  /** Absent for community-level tasks. May point at an event summary once the event is summarized. */
+  event_id?: EventId;
+  title: string;
+  /** Markdown. */
+  description: string;
+  /** Lowercased, sorted, unique. */
+  tags: string[];
+  status: TaskStatus;
+  priority: TaskPriority;
+  due_at?: number;
+  /** The one person responsible. An open task without one is `awaiting_volunteer`. */
+  assignee?: MemberId;
+  /** Other members helping, sorted. Never includes `assignee`. */
+  volunteers: MemberId[];
+  attachments: Attachment[];
+  /** In seq order. */
+  comments: TaskComment[];
+  /** Bounded status history in seq order; the first entry is the creation. */
+  history: TaskStatusChange[];
+  created_by: MemberId;
+  created_seq: number;
+  updated_seq: number;
+  /** Retention clock value when the task became done or cancelled. */
+  closed_at?: number;
+}
+
 export type RejectReason =
   | "not_member"
   | "not_authorized"
@@ -241,6 +319,8 @@ export interface CommunityState {
   members: Record<MemberId, MemberRecord>;
   events: Record<EventId, Event>;
   event_summaries: Record<EventId, EventSummary>;
+  /** Tasks (§9.7). Absent when there are none, so communities without tasks hash as before. */
+  tasks?: Record<TaskId, Task>;
   rejected_recent: RejectedOp[];
   /**
    * op_id → seq for dedupe within the log this device has replayed. Not part

@@ -15,6 +15,28 @@ export function eventId(n: number): string {
   return n.toString(16).padStart(8, "0").repeat(4);
 }
 
+/** Distinct from event ids (which repeat the counter) so a mix-up fails loudly. */
+export function taskId(n: number): string {
+  return `7a5${n.toString(16).padStart(5, "0")}`.repeat(4);
+}
+
+export function commentId(n: number): string {
+  return `c0${n.toString(16).padStart(6, "0")}`.repeat(4);
+}
+
+/** A well-formed attachment record for test task `n`. */
+export function attachment(n: number, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    blob_id: key(900 + n),
+    key: key(950 + n),
+    nonce: n.toString(16).padStart(8, "0").repeat(6),
+    name: `foto-${n}.jpg`,
+    mime: "image/jpeg",
+    size: 1234,
+    ...extra,
+  };
+}
+
 export interface Person {
   name: string;
   msk: string;
@@ -176,6 +198,12 @@ export class LogBuilder {
       location: { label: "Praça do Derby", area: { lat_e4: -80_571, lng_e4: -348_950 } },
       ...extra,
     });
+    return id;
+  }
+
+  createTask(author: Person, n: number, extra: Record<string, unknown> = {}): string {
+    const id = taskId(n);
+    this.op(author, "task.create", { task_id: id, title: `Tarefa ${n}`, ...extra });
     return id;
   }
 

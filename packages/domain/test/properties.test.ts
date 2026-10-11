@@ -8,7 +8,7 @@ import { applyInPlace, fold, reduce } from "../src/reducer.js";
 import { createSnapshot, restoreSnapshot } from "../src/snapshot.js";
 import type { CommunityState, Entry, Outcome } from "../src/types.js";
 import { clone } from "../src/util.js";
-import { canon, DAY, eventId, HOUR, LogBuilder, person, T0, type Person } from "./helpers.js";
+import { canon, commentId, DAY, eventId, HOUR, LogBuilder, person, T0, taskId, type Person } from "./helpers.js";
 
 const ana = person("Ana");
 const bia = person("Bia");
@@ -19,6 +19,8 @@ const m3 = person("M3");
 const outsider = person("Outsider");
 const PEOPLE: Person[] = [ana, bia, otto, m1, m2, m3, outsider];
 const EVENTS = [eventId(1), eventId(2), eventId(3)];
+const TASKS = [taskId(1), taskId(2), taskId(3), taskId(4)];
+const TASK_STATUSES = ["awaiting_volunteer", "todo", "in_progress", "blocked", "done", "cancelled"] as const;
 
 const ACTIONS = ["invite", "volunteer", "accept", "decline", "revoke", "approve", "reject", "withdraw"] as const;
 
@@ -28,8 +30,19 @@ const org = fc.oneof({ weight: 4, arbitrary: fc.integer({ min: 0, max: 2 }) }, {
 const mem = fc.oneof({ weight: 4, arbitrary: fc.integer({ min: 3, max: 5 }) }, { weight: 1, arbitrary: who });
 const admin = fc.oneof({ weight: 4, arbitrary: fc.constant(0) }, { weight: 1, arbitrary: who });
 const ev = fc.integer({ min: 0, max: EVENTS.length - 1 });
+const task = fc.integer({ min: 0, max: TASKS.length - 1 });
+// An event index, or "community level".
+const scope = fc.option(ev, { nil: undefined });
 
 const command = fc.oneof(
+  { weight: 3, arbitrary: fc.record({ k: fc.constant("taskCreate" as const), actor: org, task, scope, assignee: fc.option(who, { nil: undefined }) }) },
+  { weight: 3, arbitrary: fc.record({ k: fc.constant("taskAssign" as const), actor: who, task, target: fc.option(who, { nil: undefined }) }) },
+  { weight: 2, arbitrary: fc.record({ k: fc.constantFrom("taskUnassign" as const, "taskJoin" as const, "taskLeave" as const), actor: who, task }) },
+  { weight: 4, arbitrary: fc.record({ k: fc.constant("taskStatus" as const), actor: who, task, status: fc.constantFrom(...TASK_STATUSES) }) },
+  { weight: 2, arbitrary: fc.record({ k: fc.constant("taskComment" as const), actor: who, task, n: fc.nat({ max: 5 }) }) },
+  { weight: 1, arbitrary: fc.record({ k: fc.constant("taskMove" as const), actor: org, task, scope }) },
+  { weight: 1, arbitrary: fc.record({ k: fc.constant("taskRemove" as const), actor: who, task }) },
+  { weight: 1, arbitrary: fc.record({ k: fc.constant("eventRemove" as const), actor: admin, ev }) },
   { weight: 6, arbitrary: fc.record({ k: fc.constant("part" as const), actor: who, action: fc.constantFrom(...ACTIONS), ev, target: who }) },
   { weight: 6, arbitrary: fc.record({ k: fc.constant("inviteAccept" as const), actor: org, ev, target: mem, respond: fc.constantFrom("accept", "decline", "none") }) },
   { weight: 4, arbitrary: fc.record({ k: fc.constant("volunteerApprove" as const), actor: org, ev, target: mem, respond: fc.constantFrom("approve", "reject", "none") }) },
@@ -61,6 +74,10 @@ function baseLog(): LogBuilder {
   b.createEvent(bia, 1, { capacity: 2 });
   b.createEvent(otto, 2);
   b.createEvent(bia, 3, { capacity: 1 });
+  // Three tasks to start with; the fourth id is left for random creation.
+  b.createTask(bia, 1, { event_id: EVENTS[0] });
+  b.createTask(otto, 2, { event_id: EVENTS[1], assignee: m1.id });
+  b.createTask(ana, 3, { assignee: m2.id, volunteers: [m3.id] });
   return b;
 }
 
@@ -154,6 +171,39 @@ function materialize(cmds: Command[]): Entry[] {
         });
         break;
       }
+      case "taskCreate": {
+        const body: Record<string, unknown> = { task_id: TASKS[c.task]!, title: "t", tags: ["Som", "arte"] };
+        if (c.scope !== undefined) body.event_id = EVENTS[c.scope];
+        if (c.assignee !== undefined) body.assignee = PEOPLE[c.assignee]!.id;
+        e = b.op(PEOPLE[c.actor]!, "task.create", body);
+        break;
+      }
+      case "taskAssign": {
+        const body: Record<string, unknown> = { task_id: TASKS[c.task]! };
+        if (c.target !== undefined) body.member_id = PEOPLE[c.target]!.id;
+        e = b.op(PEOPLE[c.actor]!, "task.assign", body);
+        break;
+      }
+      case "taskUnassign":
+      case "taskJoin":
+      case "taskLeave":
+        e = b.op(PEOPLE[c.actor]!, `task.${c.k.slice(4).toLowerCase()}`, { task_id: TASKS[c.task]! });
+        break;
+      case "taskStatus":
+        e = b.op(PEOPLE[c.actor]!, "task.status", { task_id: TASKS[c.task]!, status: c.status });
+        break;
+      case "taskComment":
+        e = b.op(PEOPLE[c.actor]!, "task.comment", { task_id: TASKS[c.task]!, comment_id: commentId(c.n), body: "oi" });
+        break;
+      case "taskMove":
+        e = b.op(PEOPLE[c.actor]!, "task.update", { task_id: TASKS[c.task]!, event_id: c.scope === undefined ? null : EVENTS[c.scope], title: "moved" });
+        break;
+      case "taskRemove":
+        e = b.op(PEOPLE[c.actor]!, "task.remove", { task_id: TASKS[c.task]! });
+        break;
+      case "eventRemove":
+        e = b.op(PEOPLE[c.actor]!, "event.remove", { event_id: EVENTS[c.ev]! });
+        break;
       case "advance":
         e = b.op(ana, "member.profile", { profile: { display_name: "Ana" } }, { at: b.at + c.days * DAY });
         break;
@@ -209,6 +259,33 @@ function checkInvariants(s: CommunityState, log: readonly Entry[], outcomes: rea
     }
   }
   for (const id of Object.keys(s.event_summaries)) expect(s.events[id]).toBeUndefined();
+
+  // Tasks (§9.7).
+  if (s.tasks) expect(Object.keys(s.tasks).length, "empty tasks map must be absent").toBeGreaterThan(0);
+  for (const t of Object.values(s.tasks ?? {})) {
+    const open = t.status !== "done" && t.status !== "cancelled";
+    if (t.event_id !== undefined) {
+      expect(s.events[t.event_id] ?? s.event_summaries[t.event_id], "task points at a vanished event").toBeDefined();
+    }
+    if (open) {
+      // "Waiting for a volunteer" means exactly "nobody is assigned".
+      expect(t.assignee === undefined, `${t.status} with assignee=${t.assignee}`).toBe(t.status === "awaiting_volunteer");
+      expect(t.closed_at).toBeUndefined();
+      if (t.assignee !== undefined) expect(s.members[t.assignee]!.status).toBe("active");
+      for (const id of t.volunteers) expect(s.members[id]!.status).toBe("active");
+    } else {
+      expect(t.closed_at).toBeDefined();
+    }
+    if (t.assignee !== undefined) expect(t.volunteers).not.toContain(t.assignee);
+    expect([...t.volunteers].sort()).toEqual(t.volunteers);
+    expect(new Set(t.volunteers).size).toBe(t.volunteers.length);
+    expect([...t.tags].sort()).toEqual(t.tags);
+    expect(t.history.length).toBeGreaterThan(0);
+    expect(t.history.at(-1)!.status).toBe(t.status);
+    for (let i = 1; i < t.history.length; i++) expect(t.history[i]!.seq).toBeGreaterThan(t.history[i - 1]!.seq);
+    for (let i = 1; i < t.comments.length; i++) expect(t.comments[i]!.seq).toBeGreaterThan(t.comments[i - 1]!.seq);
+    for (const c of t.comments) expect(s.members[c.author], "comment by unknown member").toBeDefined();
+  }
 }
 
 const RUNS = { numRuns: 300 };
@@ -346,3 +423,22 @@ describe("properties", () => {
 function countConfirmed(ps: Record<string, { status: string }>): number {
   return Object.values(ps).filter((p) => p.status === "confirmed").length;
 }
+
+describe("coverage sanity", () => {
+  it("random logs do exercise the task machinery", () => {
+    let applied = 0;
+    let total = 0;
+    for (const cmds of fc.sample(commands, 40)) {
+      const log = materialize(cmds);
+      const { outcomes } = fold(log);
+      log.forEach((e, i) => {
+        if (e.op?.type.startsWith("task.")) {
+          total++;
+          if (outcomes[i]?.status === "applied") applied++;
+        }
+      });
+    }
+    expect(total).toBeGreaterThan(50);
+    expect(applied).toBeGreaterThan(total / 5);
+  });
+});
