@@ -244,6 +244,11 @@ try {
     await seen(ana, "Levar a caixa de som").first().click();
     await seen(ana, "Pego a caixa com o").first().waitFor({ timeout: 15000 });
     await shot(ana, "12e-task-as-admin");
+    // Back to the action page, where the next steps expect Ana to be.
+    await ana.goto(appUrl);
+    await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
+    await seen(ana, "Plenária no Derby").first().click({ timeout: 15000 });
+    await ana.getByTestId("ask-who-can-come").last().waitFor({ timeout: 15000 });
   });
 
   await step("Calendar settings explain what is read and work without any calendar", async () => {
