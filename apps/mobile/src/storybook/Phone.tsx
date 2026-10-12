@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SidebarShown, useSidebarFits, WidthOverride } from "../ui/layout";
+import { Sidebar } from "../ui/Sidebar";
 import { fonts, space, useTheme } from "../ui/theme";
 import { ScenarioProvider, type Scenario } from "./scenario";
 
@@ -8,9 +10,13 @@ const HeaderTitle = createContext<(title: string) => void>(() => {});
 
 /**
  * "phone" draws the rounded device frame; "bare" fills the viewport with a
- * status bar on top, for store screenshots (see scripts/store-screenshots.mjs).
+ * status bar on top, for store screenshots (see scripts/store-screenshots.mjs);
+ * "desktop" fills the viewport like the web app in a browser, sidebar included.
  */
-export const PhoneFrame = createContext<"phone" | "bare">("phone");
+export const PhoneFrame = createContext<"phone" | "bare" | "desktop">("phone");
+
+/** Width of the screen inside the phone frame (390 minus the bezel). */
+const PHONE_WIDTH = 390 - 16;
 
 /** Lets `<Stack.Screen options={{ title }}>` set the title of the frame's header. */
 export function useHeaderTitle() {
@@ -27,7 +33,7 @@ export function Phone({ title, scenario, children }: { title: string; scenario: 
   const frame = useContext(PhoneFrame);
   const header = (
     <View style={{ height: 52, justifyContent: "center", paddingHorizontal: space.l, backgroundColor: c.bg }}>
-      <Text numberOfLines={1} style={{ color: c.text, fontFamily: fonts.display, fontSize: 17, fontWeight: "900" }}>
+      <Text numberOfLines={1} style={{ color: c.text, fontFamily: fonts.display, fontSize: 17, fontWeight: "900", textAlign: frame === "desktop" ? "center" : "left" }}>
         {override ?? title}
       </Text>
     </View>
@@ -47,19 +53,49 @@ export function Phone({ title, scenario, children }: { title: string; scenario: 
       </ScenarioProvider>
     );
   }
+  if (frame === "desktop") {
+    return (
+      <ScenarioProvider scenario={scenario}>
+        <SafeAreaProvider>
+          <HeaderTitle.Provider value={setOverride}>
+            <Desktop header={header}>{children}</Desktop>
+          </HeaderTitle.Provider>
+        </SafeAreaProvider>
+      </ScenarioProvider>
+    );
+  }
   return (
     <ScenarioProvider scenario={scenario}>
       <SafeAreaProvider>
         <HeaderTitle.Provider value={setOverride}>
-          <View style={{ padding: space.xl, alignItems: "center" }}>
-            <View style={{ width: 390, maxWidth: "100%", height: 780, borderRadius: 36, borderWidth: 8, borderColor: c.frame, overflow: "hidden", backgroundColor: c.bg }}>
-              {header}
-              <View style={{ flex: 1 }}>{children}</View>
+          <WidthOverride.Provider value={PHONE_WIDTH}>
+            <View style={{ padding: space.xl, alignItems: "center" }}>
+              <View style={{ width: 390, maxWidth: "100%", height: 780, borderRadius: 36, borderWidth: 8, borderColor: c.frame, overflow: "hidden", backgroundColor: c.bg }}>
+                {header}
+                <View style={{ flex: 1 }}>{children}</View>
+              </View>
             </View>
-          </View>
+          </WidthOverride.Provider>
         </HeaderTitle.Provider>
       </SafeAreaProvider>
     </ScenarioProvider>
+  );
+}
+
+/** The web app's shell on a wide window: the sidebar, then the header and the screen. */
+function Desktop({ header, children }: { header: ReactNode; children: ReactNode }) {
+  const c = useTheme();
+  const sidebar = useSidebarFits();
+  return (
+    <SidebarShown.Provider value={sidebar}>
+      <View style={{ width: "100vw" as unknown as number, height: "100vh" as unknown as number, overflow: "hidden", flexDirection: "row", backgroundColor: c.bg }}>
+        {sidebar ? <Sidebar /> : null}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          {header}
+          <View style={{ flex: 1 }}>{children}</View>
+        </View>
+      </View>
+    </SidebarShown.Provider>
   );
 }
 

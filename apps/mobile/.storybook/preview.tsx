@@ -36,6 +36,7 @@ const preview: Preview = {
         icon: "mobile",
         items: [
           { value: "phone", title: "Celular" },
+          { value: "desktop", title: "Computador (web)" },
           { value: "bare", title: "Tela cheia (lojas)" },
         ],
         dynamicTitle: true,
@@ -63,7 +64,7 @@ const preview: Preview = {
   decorators: [
     (Story, ctx) => {
       const scheme = ctx.globals["scheme"] === "dark" ? "dark" : "light";
-      const frame = ctx.globals["frame"] === "bare" ? "bare" : "phone";
+      const frame = ctx.globals["frame"] === "bare" ? "bare" : ctx.globals["frame"] === "desktop" ? "desktop" : "phone";
       const reduced = ctx.globals["motion"] === "off";
       return (
         <PhoneFrame.Provider value={frame}>

@@ -4,7 +4,7 @@ import { deviceCalendarsSupported } from "../lib/matching";
 import { useApp, useCalendarService } from "../lib/context";
 import { searchPlaces, type Place } from "../model/places";
 import { formatDateInput, parseLocal } from "../model/time";
-import { Banner, Body, Button, Card, Field, Heading } from "./kit";
+import { Actions, Banner, Body, Button, Card, Field, Heading } from "./kit";
 import { space } from "./theme";
 
 export function PlacesSettings() {
@@ -60,7 +60,9 @@ export function PlacesSettings() {
               {p.activeFrom ? formatDateInput(p.activeFrom) : "…"} – {p.activeTo ? formatDateInput(p.activeTo) : "…"}
             </Body>
           ) : null}
-          <Button kind="secondary" label={t("removePlace")} onPress={() => void svc.removePlace(p.id)} />
+          <Actions>
+            <Button kind="secondary" label={t("removePlace")} onPress={() => void svc.removePlace(p.id)} />
+          </Actions>
         </Card>
       ))}
       {deviceCalendarsSupported ? (
@@ -92,10 +94,14 @@ export function PlacesSettings() {
           <Field label={t("tripFrom")} value={from} onChangeText={setFrom} keyboardType="numbers-and-punctuation" />
           <Field label={t("tripTo")} value={to} onChangeText={setTo} keyboardType="numbers-and-punctuation" />
           {error ? <Banner tone="danger" text={error} /> : null}
-          <Button testID="place-save" label={t("save")} onPress={save} />
+          <Actions>
+            <Button testID="place-save" label={t("save")} onPress={save} />
+          </Actions>
         </Card>
       ) : (
-        <Button testID="add-place" kind="secondary" label={t("addPlace")} onPress={() => setAdding(true)} />
+        <Actions>
+          <Button testID="add-place" kind="secondary" label={t("addPlace")} onPress={() => setAdding(true)} />
+        </Actions>
       )}
       <Field
         label={t("travelSpeed")}

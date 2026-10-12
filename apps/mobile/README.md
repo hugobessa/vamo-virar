@@ -29,7 +29,9 @@ src/model/         lógica independente de plataforma, com testes unitários: qu
                    listas, entrada de datas, lugares, status de sincronização, textos (pt), mensagens de erro
 src/lib/           AppStore (réplicas, sync em segundo plano, atualizações ao vivo), SealedStore
                    (persistência cifrada), contexto React
-src/ui/            kit de UI (áreas de toque de 48 pt, claro/escuro), componentes das abas
+src/ui/            kit de UI (áreas de toque de 48 pt, claro/escuro), componentes das abas;
+                   layout.ts decide o que fazer com o espaço: coluna centrada a partir de 600 pt,
+                   duas colunas e listas em pares a partir de 900 pt, barra lateral na web a partir de 1024 pt
 ```
 
 ## Armazenamento

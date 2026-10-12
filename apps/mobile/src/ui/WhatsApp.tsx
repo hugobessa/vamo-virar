@@ -2,7 +2,7 @@ import { isWhatsAppLink } from "@vamo-virar/domain";
 import { useState } from "react";
 import { Linking } from "react-native";
 import { useApp } from "../lib/context";
-import { Button, Card, Field, Heading } from "./kit";
+import { Actions, Button, Card, Field, Heading } from "./kit";
 
 /** What a typed link means: empty, a valid group link, or invalid. */
 export function parseWhatsApp(raw: string): { link?: string; invalid: boolean } {
@@ -55,22 +55,24 @@ export function WhatsAppEditor({
     <Card testID={testID}>
       <Heading>{title}</Heading>
       <WhatsAppField value={value} onChangeText={setValue} />
-      <Button
-        kind="secondary"
-        label={t("save")}
-        disabled={!parsed.link || parsed.link === current}
-        onPress={() => onSave(parsed.link!)}
-      />
-      {current ? (
+      <Actions>
         <Button
           kind="secondary"
-          label={t("whatsappRemove")}
-          onPress={() => {
-            setValue("");
-            onSave(null);
-          }}
+          label={t("save")}
+          disabled={!parsed.link || parsed.link === current}
+          onPress={() => onSave(parsed.link!)}
         />
-      ) : null}
+        {current ? (
+          <Button
+            kind="secondary"
+            label={t("whatsappRemove")}
+            onPress={() => {
+              setValue("");
+              onSave(null);
+            }}
+          />
+        ) : null}
+      </Actions>
     </Card>
   );
 }
