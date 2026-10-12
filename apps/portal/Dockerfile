@@ -2,7 +2,7 @@
 #
 # Access-request portal. Build from the repository root:
 #   docker build -f apps/portal/Dockerfile -t vamo-virar/portal .
-# (Dockerfile.dockerignore next to this file picks what goes in.)
+# (The root .dockerignore picks what goes in.)
 
 FROM node:22-alpine AS build
 WORKDIR /src/apps/portal

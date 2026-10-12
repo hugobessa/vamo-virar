@@ -21,6 +21,98 @@ O portal usa a [API de operador](../../docs/managed-hosting.md#a-api-de-operador
 do nó (`POST /operator/v1/tenants` e companhia), que nunca fica exposta na
 internet.
 
+## Montar no Railway
+
+Dois serviços no mesmo projeto, cada um com o próprio domínio:
+
+| Serviço | Domínio | Para quê |
+|---|---|---|
+| `node` | `servidor.vamovirar.app` | o servidor das comunidades (é o endereço que vai no app) |
+| `portal` | `acesso.vamovirar.app` | o formulário de pedidos e o `/admin` |
+
+O portal fala com a API de operador do nó pela rede privada do Railway
+(`node.railway.internal`), que não fica exposta na internet. Os dois são
+compilados direto do repositório, e cada merge na `main` faz um deploy novo.
+
+Antes de começar, gere três segredos (no terminal, `openssl rand -hex 32`; ou
+o botão de gerar do [guia do servidor](https://vamovirar.app/servidor/)):
+um para `VV_OPERATOR_TOKEN`, um para `PORTAL_SESSION_SECRET` e uma senha
+para o `/admin`.
+
+### 1. O serviço `node`
+
+1. No Railway, **New Project › Deploy from GitHub repo** e escolha
+   `hugobessa/vamo-virar` (na primeira vez ele pede para conectar o GitHub).
+2. Clique no serviço criado, abra **Settings** e mude o nome para `node`
+   (exatamente assim: é o nome que o portal usa na rede privada).
+3. Em **Variables › Raw Editor**, cole e clique em **Update**:
+
+   ```
+   RAILWAY_DOCKERFILE_PATH=deploy/Dockerfile
+   RAILWAY_RUN_UID=0
+   VV_TRUST_FORWARDED_FOR=1
+   VV_OPERATOR_LISTEN=[::]:9787
+   VV_OPERATOR_TOKEN=O_PRIMEIRO_SEGREDO
+   ```
+
+   Para criar comunidades suas sem passar pelo formulário, acrescente
+   `VV_PROVISIONING_TOKEN=` com mais um segredo.
+4. Clique com o botão direito no serviço, **Attach Volume**, mount path `/data`.
+5. **Settings › Networking › Custom Domain**: `servidor.vamovirar.app`,
+   porta `8787`. O Railway mostra os registros DNS para criar (passo 3).
+
+### 2. O serviço `portal`
+
+1. No mesmo projeto, **+ New › GitHub Repo › hugobessa/vamo-virar** de novo
+   e mude o nome do serviço para `portal`.
+2. Em **Variables › Raw Editor**:
+
+   ```
+   RAILWAY_DOCKERFILE_PATH=apps/portal/Dockerfile
+   RAILWAY_RUN_UID=0
+   PORTAL_PUBLIC_URL=https://acesso.vamovirar.app
+   PORTAL_NODE_URL=https://servidor.vamovirar.app
+   PORTAL_OPERATOR_URL=http://node.railway.internal:9787
+   VV_OPERATOR_TOKEN=${{node.VV_OPERATOR_TOKEN}}
+   PORTAL_TRUST_PROXY=1
+   PORTAL_ADMIN_EMAIL=seu@email
+   PORTAL_ADMIN_PASSWORD=A_SENHA_DO_ADMIN
+   PORTAL_SESSION_SECRET=O_SEGUNDO_SEGREDO
+   PORTAL_MAIL_FROM=Vamo Virar <servidor@vamovirar.app>
+   PORTAL_SMTP_URL=smtps://resend:SUA_API_KEY@smtp.resend.com:465
+   ```
+
+   (`${{node.VV_OPERATOR_TOKEN}}` é copiado do serviço `node` pelo próprio
+   Railway. O SMTP está explicado em [O email](#2-o-email).)
+3. **Attach Volume** com mount path `/data`.
+4. **Settings › Networking › Custom Domain**: `acesso.vamovirar.app`, porta `3000`.
+
+### 3. O DNS na Cloudflare
+
+Para cada domínio, crie no painel da Cloudflare (**DNS › Records**) os
+registros que o Railway mostrou (um `CNAME` e, às vezes, um `TXT` de
+verificação). Deixe o `CNAME` como **DNS only** (nuvem cinza): o Railway cuida
+do certificado HTTPS. Em alguns minutos o Railway marca o domínio como
+verificado.
+
+### 4. Conferir
+
+- `https://servidor.vamovirar.app/.well-known/vamo-virar` mostra um texto
+  começando com `{"protocol"`;
+- `https://acesso.vamovirar.app/` mostra o formulário;
+- faça um pedido você mesmo, aprove em `https://acesso.vamovirar.app/admin` e
+  crie uma comunidade no app com o código do email.
+
+Se o portal disser que não consegue falar com o nó, confira se o serviço se
+chama `node` e se o `VV_OPERATOR_TOKEN` é igual nos dois. Se ainda assim não
+der, troque `VV_OPERATOR_LISTEN` para `0.0.0.0:9787` (ambientes do Railway com
+rede privada IPv4).
+
+**Backup:** os dados ficam nos volumes do Railway. O celular de quem fundou
+cada comunidade consegue reconstruí-la em outro servidor, então um backup do
+nó (`community-node backup`, veja [deploy.md](../../docs/deploy.md)) é uma
+segurança a mais, não a única cópia.
+
 ## Montar em casa com o domínio `servidor.vamovirar.app`
 
 A pasta [`deploy/`](deploy) tem tudo para um computador em casa: o nó, o

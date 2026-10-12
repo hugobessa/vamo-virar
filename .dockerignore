@@ -1,4 +1,5 @@
-# Only the Rust workspace is needed to build the node image.
+# Only what the images need goes into the build context:
+# the Rust workspace (deploy/Dockerfile) and the portal (apps/portal/Dockerfile).
 **
 !Cargo.toml
 !Cargo.lock
@@ -6,3 +7,8 @@
 !apps/node/**
 crates/**/target
 apps/node/target
+!tsconfig.base.json
+!apps/portal/package.json
+!apps/portal/tsconfig.json
+!apps/portal/tsconfig.build.json
+!apps/portal/src/**
