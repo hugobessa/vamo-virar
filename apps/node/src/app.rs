@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rusqlite::Connection;
 use serde::Deserialize;
 use tokio::sync::broadcast;
 use vv_crypto::primitives::public_key;
@@ -93,7 +94,7 @@ impl Config {
         }
         let mut names = std::collections::HashSet::new();
         for t in &self.tenants {
-            if t.name.is_empty() || t.name.len() > 64 || !names.insert(t.name.as_str()) {
+            if !valid_tenant_name(&t.name) || !names.insert(t.name.as_str()) {
                 return Err(format!(
                     "tenant names must be unique and 1-64 characters: {:?}",
                     t.name
@@ -108,23 +109,11 @@ impl Config {
         }
         Ok(())
     }
+}
 
-    pub fn tenant(&self, name: Option<&str>) -> Option<&Tenant> {
-        let name = name?;
-        self.tenants.iter().find(|t| t.name == name)
-    }
-
-    /// The tenant's quota for a community, if it has one.
-    pub fn max_log_bytes(&self, tenant: Option<&str>) -> Option<u64> {
-        self.tenant(tenant).and_then(|t| t.max_log_bytes)
-    }
-
-    /// The blob quota for a community: the tenant's, or the node's default.
-    pub fn max_blob_bytes_total(&self, tenant: Option<&str>) -> u64 {
-        self.tenant(tenant)
-            .and_then(|t| t.max_blob_bytes_total)
-            .unwrap_or(self.max_blob_bytes_total)
-    }
+/// Tenant names: 1-64 characters, no control characters.
+pub fn valid_tenant_name(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 64 && !name.chars().any(char::is_control)
 }
 
 /// Constant-time comparison for secrets.
@@ -256,6 +245,57 @@ impl App {
             streams: Mutex::new(HashMap::new()),
             rate: Mutex::new(HashMap::new()),
         })
+    }
+
+    /// A tenant by name: from the config file, or one the operator API
+    /// added (revoked ones included, so their communities keep their limits).
+    pub fn tenant(&self, c: &Connection, name: Option<&str>) -> rusqlite::Result<Option<Tenant>> {
+        let Some(name) = name else {
+            return Ok(None);
+        };
+        if let Some(t) = self.config.tenants.iter().find(|t| t.name == name) {
+            return Ok(Some(t.clone()));
+        }
+        Ok(store::tenant(c, name)?.map(|s| s.tenant))
+    }
+
+    /// The tenant whose provisioning token is `token`, if any may provision.
+    pub fn tenant_for_token(
+        &self,
+        c: &Connection,
+        token: &str,
+    ) -> rusqlite::Result<Option<Tenant>> {
+        let digest = hex(&<sha2::Sha256 as sha2::Digest>::digest(token.as_bytes()));
+        if let Some(t) = self
+            .config
+            .tenants
+            .iter()
+            .find(|t| same_secret(t.token_sha256.as_bytes(), digest.as_bytes()))
+        {
+            return Ok(Some(t.clone()));
+        }
+        Ok(store::active_tenant_by_hash(c, &digest)?.map(|s| s.tenant))
+    }
+
+    /// The tenant's log quota for a community, if it has one.
+    pub fn max_log_bytes(
+        &self,
+        c: &Connection,
+        tenant: Option<&str>,
+    ) -> rusqlite::Result<Option<u64>> {
+        Ok(self.tenant(c, tenant)?.and_then(|t| t.max_log_bytes))
+    }
+
+    /// The blob quota for a community: the tenant's, or the node's default.
+    pub fn max_blob_bytes_total(
+        &self,
+        c: &Connection,
+        tenant: Option<&str>,
+    ) -> rusqlite::Result<u64> {
+        Ok(self
+            .tenant(c, tenant)?
+            .and_then(|t| t.max_blob_bytes_total)
+            .unwrap_or(self.config.max_blob_bytes_total))
     }
 
     pub fn epoch_grace_ms(&self) -> u64 {

@@ -1,0 +1,36 @@
+# Internal router behind the tunnel: one public address, two services.
+# TLS ends at the tunnel's edge, so Caddy only speaks plain HTTP inside the
+# Compose network and is never published on the host.
+{
+	auto_https off
+	admin off
+}
+
+:80 {
+	# The community node: protocol API and discovery.
+	@node path /v1/* /.well-known/vamo-virar
+	handle @node {
+		reverse_proxy node:8787 {
+			# The tunnel puts the real client address in CF-Connecting-IP;
+			# both services rate-limit on the last X-Forwarded-For hop.
+			header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+		}
+	}
+	# Everything else: the access-request portal.
+	handle {
+		reverse_proxy portal:3000 {
+			header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+		}
+	}
+	# Never log query strings (stream tokens, confirmation links) or credentials.
+	log {
+		format filter {
+			wrap console
+			fields {
+				request>uri delete
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+			}
+		}
+	}
+}

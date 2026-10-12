@@ -34,13 +34,14 @@ disabled_retention_secs = 2592000
 trust_forwarded_for = false
 
 # --- Managed hosting (docs/managed-hosting.md) ------------------------------
-# The operator API (usage, suspension, export, metrics) on its own private
-# listener. Requires operator_token (or VV_OPERATOR_TOKEN), 16+ characters.
+# The operator API (usage, suspension, export, metrics, adding and revoking
+# tenants without a restart) on its own private listener. Requires operator_token (or VV_OPERATOR_TOKEN), 16+ characters.
 # operator_listen = "127.0.0.1:9787"
 # operator_token = "change-me-to-something-long"
 
 # Customers who create communities with their own token. Generate one with
-# `community-node tenant-token`; only the hash goes here.
+# `community-node tenant-token`; only the hash goes here. (Tenants can also be
+# added through the operator API; those live in the database.)
 # [[tenants]]
 # name = "coletivo-recife"
 # token_sha256 = "<64 hex characters>"

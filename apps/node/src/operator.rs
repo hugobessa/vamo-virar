@@ -1,5 +1,5 @@
 //! Operator API for managed hosting (docs/managed-hosting.md): usage,
-//! suspension, deletion, export and Prometheus metrics.
+//! suspension, deletion, export, tenants and Prometheus metrics.
 //!
 //! It is served on its own listener (`operator_listen`), never next to the
 //! public API, and every request needs `Authorization: Bearer
@@ -19,7 +19,7 @@ use serde::Deserialize;
 use serde_json::json;
 use vv_crypto::cbor;
 
-use crate::app::{hex, same_secret, unhex, App};
+use crate::app::{hex, same_secret, unhex, valid_tenant_name, App, Tenant};
 use crate::sequencer;
 use crate::store::{self, Cid};
 
@@ -32,7 +32,9 @@ pub fn router(app: Shared) -> Router {
         .route("/operator/v1/communities/{cid}/suspend", post(suspend))
         .route("/operator/v1/communities/{cid}/resume", post(resume))
         .route("/operator/v1/communities/{cid}/export", get(export))
-        .route("/operator/v1/tenants", get(tenants))
+        .route("/operator/v1/tenants", get(tenants).post(add_tenant))
+        .route("/operator/v1/tenants/{name}", delete(revoke_tenant))
+        .route("/operator/v1/tenants/{name}/token", post(new_tenant_token))
         .route("/operator/v1/metrics", get(metrics))
         .with_state(app)
 }
@@ -166,31 +168,175 @@ async fn list(State(app): State<Shared>, headers: HeaderMap) -> Result<Response,
     Ok(Json(json!({ "communities": items })).into_response())
 }
 
+/// Tenants from the config file, then the ones this API added, with usage.
 async fn tenants(State(app): State<Shared>, headers: HeaderMap) -> Result<Response, OpError> {
     authorize(&app, &headers)?;
-    let rows = usage(app.store.lock().unwrap().conn())?;
-    let items: Vec<_> = app
+    let st = app.store.lock().unwrap();
+    let rows = usage(st.conn())?;
+    let listed = app
         .config
         .tenants
         .iter()
-        .map(|t| {
+        .map(|t| (t, "config", None, None))
+        .collect::<Vec<_>>();
+    let stored = store::tenants(st.conn())?;
+    let listed = listed.into_iter().chain(
+        stored
+            .iter()
+            .map(|s| (&s.tenant, "operator", Some(s.created_at), s.revoked_at)),
+    );
+    let items: Vec<_> = listed
+        .map(|(t, source, created_at, revoked_at)| {
             let mine = rows.iter().filter(|u| u.tenant.as_deref() == Some(&t.name));
             let (count, bytes, blob_bytes) = mine.fold((0u64, 0u64, 0u64), |(n, b, bb), u| {
                 (n + 1, b + u.log_bytes, bb + u.blob_bytes)
             });
-            let max_blob_bytes_total = app.config.max_blob_bytes_total(Some(&t.name));
             json!({
                 "name": t.name,
+                "source": source,
+                "created_at": created_at,
+                "revoked_at": revoked_at,
                 "communities": count,
                 "max_communities": t.max_communities,
                 "log_bytes": bytes,
                 "max_log_bytes_per_community": t.max_log_bytes,
                 "blob_bytes": blob_bytes,
-                "max_blob_bytes_total_per_community": max_blob_bytes_total,
+                "max_blob_bytes_total_per_community": t
+                    .max_blob_bytes_total
+                    .unwrap_or(app.config.max_blob_bytes_total),
             })
         })
         .collect();
     Ok(Json(json!({ "tenants": items })).into_response())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NewTenant {
+    name: String,
+    max_communities: Option<u64>,
+    max_log_bytes: Option<u64>,
+    max_blob_bytes_total: Option<u64>,
+}
+
+/// A fresh provisioning token and its SHA-256, as `tenant-token` prints them.
+fn tenant_token() -> (String, String) {
+    let token = hex(&crate::app::random::<32>());
+    let digest = hex(&<sha2::Sha256 as sha2::Digest>::digest(token.as_bytes()));
+    (token, digest)
+}
+
+fn config_tenant(app: &App, name: &str) -> bool {
+    app.config.tenants.iter().any(|t| t.name == name)
+}
+
+/// Adds a tenant without a restart. The answer carries its token, the only
+/// time it is ever shown: the node keeps just the SHA-256.
+async fn add_tenant(
+    State(app): State<Shared>,
+    headers: HeaderMap,
+    body: Option<Json<NewTenant>>,
+) -> Result<Response, OpError> {
+    authorize(&app, &headers)?;
+    let Some(Json(req)) = body else {
+        return Err(OpError(
+            StatusCode::BAD_REQUEST,
+            "malformed",
+            "expected a JSON body with name and optional limits".into(),
+        ));
+    };
+    if !valid_tenant_name(&req.name) {
+        return Err(OpError(
+            StatusCode::BAD_REQUEST,
+            "malformed",
+            "tenant names are 1-64 characters, without control characters".into(),
+        ));
+    }
+    let (token, token_sha256) = tenant_token();
+    let tenant = Tenant {
+        name: req.name,
+        token_sha256,
+        max_communities: req.max_communities,
+        max_log_bytes: req.max_log_bytes,
+        max_blob_bytes_total: req.max_blob_bytes_total,
+    };
+    let mut st = app.store.lock().unwrap();
+    let tx = st.tx()?;
+    if config_tenant(&app, &tenant.name) || store::tenant(&tx, &tenant.name)?.is_some() {
+        return Err(OpError(
+            StatusCode::CONFLICT,
+            "exists",
+            "a tenant with this name already exists".into(),
+        ));
+    }
+    store::insert_tenant(&tx, &tenant, app.clock.now())?;
+    tx.commit()?;
+    tracing::info!(tenant = %tenant.name, "operator added tenant");
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "name": tenant.name,
+            "token": token,
+            "max_communities": tenant.max_communities,
+            "max_log_bytes": tenant.max_log_bytes,
+            "max_blob_bytes_total": tenant.max_blob_bytes_total,
+        })),
+    )
+        .into_response())
+}
+
+fn stored_only(app: &App, name: &str) -> Result<(), OpError> {
+    if config_tenant(app, name) {
+        return Err(OpError(
+            StatusCode::CONFLICT,
+            "config_tenant",
+            "this tenant comes from the config file; change it there".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn no_tenant() -> OpError {
+    OpError(StatusCode::NOT_FOUND, "not_found", "no such tenant".into())
+}
+
+/// Replaces a tenant's token (a lost one, or a leaked one) and lifts a
+/// revocation. The old token stops working at once.
+async fn new_tenant_token(
+    State(app): State<Shared>,
+    Path(name): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response, OpError> {
+    authorize(&app, &headers)?;
+    stored_only(&app, &name)?;
+    let (token, digest) = tenant_token();
+    let mut st = app.store.lock().unwrap();
+    let tx = st.tx()?;
+    if !store::set_tenant_token(&tx, &name, &digest)? {
+        return Err(no_tenant());
+    }
+    tx.commit()?;
+    tracing::info!(tenant = %name, "operator replaced tenant token");
+    Ok(Json(json!({ "name": name, "token": token })).into_response())
+}
+
+/// Stops a tenant's token from creating or restoring communities. Its
+/// communities keep working, with the same limits.
+async fn revoke_tenant(
+    State(app): State<Shared>,
+    Path(name): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response, OpError> {
+    authorize(&app, &headers)?;
+    stored_only(&app, &name)?;
+    let mut st = app.store.lock().unwrap();
+    let tx = st.tx()?;
+    if !store::revoke_tenant(&tx, &name, app.clock.now())? {
+        return Err(no_tenant());
+    }
+    tx.commit()?;
+    tracing::info!(tenant = %name, "operator revoked tenant");
+    Ok(Json(json!({ "name": name, "revoked": true })).into_response())
 }
 
 fn set_suspended(app: &App, cid: &Cid, suspended: bool) -> Result<Response, OpError> {

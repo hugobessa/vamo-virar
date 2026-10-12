@@ -1,0 +1,72 @@
+# servidor.vamovirar.app on a home computer: the community node, the
+# access-request portal, an internal Caddy router and a Cloudflare Tunnel.
+# Nothing is published on the host: the tunnel connects out to Cloudflare.
+#
+#   cp apps/portal/deploy/.env.example apps/portal/deploy/.env   # and fill it in
+#   docker compose -f apps/portal/deploy/docker-compose.yml up -d --build
+#
+# See apps/portal/README.md.
+services:
+  node:
+    build:
+      context: ../../..
+      dockerfile: deploy/Dockerfile
+    image: vamo-virar/community-node:local
+    restart: unless-stopped
+    environment:
+      VV_TRUST_FORWARDED_FOR: "1"
+      # The portal adds one tenant (code + limits) per approved request here.
+      # Reachable only inside this Compose network.
+      VV_OPERATOR_LISTEN: 0.0.0.0:9787
+      VV_OPERATOR_TOKEN: ${VV_OPERATOR_TOKEN:?set VV_OPERATOR_TOKEN in .env}
+      # Optional: your own code, for communities you create yourself.
+      VV_PROVISIONING_TOKEN: ${VV_PROVISIONING_TOKEN:-}
+      RUST_LOG: info
+    volumes:
+      - node-data:/data
+
+  portal:
+    build:
+      context: ../../..
+      dockerfile: apps/portal/Dockerfile
+    image: vamo-virar/portal:local
+    restart: unless-stopped
+    depends_on:
+      - node
+    environment:
+      PORTAL_PUBLIC_URL: ${PORTAL_PUBLIC_URL:-https://servidor.vamovirar.app}
+      PORTAL_OPERATOR_URL: http://node:9787
+      PORTAL_TRUST_PROXY: "1"
+      VV_OPERATOR_TOKEN: ${VV_OPERATOR_TOKEN}
+      PORTAL_ADMIN_EMAIL: ${PORTAL_ADMIN_EMAIL:?set PORTAL_ADMIN_EMAIL in .env}
+      PORTAL_ADMIN_PASSWORD: ${PORTAL_ADMIN_PASSWORD:?set PORTAL_ADMIN_PASSWORD in .env}
+      PORTAL_SESSION_SECRET: ${PORTAL_SESSION_SECRET:?set PORTAL_SESSION_SECRET in .env}
+      PORTAL_MAIL_FROM: ${PORTAL_MAIL_FROM:?set PORTAL_MAIL_FROM in .env}
+      PORTAL_SMTP_URL: ${PORTAL_SMTP_URL:?set PORTAL_SMTP_URL in .env}
+      PORTAL_DEFAULT_MAX_COMMUNITIES: ${PORTAL_DEFAULT_MAX_COMMUNITIES:-1}
+      PORTAL_DEFAULT_MAX_LOG_MB: ${PORTAL_DEFAULT_MAX_LOG_MB:-256}
+      PORTAL_DEFAULT_MAX_FILES_MB: ${PORTAL_DEFAULT_MAX_FILES_MB:-512}
+    volumes:
+      - portal-data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - node
+      - portal
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on:
+      - caddy
+
+volumes:
+  node-data:
+  portal-data:
