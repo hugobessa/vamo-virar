@@ -26,7 +26,12 @@ export function nodeOperator(baseUrl: string, token: string, fetchImpl: typeof f
         signal: AbortSignal.timeout(10_000),
       });
     } catch (e) {
-      throw new NodeError(`não consegui falar com o nó em ${baseUrl}: ${(e as Error).message}`);
+      // fetch() only says "fetch failed"; the reason (ENOTFOUND, ECONNREFUSED,
+      // a timeout) is in `cause`, and it is what tells a wrong address from a
+      // node that is not listening.
+      const cause = (e as Error & { cause?: { code?: string; message?: string } }).cause;
+      const why = cause?.code ?? cause?.message ?? (e as Error).message;
+      throw new NodeError(`não consegui falar com o nó em ${baseUrl}: ${why}`);
     }
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     return { status: res.status, json };
