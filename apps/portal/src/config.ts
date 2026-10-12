@@ -24,8 +24,10 @@ export interface PortalConfig {
   /** Signs the admin session cookie. Random per start when unset. */
   sessionSecret: Buffer;
   mailFrom: string;
-  /** smtp:// or smtps:// URL. Unset: emails are printed to the log (development only). */
+  /** smtp:// or smtps:// URL. Unset (and no Mailgun): emails are printed to the log (development only). */
   smtpUrl: string | undefined;
+  /** Mailgun's HTTP API instead of SMTP, for hosts that block outbound SMTP. */
+  mailgun: { apiKey: string; domain: string; apiUrl: string } | undefined;
   dataDir: string;
   host: string;
   port: number;
@@ -69,6 +71,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PortalConfig {
     sessionSecret: secret ? Buffer.from(secret) : randomBytes(32),
     mailFrom: required(env, "PORTAL_MAIL_FROM"),
     smtpUrl: env.PORTAL_SMTP_URL?.trim() || undefined,
+    mailgun: env.PORTAL_MAILGUN_API_KEY?.trim()
+      ? {
+          apiKey: env.PORTAL_MAILGUN_API_KEY.trim(),
+          domain: required(env, "PORTAL_MAILGUN_DOMAIN"),
+          apiUrl: trimSlash(env.PORTAL_MAILGUN_API_URL?.trim() || "https://api.mailgun.net"),
+        }
+      : undefined,
     dataDir: env.PORTAL_DATA_DIR?.trim() || "./data",
     host: env.PORTAL_HOST?.trim() || "0.0.0.0",
     port: int(env, "PORTAL_PORT", 3000),
