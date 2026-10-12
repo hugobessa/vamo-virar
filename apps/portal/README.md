@@ -32,7 +32,8 @@ publicada a cada versão (`v*`) no GHCR:
 | `portal` | `ghcr.io/hugobessa/vamo-virar-portal:latest` | `acesso.vamovirar.app` | o formulário de pedidos e o `/admin` |
 
 O portal fala com a API de operador do nó pela rede privada do Railway
-(`node.railway.internal`), que não fica exposta na internet.
+(o endereço `*.railway.internal` do serviço `node`), que não fica exposta na
+internet.
 
 Antes de começar, gere três segredos (no terminal, `openssl rand -hex 32`; ou
 o botão de gerar do [guia do servidor](https://vamovirar.app/servidor/)):
@@ -71,7 +72,7 @@ para o `/admin`.
    RAILWAY_RUN_UID=0
    PORTAL_PUBLIC_URL=https://acesso.vamovirar.app
    PORTAL_NODE_URL=https://servidor.vamovirar.app
-   PORTAL_OPERATOR_URL=http://node.railway.internal:9787
+   PORTAL_OPERATOR_URL=http://${{node.RAILWAY_PRIVATE_DOMAIN}}:9787
    VV_OPERATOR_TOKEN=${{node.VV_OPERATOR_TOKEN}}
    PORTAL_TRUST_PROXY=1
    PORTAL_ADMIN_EMAIL=seu@email
@@ -82,8 +83,10 @@ para o `/admin`.
    PORTAL_MAILGUN_DOMAIN=mg.vamovirar.app
    ```
 
-   (`${{node.VV_OPERATOR_TOKEN}}` é copiado do serviço `node` pelo próprio
-   Railway.)
+   (`${{node.…}}` é preenchido pelo próprio Railway com valores do serviço
+   `node`: o token e o endereço na rede privada. O endereço é escolhido quando
+   o serviço é criado e não muda se você renomear o serviço depois; por isso
+   use a referência em vez de escrever `node.railway.internal`.)
 
    O email sai pela API HTTP do Mailgun, porque o Railway pode bloquear SMTP
    para fora (a conexão fica parada até dar erro). O `PORTAL_MAIL_FROM` tem que
@@ -112,10 +115,18 @@ verificado.
 - faça um pedido você mesmo, aprove em `https://acesso.vamovirar.app/admin` e
   crie uma comunidade no app com o código do email.
 
-Se o portal disser que não consegue falar com o nó, confira se o serviço se
-chama `node` e se o `VV_OPERATOR_TOKEN` é igual nos dois. Se ainda assim não
-der, troque `VV_OPERATOR_LISTEN` para `0.0.0.0:9787` (ambientes do Railway com
-rede privada IPv4).
+Se o portal disser que não consegue falar com o nó, o fim da mensagem diz
+por quê:
+
+- `ENOTFOUND`: o endereço está errado. Use a referência
+  `${{node.RAILWAY_PRIVATE_DOMAIN}}` (com o nome do serviço como aparece no
+  painel) ou confira o endereço em **Settings › Networking › Private
+  Networking** do serviço `node`;
+- `ECONNREFUSED`: o nó não está ouvindo na porta 9787. Confira
+  `VV_OPERATOR_LISTEN` e `VV_OPERATOR_TOKEN` no `node` e se o log do deploy
+  mostra `operator API listening on`; se não ajudar, troque para
+  `VV_OPERATOR_LISTEN=0.0.0.0:9787`;
+- `401 unauthorized`: o `VV_OPERATOR_TOKEN` é diferente nos dois serviços.
 
 ### Atualizar no Railway
 

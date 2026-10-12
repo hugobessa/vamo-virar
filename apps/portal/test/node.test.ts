@@ -3,6 +3,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -89,5 +90,18 @@ describe.skipIf(!HAVE_NODE)("against a real node", () => {
 
   it("reports a wrong operator token", async () => {
     await expect(nodeOperator(operatorUrl, "wrong-token-0123456789").issueToken("x", { maxCommunities: 1, maxLogBytes: 1, maxBlobBytes: 1 })).rejects.toThrow(NodeError);
+  });
+});
+
+describe("unreachable node", () => {
+  it("says why the connection failed", async () => {
+    // A port that was free a moment ago: nothing listens there.
+    const probe = createServer();
+    await new Promise<void>((r) => probe.listen(0, "127.0.0.1", r));
+    const port = (probe.address() as AddressInfo).port;
+    await new Promise((r) => probe.close(r));
+    await expect(
+      nodeOperator(`http://127.0.0.1:${port}`, "token-0123456789abcdef").issueToken("x", { maxCommunities: 1, maxLogBytes: 1, maxBlobBytes: 1 }),
+    ).rejects.toThrow(/não consegui falar com o nó em http:\/\/127\.0\.0\.1:\d+: ECONNREFUSED/);
   });
 });
