@@ -49,9 +49,9 @@ export function hero(days: number) {
 }
 
 export const copy = {
-  nav: { how: "Como funciona", privacy: "Privacidade", faq: "Perguntas", create: "Baixar o app" },
+  nav: { how: "Como funciona", privacy: "Privacidade", faq: "Perguntas", create: "Usar no navegador", createShort: "Abrir" },
   hero: {
-    create: "Baixar o app",
+    create: "Usar no navegador",
     join: "Recebi um convite",
     trust: ["Sem cadastro com e-mail", "Cifrado de ponta a ponta", "Agenda só no seu celular", "Código aberto"],
   },
@@ -118,6 +118,7 @@ export const copy = {
     eyebrow: "Perguntas",
     title: "Perguntas frequentes",
     items: [
+      { q: "Preciso instalar alguma coisa?", a: "Por enquanto não: o Vamo Virar funciona no navegador, em web.vamovirar.app, no celular ou no computador. Os apps para iPhone e Android estão a caminho das lojas, e a sua comunidade continua a mesma quando eles chegarem." },
       { q: "Preciso de um cadastro com e-mail e senha?", a: "Não. Você é identificada(o) por uma chave guardada no seu celular, não por um cadastro com e-mail e senha." },
       { q: "O servidor da comunidade lê as minhas informações?", a: "Não. O que a comunidade compartilha é cifrado de ponta a ponta: o servidor só guarda e repassa dados cifrados." },
       { q: "Quem organiza vê a minha agenda?", a: "Não. Quando a organização pergunta se você pode ir, seu celular confere a agenda e os lugares e envia só a resposta: posso, talvez ou não posso." },
@@ -139,9 +140,11 @@ export const copy = {
   },
   cta: {
     title: "Bora virar?",
-    body: "Baixe, crie o comitê e mande o convite no grupo. Dá tempo.",
-    appStore: "Baixar na App Store",
-    playStore: "Baixar no Google Play",
+    body: "Abra no navegador, crie o comitê e mande o convite no grupo. Dá tempo. Os apps para iPhone e Android chegam em breve.",
+    web: "Usar no navegador",
+    webHint: "Funciona no celular e no computador. No celular, adicione à tela de início: fica com cara de app e o navegador não apaga os seus dados.",
+    appStore: "App Store · em breve",
+    playStore: "Google Play · em breve",
   },
   footer: { open: "Código aberto, licença MIT.", source: "Código", docs: "Documentação", privacy: "Política de Privacidade", terms: "Termos de Uso", childSafety: "Segurança Infantil" },
 } as const;
