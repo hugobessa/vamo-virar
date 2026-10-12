@@ -2,6 +2,7 @@
 // and announced as links, which a Pressable with an onPress is not.
 
 import { createElement, type CSSProperties, type ReactNode } from "react";
+import { View } from "react-native";
 import { ButtonFace, type ButtonKind } from "../kit";
 import { fonts, useTheme } from "../theme";
 
@@ -39,6 +40,16 @@ export function TextLink({ href, children, color, size = 15, bold = true, underl
     >
       {children}
     </Anchor>
+  );
+}
+
+/** Where a button will go once it exists ("App Store · em breve"): the flat
+ * grey face of a disabled button, and not a link. */
+export function SoonButton({ label }: { label: string }) {
+  return (
+    <View accessibilityRole="button" aria-disabled accessibilityState={{ disabled: true }} accessibilityLabel={label}>
+      <ButtonFace label={label} flat />
+    </View>
   );
 }
 

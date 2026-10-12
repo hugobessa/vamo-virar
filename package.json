@@ -17,7 +17,8 @@
     "typecheck": "npm run build && npm run typecheck --workspaces --if-present",
     "test": "npm run build && npm run test --workspaces --if-present",
     "check:vendors": "node scripts/check-vendor-independence.mjs",
-    "build:landing": "npm run build:landing -w @vamo-virar/mobile"
+    "build:landing": "npm run build:landing -w @vamo-virar/mobile",
+    "build:web": "npm run build && npm run export:web -w @vamo-virar/mobile"
   },
   "engines": {
     "node": ">=20"

@@ -159,6 +159,40 @@ No Cloudflare Pages: diretório raiz vazio, comando de build
 `apps/mobile/dist-landing` e a variável `NODE_VERSION=22`. Os cabeçalhos de
 segurança estão em `apps/mobile/landing/public/_headers`.
 
+### App web (Cloudflare Pages)
+
+O mesmo app roda no navegador, em [web.vamovirar.app](https://web.vamovirar.app),
+enquanto as lojas não aprovam as versões para celular. É um site estático
+(`expo export --platform web`) que fala direto com o nó de cada comunidade, por
+isso o nó precisa ser a v0.3.0 ou mais nova (CORS).
+
+```sh
+npm run build:web          # pacotes + export para apps/mobile/dist-web
+```
+
+No Cloudflare Pages, num projeto separado do da landing: diretório raiz vazio,
+comando de build `npm ci && npm run build:web`, diretório de saída
+`apps/mobile/dist-web`, variável `NODE_VERSION=22` e o domínio personalizado
+`web.vamovirar.app`. Os cabeçalhos de segurança (CSP, HSTS e outros) estão em
+`apps/mobile/public/_headers`. Sem um `404.html`, o Pages serve o `index.html`
+em qualquer caminho, como o app espera (`/join`, `/c/…`).
+
+Diferenças em relação ao app no celular:
+
+- **Onde ficam os dados:** no IndexedDB do navegador. A chave do aparelho fica
+  cifrada por uma chave WebCrypto não exportável. Uma cópia do armazenamento
+  do site não revela a chave, mas o código que roda na página consegue usá-la,
+  então a proteção é menor que a do chaveiro do celular.
+- **Os dados podem sumir:** o navegador pode apagá-los (limpeza de dados; no
+  Safari do iPhone, depois de 7 dias sem uso, a menos que o site esteja na tela
+  de início). O app pede armazenamento persistente e pode ser instalado como
+  PWA ("Adicionar à tela de início"). Quem perder os dados volta com um convite
+  novo; quem fundou a comunidade tem o código de recuperação.
+- **Sem agendas do aparelho:** o navegador não lê o calendário do celular.
+- **Convites:** os links são `https://web.vamovirar.app/join#…`. O convite vai
+  no fragmento (depois de `#`), que o navegador não envia ao servidor do site.
+  O app no celular aceita esses links e os antigos `vamovirar://join?…`.
+
 ### Compilar na nuvem com EAS
 
 Sem Android Studio nem Xcode, o [EAS Build](https://docs.expo.dev/build/introduction/)

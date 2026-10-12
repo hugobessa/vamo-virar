@@ -266,7 +266,7 @@ export function makeEntry(o: EntryOptions = {}) {
     reject: async (p: unknown) => action("replica.reject")(p),
     createInvite: async (opts: unknown) => {
       action("replica.createInvite")(opts);
-      return "vamovirar://join?c=0a1b2c3d&n=https%3A%2F%2Fcomite.example.org&k=9f8e7d6c&i=5b4a";
+      return "https://web.vamovirar.app/join#c=0a1b2c3d&n=https%3A%2F%2Fcomite.example.org&k=9f8e7d6c&i=5b4a";
     },
     makeAdmin: async (id: string) => action("replica.makeAdmin")(id),
     removeMember: async (id: string) => action("replica.removeMember")(id),

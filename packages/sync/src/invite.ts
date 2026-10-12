@@ -20,15 +20,29 @@ export interface Invite {
 
 const SCHEME = "vamovirar://join";
 
-export function inviteLink(inv: Invite): string {
+/** Where invite links point: the web app, which also takes them in a browser. */
+export const INVITE_BASE = "https://web.vamovirar.app/join";
+
+/**
+ * `https://web.vamovirar.app/join#c=…&n=…&k=…&i=…` (§10.3). The invite sits in
+ * the fragment, which browsers never send to the server hosting the page.
+ */
+export function inviteLink(inv: Invite, base = INVITE_BASE): string {
   const q = [`c=${toHex(inv.cid)}`, `n=${encodeURIComponent(inv.node)}`, `k=${toHex(inv.ik)}`];
   if (inv.secret) q.push(`i=${toHex(inv.secret)}`);
-  return `${SCHEME}?${q.join("&")}`;
+  return `${base}#${q.join("&")}`;
+}
+
+/** The invite part of a link: after `#` in https links, after `?` in `vamovirar://join` ones. */
+function inviteQuery(link: string): string {
+  if (link.startsWith(`${SCHEME}?`)) return link.slice(SCHEME.length + 1);
+  const m = /^https:\/\/[^/?#\s]+\/join\/?[?#](.*)$/.exec(link);
+  if (m) return m[1]!;
+  throw new Error("not a vamo-virar invite link");
 }
 
 export function parseInvite(link: string): Invite {
-  const [base, query = ""] = link.split("?", 2);
-  if (base !== SCHEME) throw new Error("not a vamo-virar invite link");
+  const query = inviteQuery(link);
   const params = new Map<string, string>();
   for (const pair of query.split("&")) {
     const [k, v = ""] = pair.split("=", 2);

@@ -1,6 +1,7 @@
 import { parseInvite } from "@vamo-virar/sync";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
+import { Platform } from "react-native";
 import { useApp } from "../lib/context";
 import { Banner, Body, Button, Field, FormSection, Screen } from "../ui/kit";
 import { errorText } from "../model/errors";
@@ -9,9 +10,14 @@ export default function Join() {
   const { store, t } = useApp();
   // Opened from a vamovirar://join?c=…&n=…&k=…&i=… link, the params are already here.
   const params = useLocalSearchParams<{ c?: string; n?: string; k?: string; i?: string }>();
+  // In the browser, an https://…/join#c=… link keeps the invite in the
+  // fragment, which never reaches the server; read it from there.
+  const hash = Platform.OS === "web" ? globalThis.location?.hash?.replace(/^#/, "") ?? "" : "";
   const fromLink = params.c && params.n && params.k
     ? `vamovirar://join?c=${params.c}&n=${encodeURIComponent(params.n)}&k=${params.k}${params.i ? `&i=${params.i}` : ""}`
-    : "";
+    : hash.includes("c=")
+      ? `vamovirar://join?${hash}`
+      : "";
   const [link, setLink] = useState(fromLink);
   const [displayName, setDisplayName] = useState("");
   const [contact, setContact] = useState("");

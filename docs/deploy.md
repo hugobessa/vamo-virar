@@ -111,6 +111,13 @@ nó sem backup pode ser substituído.
 
 - **Saúde:** `community-node health --url http://127.0.0.1:8787` sai com 0
   quando o nó responde (o health check do contêiner usa isso).
+- **Navegador (CORS):** a API pública responde a qualquer origem
+  (`Access-Control-Allow-Origin: *`), para que o app web
+  (`web.vamovirar.app`) fale com qualquer nó. As credenciais vão sempre em
+  cabeçalhos (token de sessão, código de criação), nunca em cookies, então uma
+  página de outra origem não ganha nada que já não pudesse fazer com esses
+  cabeçalhos. A API de operador não responde a CORS. Nós anteriores à v0.3.0
+  não funcionam com o app web; atualize o nó.
 - **Logs:** `RUST_LOG=info`. O nó nunca registra corpos de requisição nem tokens;
   o Caddyfile incluído também descarta URIs de requisição e cabeçalhos de autenticação.
 - **Atualizações:** faça um backup, pare, substitua o binário ou a imagem, inicie.

@@ -959,8 +959,14 @@ qualquer pedido, mas o nó aplica limite de taxa à entrada; `"open_request"` é
 Link de convite (codificável em QR):
 
 ```
-vamovirar://join?c=<community_id>&n=<node_url>&k=<IK.public>&i=<invite_secret>
+https://web.vamovirar.app/join#c=<community_id>&n=<node_url>&k=<IK.public>&i=<invite_secret>
 ```
+
+Os parâmetros ficam no fragmento (depois de `#`), que o navegador nunca envia
+ao servidor que hospeda a página: quem hospeda o app web não vê o convite. O
+app também aceita o formato anterior, `vamovirar://join?c=…&n=…&k=…&i=…`, e
+links `https://<qualquer host>/join` com os parâmetros no fragmento ou na
+query.
 
 O admin registra `SHA-256("vv/invite/v1" || invite_secret)` no nó (escopo
 control) com uma validade e um número máximo de usos. O nó verifica o hash na
