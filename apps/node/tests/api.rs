@@ -730,3 +730,64 @@ async fn intake_rate_limit_uses_forwarded_address_only_when_trusted() {
         assert_eq!(s == StatusCode::OK, trusted);
     }
 }
+
+#[tokio::test]
+async fn any_origin_may_call_the_public_api_but_not_the_operator_api() {
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
+    let app = node();
+    let send = |req: Request<Body>| community_node::service(app.clone()).oneshot(req);
+
+    let pre = send(
+        Request::builder()
+            .method("OPTIONS")
+            .uri("/v1/communities")
+            .header("origin", "https://web.vamovirar.app")
+            .header("access-control-request-method", "POST")
+            .header(
+                "access-control-request-headers",
+                "x-vv-provision-token, content-type",
+            )
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(pre.status(), StatusCode::NO_CONTENT);
+    let h = pre.headers();
+    assert_eq!(h["access-control-allow-origin"], "*");
+    assert!(h["access-control-allow-headers"]
+        .to_str()
+        .unwrap()
+        .contains("x-vv-provision-token"));
+    assert!(h["access-control-allow-methods"]
+        .to_str()
+        .unwrap()
+        .contains("PUT"));
+
+    // Answers, errors included, carry the header so the page can read them.
+    for uri in ["/.well-known/vamo-virar", "/v1/c/00/ops"] {
+        let res = send(
+            Request::builder()
+                .uri(uri)
+                .header("origin", "https://web.vamovirar.app")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(res.headers()["access-control-allow-origin"], "*", "{uri}");
+    }
+
+    let op = community_node::operator_service(app.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/operator/v1/tenants")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(op.headers().get("access-control-allow-origin").is_none());
+}

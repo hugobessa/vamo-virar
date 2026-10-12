@@ -14,7 +14,9 @@ pub use app::{App, Config};
 
 /// Builds the full HTTP application for `app`.
 pub fn service(app: Arc<App>) -> axum::Router {
-    api::router(app).layer(api::body_limit())
+    api::router(app)
+        .layer(api::body_limit())
+        .layer(axum::middleware::from_fn(api::cors))
 }
 
 /// The operator API (managed hosting), for its own listener.
