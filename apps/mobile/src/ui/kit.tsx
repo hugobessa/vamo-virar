@@ -164,9 +164,9 @@ export function Button({
  * anchors. The landing page's stylesheet sinks the face while the anchor is
  * active (see landing/motion.css).
  */
-export function ButtonFace({ label, kind = "primary" }: { label: string; kind?: ButtonKind }) {
+export function ButtonFace({ label, kind = "primary", flat = false }: { label: string; kind?: ButtonKind; flat?: boolean }) {
   const c = useTheme();
-  const { bg, fg, edge, depth } = buttonColours(kind, c);
+  const { bg, fg, edge, depth } = buttonColours(kind, c, flat);
   return (
     <View style={{ paddingBottom: buttonDepth }}>
       <View pointerEvents="none" style={[styles.depth, { backgroundColor: depth }]} />

@@ -3,6 +3,10 @@
 const REPO = "https://github.com/hugobessa/vamo-virar";
 
 export interface LandingLinks {
+  /** The web app, while the store apps are not out. */
+  webApp: string;
+  /** Its join screen, for people who got an invite. */
+  webJoin: string;
   /** App Store page (ascAppId in eas.json). */
   appStore: string;
   /** Google Play page (android.package in app.json). */
@@ -22,6 +26,8 @@ export interface LandingLinks {
 }
 
 export const defaultLinks: LandingLinks = {
+  webApp: "https://web.vamovirar.app/",
+  webJoin: "https://web.vamovirar.app/join",
   appStore: "https://apps.apple.com/app/id6821252003",
   playStore: "https://play.google.com/store/apps/details?id=me.bessa.vamovirar",
   source: REPO,

@@ -3,7 +3,7 @@ import { Text, View, useWindowDimensions } from "react-native";
 import { BrandBox, Display, Eyebrow, Flag, Star, Wordmark, type BoxTone } from "../brand";
 import { Chip, Progress } from "../kit";
 import { fonts, motion, palette, space, type, useTheme } from "../theme";
-import { Anchor, LinkButton, TextLink } from "./Anchor";
+import { Anchor, LinkButton, SoonButton, TextLink } from "./Anchor";
 import { ACTIONS, FLIP_WORDS, copy, daysToRunoff, hero as heroCopy } from "./copy";
 import { defaultLinks, type LandingLinks } from "./links";
 import { Accordion, Band, Headline, Marquee, PhoneStory, PrivacyDiagram, Reveal, Stripe } from "./motion";
@@ -90,7 +90,7 @@ function ItemBody({ children, color, muted }: { children: ReactNode; color?: str
   );
 }
 
-function Header() {
+function Header({ links }: { links: LandingLinks }) {
   const c = useTheme();
   const l = useLayout();
   return (
@@ -108,7 +108,7 @@ function Header() {
           </View>
         ) : null}
         <View style={{ flexShrink: 0, minWidth: l.compact ? 96 : 180 }}>
-          <LinkButton href="#baixar" label={l.compact ? "Baixar" : copy.nav.create} />
+          <LinkButton href={links.webApp} label={l.compact ? copy.nav.createShort : copy.nav.create} />
         </View>
       </View>
       <Stripe height={4} sweep />
@@ -116,7 +116,7 @@ function Header() {
   );
 }
 
-function Hero() {
+function Hero({ links }: { links: LandingLinks }) {
   const l = useLayout();
   const c = useTheme();
   const h = heroCopy(daysToRunoff());
@@ -138,10 +138,10 @@ function Hero() {
           <Reveal delay={motion.stagger * 3}>
             <View style={l.compact ? { gap: space.m, maxWidth: 420 } : { flexDirection: "row", flexWrap: "wrap", gap: space.m }}>
               <View style={{ minWidth: l.compact ? undefined : 200 }}>
-                <LinkButton href="#baixar" label={copy.hero.create} />
+                <LinkButton href={links.webApp} label={copy.hero.create} />
               </View>
               <View style={{ minWidth: l.compact ? undefined : 200 }}>
-                <LinkButton href="#baixar" kind="secondary" label={copy.hero.join} />
+                <LinkButton href={links.webJoin} kind="secondary" label={copy.hero.join} />
               </View>
             </View>
           </Reveal>
@@ -394,10 +394,16 @@ function Download({ links }: { links: LandingLinks }) {
         </View>
         <View style={{ gap: space.m, width: l.split ? 300 : "100%", maxWidth: l.split ? undefined : 420 }}>
           <Reveal delay={motion.stagger * 3}>
-            <LinkButton href={links.appStore} kind="accent" label={copy.cta.appStore} />
+            <LinkButton href={links.webApp} kind="accent" label={copy.cta.web} />
           </Reveal>
           <Reveal delay={motion.stagger * 4}>
-            <LinkButton href={links.playStore} kind="accent" label={copy.cta.playStore} />
+            <ItemBody color={palette.white}>{copy.cta.webHint}</ItemBody>
+          </Reveal>
+          <Reveal delay={motion.stagger * 5}>
+            <SoonButton label={copy.cta.appStore} />
+          </Reveal>
+          <Reveal delay={motion.stagger * 6}>
+            <SoonButton label={copy.cta.playStore} />
           </Reveal>
         </View>
       </View>
@@ -462,8 +468,8 @@ export function LandingPage({ links = defaultLinks }: { links?: LandingLinks }) 
   const c = useTheme();
   return (
     <View nativeID="topo" style={{ overflow: "hidden" }}>
-      <Header />
-      <Hero />
+      <Header links={links} />
+      <Hero links={links} />
       {/* The band's top is cut on a diagonal, so the strip keeps clear of it. */}
       <Band bg={c.surface}>
         <View style={{ paddingTop: space.l, paddingBottom: space.xl }}>
