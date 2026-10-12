@@ -77,12 +77,19 @@ para o `/admin`.
    PORTAL_ADMIN_EMAIL=seu@email
    PORTAL_ADMIN_PASSWORD=A_SENHA_DO_ADMIN
    PORTAL_SESSION_SECRET=O_SEGUNDO_SEGREDO
-   PORTAL_MAIL_FROM=Vamo Virar <servidor@vamovirar.app>
-   PORTAL_SMTP_URL=smtps://resend:SUA_API_KEY@smtp.resend.com:465
+   PORTAL_MAIL_FROM=Vamo Virar <servidor@mg.vamovirar.app>
+   PORTAL_MAILGUN_API_KEY=SUA_API_KEY_DO_MAILGUN
+   PORTAL_MAILGUN_DOMAIN=mg.vamovirar.app
    ```
 
    (`${{node.VV_OPERATOR_TOKEN}}` é copiado do serviço `node` pelo próprio
-   Railway. O SMTP está explicado em [O email](#2-o-email).)
+   Railway.)
+
+   O email sai pela API HTTP do Mailgun, porque o Railway pode bloquear SMTP
+   para fora (a conexão fica parada até dar erro). O `PORTAL_MAIL_FROM` tem que
+   ser do domínio verificado no Mailgun (aqui, `@mg.vamovirar.app`). Se o
+   domínio estiver na região EU do Mailgun, acrescente
+   `PORTAL_MAILGUN_API_URL=https://api.eu.mailgun.net`.
 3. **Attach Volume** com mount path `/data`.
 4. **Settings › Networking › Custom Domain**: `acesso.vamovirar.app`, porta `3000`.
 
@@ -91,7 +98,10 @@ para o `/admin`.
 Para cada domínio, crie no painel da Cloudflare (**DNS › Records**) os
 registros que o Railway mostrou (um `CNAME` e, às vezes, um `TXT` de
 verificação). Deixe o `CNAME` como **DNS only** (nuvem cinza): o Railway cuida
-do certificado HTTPS. Em alguns minutos o Railway marca o domínio como
+do certificado HTTPS. Com o proxy da Cloudflare ligado (nuvem laranja), o nó e o
+portal enxergam o endereço da Cloudflare em vez do de quem acessa, e os limites
+por endereço (pedidos de acesso, tentativas de login, pedidos de entrada nas
+comunidades) passam a valer para todo mundo junto. Em alguns minutos o Railway marca o domínio como
 verificado.
 
 ### 4. Conferir
@@ -239,7 +249,9 @@ crie no Cloudflare Zero Trust uma **Access application** para
 | `PORTAL_ADMIN_PASSWORD` | obrigatória | senha do `/admin`, 12 caracteres ou mais |
 | `PORTAL_SESSION_SECRET` | aleatório a cada início | assina o cookie do `/admin` (32+ caracteres); sem ele, reiniciar desloga |
 | `PORTAL_MAIL_FROM` | obrigatória | remetente dos emails |
-| `PORTAL_SMTP_URL` | nenhum | `smtps://usuário:senha@host:465`; sem ele os emails vão para o log (só para desenvolvimento) |
+| `PORTAL_MAILGUN_API_KEY`, `PORTAL_MAILGUN_DOMAIN` | nenhum | envia pela API HTTP do Mailgun (porta 443), para quem bloqueia SMTP; tem prioridade sobre o SMTP |
+| `PORTAL_MAILGUN_API_URL` | `https://api.mailgun.net` | `https://api.eu.mailgun.net` para domínios na região EU |
+| `PORTAL_SMTP_URL` | nenhum | `smtps://usuário:senha@host:465` (caracteres especiais codificados, `@` vira `%40`); sem ele nem Mailgun, os emails vão para o log (só para desenvolvimento) |
 | `PORTAL_DEFAULT_MAX_COMMUNITIES` | `1` | valor inicial do formulário de aprovação |
 | `PORTAL_DEFAULT_MAX_LOG_MB` | `256` | espaço para as informações de cada comunidade |
 | `PORTAL_DEFAULT_MAX_FILES_MB` | `512` | espaço para arquivos anexados de cada comunidade |

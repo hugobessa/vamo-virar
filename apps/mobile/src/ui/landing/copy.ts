@@ -133,7 +133,8 @@ export const copy = {
   },
   organizers: {
     title: "Para quem coordena",
-    body: "O servidor é um programa pequeno que você liga na nuvem com poucos cliques, ou de graça num computador sobrando ou num Raspberry Pi.",
+    body: "Peça um lugar grátis no servidor do Vamo Virar e receba o código por email. Ou monte o seu: um programa pequeno que você liga na nuvem com poucos cliques, ou de graça num computador sobrando.",
+    request: "Pedir um servidor grátis",
     cta: "Como montar o servidor",
   },
   cta: {

@@ -11,6 +11,8 @@ export interface LandingLinks {
   docs: string;
   /** How to run a community server, built from docs/hosting-guide.md. */
   serverDocs: string;
+  /** Ask for room on the project's own server (apps/portal). */
+  requestServer: string;
   /** Built from docs/privacy-policy.md by the landing build. */
   privacy: string;
   /** Built from docs/terms-of-service.md by the landing build. */
@@ -25,6 +27,7 @@ export const defaultLinks: LandingLinks = {
   source: REPO,
   docs: `${REPO}/tree/main/docs`,
   serverDocs: "/servidor/",
+  requestServer: "https://acesso.vamovirar.app/",
   privacy: "/privacidade/",
   terms: "/termos/",
   childSafety: "/seguranca-infantil/",

@@ -418,7 +418,10 @@ function Footer({ links }: { links: LandingLinks }) {
             <Eyebrow>{copy.organizers.title}</Eyebrow>
             <ItemBody muted>{copy.organizers.body}</ItemBody>
           </View>
-          <TextLink href={links.serverDocs}>{copy.organizers.cta}</TextLink>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.l }}>
+            <LinkButton href={links.requestServer} label={copy.organizers.request} />
+            <TextLink href={links.serverDocs}>{copy.organizers.cta}</TextLink>
+          </View>
         </View>
       </View>
       <View

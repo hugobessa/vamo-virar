@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 
 import { loadConfig } from "./config.js";
 import { Requests } from "./db.js";
-import { logMailer, smtpMailer } from "./mailer.js";
+import { logMailer, mailgunMailer, smtpMailer } from "./mailer.js";
 import { nodeOperator } from "./node.js";
 import { createHandler } from "./server.js";
 
@@ -16,10 +16,15 @@ try {
 
 const db = Requests.open(config.dataDir);
 db.recoverInterrupted();
-if (!config.smtpUrl) {
-  console.warn("PORTAL_SMTP_URL não definido: os emails (com os códigos!) vão para o log. Só para desenvolvimento.");
+let mailer;
+if (config.mailgun) {
+  mailer = mailgunMailer(config.mailgun.apiKey, config.mailgun.domain, config.mailFrom, config.mailgun.apiUrl);
+} else if (config.smtpUrl) {
+  mailer = smtpMailer(config.smtpUrl, config.mailFrom);
+} else {
+  console.warn("Nem PORTAL_MAILGUN_API_KEY nem PORTAL_SMTP_URL definidos: os emails (com os códigos!) vão para o log. Só para desenvolvimento.");
+  mailer = logMailer();
 }
-const mailer = config.smtpUrl ? smtpMailer(config.smtpUrl, config.mailFrom) : logMailer();
 const handler = createHandler({ config, db, mailer, node: nodeOperator(config.operatorUrl, config.operatorToken) });
 
 // Unconfirmed requests are deleted once their link expires.
