@@ -1436,6 +1436,36 @@ async fn pump(
 }
 
 /// Body size limit applied to the whole router.
+/// CORS, so the web app (or any other origin) can talk to any node. Every
+/// request carries its credentials in headers (a bearer token, the
+/// provisioning token), never in cookies, so allowing every origin gives a
+/// page nothing it could not already do with those headers itself. The
+/// operator API has its own router and gets none of this.
+pub async fn cors(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    const ALLOW_HEADERS: &str = "authorization, content-type, x-vv-provision-token";
+    if req.method() == axum::http::Method::OPTIONS {
+        return (
+            StatusCode::NO_CONTENT,
+            [
+                (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
+                (
+                    header::ACCESS_CONTROL_ALLOW_METHODS,
+                    "GET, POST, PUT, DELETE",
+                ),
+                (header::ACCESS_CONTROL_ALLOW_HEADERS, ALLOW_HEADERS),
+                (header::ACCESS_CONTROL_MAX_AGE, "86400"),
+            ],
+        )
+            .into_response();
+    }
+    let mut res = next.run(req).await;
+    res.headers_mut().insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        header::HeaderValue::from_static("*"),
+    );
+    res
+}
+
 pub fn body_limit() -> axum::extract::DefaultBodyLimit {
     axum::extract::DefaultBodyLimit::max(MAX_BODY)
 }
