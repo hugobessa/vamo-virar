@@ -13,6 +13,22 @@ describe("invite links", () => {
     expect(parseInvite(inviteLink({ cid, node, ik }))).toEqual({ cid, node, ik });
   });
 
+  it("point to the web app, with the invite in the fragment", () => {
+    const link = inviteLink({ cid, node: "https://servidor.vamovirar.app", ik });
+    expect(link).toBe(`https://web.vamovirar.app/join#c=${"01".repeat(32)}&n=https%3A%2F%2Fservidor.vamovirar.app&k=${"02".repeat(32)}`);
+    expect(inviteLink({ cid, node: "https://n.example", ik }, "http://127.0.0.1:8081/join")).toMatch(/^http:\/\/127\.0\.0\.1:8081\/join#c=/);
+  });
+
+  it("accept the app scheme, https links on any host, and a query instead of a fragment", () => {
+    const q = `c=${"01".repeat(32)}&n=https%3A%2F%2Fn.example&k=${"02".repeat(32)}`;
+    const want = { cid, node: "https://n.example", ik };
+    expect(parseInvite(`vamovirar://join?${q}`)).toEqual(want);
+    expect(parseInvite(`https://web.vamovirar.app/join#${q}`)).toEqual(want);
+    expect(parseInvite(`https://outro.example/join/?${q}`)).toEqual(want);
+    expect(() => parseInvite(`http://web.vamovirar.app/join#${q}`)).toThrow(/not a vamo-virar invite/);
+    expect(() => parseInvite(`https://web.vamovirar.app/outra#${q}`)).toThrow(/not a vamo-virar invite/);
+  });
+
   it("reject malformed links", () => {
     expect(() => parseInvite("https://evil.example/join?c=00")).toThrow();
     expect(() => parseInvite(`vamovirar://join?c=${"00".repeat(31)}&n=https%3A%2F%2Fx&k=${"00".repeat(32)}`)).toThrow();

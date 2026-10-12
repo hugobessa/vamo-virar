@@ -238,7 +238,7 @@ function StepSketch({ step }: { step: number }) {
           {line(70)}
         </View>
         <View style={{ alignSelf: "flex-start", backgroundColor: c.chip, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
-          <Text style={{ color: c.text, fontFamily: fonts.text, fontSize: 12, fontWeight: "600" }}>vamovirar://join?…</Text>
+          <Text style={{ color: c.text, fontFamily: fonts.text, fontSize: 12, fontWeight: "600" }}>web.vamovirar.app/join#…</Text>
         </View>
         <View style={{ flexDirection: "row", gap: 6 }}>
           <View style={{ flex: 1, height: 26, borderRadius: 8, backgroundColor: c.primary }} />

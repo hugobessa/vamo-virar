@@ -136,13 +136,14 @@ try {
     await ana.getByRole("tab", { name: "Pessoas" }).click();
     await byId(ana, "create-invite").click();
     invite = await byId(ana, "invite-text").textContent({ timeout: 10000 });
-    if (!invite?.startsWith("vamovirar://join?")) throw new Error(`bad invite: ${invite}`);
+    if (!invite?.startsWith("https://web.vamovirar.app/join#")) throw new Error(`bad invite: ${invite}`);
     await shot(ana, "04-invite");
   });
 
   await step("Bia asks to join with the link", async () => {
-    await bia.goto(`${appUrl}/join`);
-    await byId(bia, "invite-link").fill(invite);
+    // The same link, on this test deployment: the invite rides in the fragment.
+    await bia.goto(`${appUrl}/join#${invite.split("#")[1]}`);
+    if (!(await byId(bia, "invite-link").inputValue()).includes("c=")) throw new Error("join screen not prefilled from the link");
     await byId(bia, "display-name").fill("Bia");
     await byId(bia, "join-submit").click();
     await bia.getByText("Pedido enviado").first().waitFor({ timeout: 10000 });
