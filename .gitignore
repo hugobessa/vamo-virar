@@ -9,3 +9,6 @@ apps/mobile/dist-web/
 apps/mobile/.expo/
 apps/mobile/expo-env.d.ts
 apps/mobile/e2e/screenshots/
+
+# Secrets for deployments (copy .env.example)
+.env

@@ -368,24 +368,20 @@ fn provisioning_allowed(app: &App, headers: &HeaderMap) -> Result<Option<String>
             return Ok(None);
         }
     }
+    let st = app.store.lock().unwrap();
     if !got.is_empty() {
-        let digest = hex(&<sha2::Sha256 as sha2::Digest>::digest(got.as_bytes()));
-        if let Some(t) = app
-            .config
-            .tenants
-            .iter()
-            .find(|t| same_secret(t.token_sha256.as_bytes(), digest.as_bytes()))
-        {
-            return Ok(Some(t.name.clone()));
+        if let Some(t) = app.tenant_for_token(st.conn(), got)? {
+            return Ok(Some(t.name));
         }
     }
     if app.config.provisioning_token.is_none() && app.config.open_provisioning {
         return Ok(None);
     }
+    let no_tenants = app.config.tenants.is_empty() && store::active_tenant_count(st.conn())? == 0;
     Err(ApiError::new(
         StatusCode::FORBIDDEN,
         "forbidden",
-        if app.config.provisioning_token.is_none() && app.config.tenants.is_empty() {
+        if app.config.provisioning_token.is_none() && no_tenants {
             "provisioning is closed on this node"
         } else {
             "provisioning token required"
@@ -399,7 +395,7 @@ fn tenant_has_room(
     c: &rusqlite::Connection,
     tenant: &Option<String>,
 ) -> Result<(), ApiError> {
-    let Some(t) = app.config.tenant(tenant.as_deref()) else {
+    let Some(t) = app.tenant(c, tenant.as_deref())? else {
         return Ok(());
     };
     if let Some(max) = t.max_communities {
@@ -632,7 +628,8 @@ async fn post_ops(
     if !only_migrate {
         require_open(&cm)?;
     }
-    let max_log_bytes = app.config.max_log_bytes(cm.tenant.as_deref());
+    let max_log_bytes =
+        app.max_log_bytes(app.store.lock().unwrap().conn(), cm.tenant.as_deref())?;
 
     let now = app.clock.now();
     let grace = app.epoch_grace_ms();
@@ -1287,7 +1284,7 @@ async fn put_blob(
     let cm = store::community(&tx, &cid)?.ok_or_else(ApiError::not_hosted)?;
     require_writable(&cm)?;
     if store::blob_size(&tx, &cid, &blob_id)?.is_none() {
-        let quota = app.config.max_blob_bytes_total(cm.tenant.as_deref());
+        let quota = app.max_blob_bytes_total(&tx, cm.tenant.as_deref())?;
         if cm.blob_bytes + size > quota {
             return Err(ApiError::new(
                 StatusCode::INSUFFICIENT_STORAGE,

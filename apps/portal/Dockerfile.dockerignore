@@ -1,0 +1,6 @@
+**
+!tsconfig.base.json
+!apps/portal/package.json
+!apps/portal/tsconfig.json
+!apps/portal/tsconfig.build.json
+!apps/portal/src/**

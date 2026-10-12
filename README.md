@@ -252,12 +252,14 @@ multi-arquitetura no GHCR.
 | [`docs/offline-testing.md`](docs/offline-testing.md) | Cenários offline e de falha |
 | [`docs/deploy.md`](docs/deploy.md) | Como rodar um nó da comunidade |
 | [`docs/managed-hosting.md`](docs/managed-hosting.md) | Hospedar muitas comunidades; mudar uma comunidade de nó |
+| [`apps/portal/README.md`](apps/portal/README.md) | Portal de pedidos de acesso: aprovar comunidades e enviar o código por email; montagem em casa com Cloudflare Tunnel |
 
 ## Estrutura
 
 ```
 apps/mobile      app React Native (Expo) para iOS e Android
 apps/node        nó da comunidade em Rust
+apps/portal      portal de pedidos de acesso a um nó (aprovação e código por email)
 packages/*       TypeScript: protocol, domain, crypto, sync, matching
 crates/*         Rust: vv-crypto
 deploy/          Dockerfile, Compose, Caddy, systemd

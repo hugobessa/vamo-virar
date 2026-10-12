@@ -204,6 +204,33 @@ pub async fn operator(
     )
 }
 
+/// An operator API call with a JSON body.
+pub async fn operator_json(
+    app: &Arc<App>,
+    method: &str,
+    uri: &str,
+    token: Option<&str>,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    let mut req = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("content-type", "application/json");
+    if let Some(t) = token {
+        req = req.header("authorization", format!("Bearer {t}"));
+    }
+    let res = community_node::operator_service(app.clone())
+        .oneshot(req.body(Body::from(body.to_string())).unwrap())
+        .await
+        .unwrap();
+    let status = res.status();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
 pub async fn call(
     app: &Arc<App>,
     method: &str,

@@ -424,6 +424,146 @@ async fn operator_lists_usage_serves_metrics_and_deletes_with_confirmation() {
     );
 }
 
+#[tokio::test]
+async fn the_operator_api_adds_rotates_and_revokes_tenants_without_a_restart() {
+    let app = node_with(managed_config(None, None));
+    let add = |name: &str, max: u64| serde_json::json!({ "name": name, "max_communities": max, "max_log_bytes": 2_000 });
+    let (s, _) = operator_json(&app, "POST", "/operator/v1/tenants", None, add("ana", 1)).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let (s, v) = operator_json(
+        &app,
+        "POST",
+        "/operator/v1/tenants",
+        Some(OPERATOR),
+        add("ana", 1),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    let token = v["token"].as_str().unwrap().to_owned();
+    assert_eq!(token.len(), 64);
+    // Names are unique across the config file and the API.
+    for name in ["ana", "acme"] {
+        let (s, v) = operator_json(
+            &app,
+            "POST",
+            "/operator/v1/tenants",
+            Some(OPERATOR),
+            add(name, 1),
+        )
+        .await;
+        assert_eq!(
+            (s, v["code"].as_str()),
+            (StatusCode::CONFLICT, Some("exists"))
+        );
+    }
+    let (s, _) = operator_json(
+        &app,
+        "POST",
+        "/operator/v1/tenants",
+        Some(OPERATOR),
+        add("", 1),
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    // The new token provisions at once, within the tenant's limits.
+    let mut f = Fixture::new(60);
+    assert_eq!(create_as(&app, &mut f, &token).await.0, StatusCode::OK);
+    let mut g = Fixture::new(61);
+    let (s, v) = create_as(&app, &mut g, &token).await;
+    assert_eq!(
+        (s, code(&v)),
+        (StatusCode::INSUFFICIENT_STORAGE, "quota_exceeded")
+    );
+    let t = member_token(&app, &f).await;
+    let mut last = Ok(0);
+    for _ in 0..20 {
+        last = first_result(
+            &submit(&app, &f.cid.clone(), &t, vec![f.data([50; 32])])
+                .await
+                .1,
+        );
+        if last.is_err() {
+            break;
+        }
+    }
+    assert_eq!(last, Err("quota_exceeded".into()));
+
+    // Revoked: the token stops provisioning; the community keeps working
+    // (under the same limits) and can always leave.
+    let (s, _) = operator(&app, "DELETE", "/operator/v1/tenants/ana", Some(OPERATOR)).await;
+    assert_eq!(s, StatusCode::OK);
+    let mut h = Fixture::new(62);
+    let (s, v) = create_as(&app, &mut h, &token).await;
+    assert_eq!((s, code(&v)), (StatusCode::FORBIDDEN, "forbidden"));
+    let m = f.migrate(f.admin, &["https://self-hosted.example"]);
+    assert!(first_result(&submit(&app, &f.cid, &t, vec![m]).await.1).is_ok());
+
+    // A new token replaces the old one and lifts the revocation.
+    let (s, body) = operator(
+        &app,
+        "POST",
+        "/operator/v1/tenants/ana/token",
+        Some(OPERATOR),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let fresh: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let fresh = fresh["token"].as_str().unwrap();
+    assert_ne!(fresh, token);
+    assert_eq!(
+        create_as(&app, &mut h, &token).await.0,
+        StatusCode::FORBIDDEN
+    );
+    let (s, v) = create_as(&app, &mut h, fresh).await;
+    assert_eq!(
+        (s, code(&v)),
+        (StatusCode::INSUFFICIENT_STORAGE, "quota_exceeded")
+    );
+
+    // Config tenants are changed in the config file, not here.
+    let (s, _) = operator(&app, "DELETE", "/operator/v1/tenants/acme", Some(OPERATOR)).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    let (s, _) = operator(
+        &app,
+        "DELETE",
+        "/operator/v1/tenants/nobody",
+        Some(OPERATOR),
+    )
+    .await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+
+    let (s, body) = operator(&app, "GET", "/operator/v1/tenants", Some(OPERATOR)).await;
+    assert_eq!(s, StatusCode::OK);
+    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["tenants"][0]["source"], "config");
+    assert_eq!(v["tenants"][1]["name"], "ana");
+    assert_eq!(v["tenants"][1]["source"], "operator");
+    assert_eq!(v["tenants"][1]["communities"], 1);
+    assert!(v["tenants"][1]["revoked_at"].is_null());
+}
+
+#[tokio::test]
+async fn a_node_with_only_api_tenants_accepts_their_tokens() {
+    let app = node_with(Config {
+        operator_token: Some(OPERATOR.into()),
+        ..Config::default()
+    });
+    let mut f = Fixture::new(63);
+    let (s, v) = create_as(&app, &mut f, "anything").await;
+    assert_eq!((s, code(&v)), (StatusCode::FORBIDDEN, "forbidden"));
+    let (_, v) = operator_json(
+        &app,
+        "POST",
+        "/operator/v1/tenants",
+        Some(OPERATOR),
+        serde_json::json!({ "name": "solo" }),
+    )
+    .await;
+    let token = v["token"].as_str().unwrap();
+    assert_eq!(create_as(&app, &mut f, token).await.0, StatusCode::OK);
+}
+
 #[test]
 fn config_validation() {
     let mut c = managed_config(None, None);

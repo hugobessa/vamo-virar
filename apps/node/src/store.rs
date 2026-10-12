@@ -134,6 +134,20 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX IF NOT EXISTS blobs_by_time ON blobs (cid, at, blob_id);
     ALTER TABLE communities ADD COLUMN blob_bytes INTEGER NOT NULL DEFAULT 0;
     "#,
+    // 5 — tenants added through the operator API (managed-hosting.md), next
+    // to the ones in the config file. Only the token's SHA-256 is kept. A
+    // revoked tenant keeps its row, so its communities keep their limits.
+    r#"
+    CREATE TABLE IF NOT EXISTS tenants (
+      name                 TEXT PRIMARY KEY,
+      token_sha256         TEXT NOT NULL UNIQUE,
+      max_communities      INTEGER,
+      max_log_bytes        INTEGER,
+      max_blob_bytes_total INTEGER,
+      created_at           INTEGER NOT NULL,
+      revoked_at           INTEGER
+    );
+    "#,
 ];
 
 pub const SCHEMA_VERSION: usize = MIGRATIONS.len();
@@ -486,6 +500,102 @@ pub fn communities_of_tenant(c: &Connection, tenant: &str) -> rusqlite::Result<u
         [tenant],
         |r| r.get(0),
     )
+}
+
+/// A tenant the operator API added (managed-hosting.md).
+#[derive(Clone, Debug)]
+pub struct StoredTenant {
+    pub tenant: crate::app::Tenant,
+    pub created_at: u64,
+    pub revoked_at: Option<u64>,
+}
+
+const TENANT_COLUMNS: &str =
+    "name, token_sha256, max_communities, max_log_bytes, max_blob_bytes_total, created_at, revoked_at";
+
+fn tenant_row(r: &rusqlite::Row) -> rusqlite::Result<StoredTenant> {
+    Ok(StoredTenant {
+        tenant: crate::app::Tenant {
+            name: r.get(0)?,
+            token_sha256: r.get(1)?,
+            max_communities: r.get(2)?,
+            max_log_bytes: r.get(3)?,
+            max_blob_bytes_total: r.get(4)?,
+        },
+        created_at: r.get(5)?,
+        revoked_at: r.get(6)?,
+    })
+}
+
+/// A stored tenant by name, revoked or not.
+pub fn tenant(c: &Connection, name: &str) -> rusqlite::Result<Option<StoredTenant>> {
+    c.query_row(
+        &format!("SELECT {TENANT_COLUMNS} FROM tenants WHERE name = ?1"),
+        [name],
+        tenant_row,
+    )
+    .optional()
+}
+
+/// The stored tenant whose token hashes to `token_sha256`, unless revoked.
+pub fn active_tenant_by_hash(
+    c: &Connection,
+    token_sha256: &str,
+) -> rusqlite::Result<Option<StoredTenant>> {
+    c.query_row(
+        &format!(
+            "SELECT {TENANT_COLUMNS} FROM tenants WHERE token_sha256 = ?1 AND revoked_at IS NULL"
+        ),
+        [token_sha256],
+        tenant_row,
+    )
+    .optional()
+}
+
+pub fn tenants(c: &Connection) -> rusqlite::Result<Vec<StoredTenant>> {
+    let mut st = c.prepare(&format!(
+        "SELECT {TENANT_COLUMNS} FROM tenants ORDER BY created_at, name"
+    ))?;
+    let rows = st.query_map([], tenant_row)?;
+    rows.collect()
+}
+
+pub fn active_tenant_count(c: &Connection) -> rusqlite::Result<u64> {
+    c.query_row(
+        "SELECT COUNT(*) FROM tenants WHERE revoked_at IS NULL",
+        [],
+        |r| r.get(0),
+    )
+}
+
+pub fn insert_tenant(c: &Connection, t: &crate::app::Tenant, now: u64) -> rusqlite::Result<()> {
+    c.execute(
+        &format!("INSERT INTO tenants ({TENANT_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)"),
+        params![
+            t.name,
+            t.token_sha256,
+            t.max_communities,
+            t.max_log_bytes,
+            t.max_blob_bytes_total,
+            now
+        ],
+    )?;
+    Ok(())
+}
+
+/// A new token for a stored tenant; also lifts a revocation.
+pub fn set_tenant_token(c: &Connection, name: &str, token_sha256: &str) -> rusqlite::Result<bool> {
+    Ok(c.execute(
+        "UPDATE tenants SET token_sha256 = ?2, revoked_at = NULL WHERE name = ?1",
+        params![name, token_sha256],
+    )? == 1)
+}
+
+pub fn revoke_tenant(c: &Connection, name: &str, now: u64) -> rusqlite::Result<bool> {
+    Ok(c.execute(
+        "UPDATE tenants SET revoked_at = COALESCE(revoked_at, ?2) WHERE name = ?1",
+        params![name, now],
+    )? == 1)
 }
 
 /// Communities disabled at or before `cutoff` (node time), due for deletion (§11.5).

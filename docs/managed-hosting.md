@@ -68,6 +68,12 @@ e a linha `token_sha256` para a configuração. O arquivo de configuração guar
 hash. Um cliente usa seu token como "código de configuração" ao criar uma
 comunidade no app (ou ao trazer uma para cá).
 
+Clientes também podem ser criados, ter o token trocado e ser revogados pela
+[API de operador](#a-api-de-operador), sem editar a configuração nem reiniciar o
+nó. Eles ficam no banco do nó (só o SHA-256 do token), ao lado dos do arquivo,
+e os nomes não se repetem entre os dois. O [portal de pedidos](../apps/portal/README.md)
+usa isso para aprovar pedidos de acesso e enviar o código por email.
+
 Escale rodando mais nós, cada um com seu próprio disco, e dando a cada
 cliente (ou comunidade) o endereço do nó que o hospeda. Os nós não
 conversam entre si; uma comunidade vive em exatamente um nó por vez, e
@@ -99,7 +105,10 @@ Servida apenas quando `operator_listen` está definido, somente nesse endereço,
 | Método e caminho | O que faz |
 |---|---|
 | `GET /operator/v1/communities` | Cada comunidade: id, cliente, created_at, head_seq, época, bytes e contagens de log/anexos/snapshot/caixa postal, pedidos de entrada pendentes, suspensa, moved_to, modo de entrada |
-| `GET /operator/v1/tenants` | Por cliente: comunidades, bytes de log e de anexos e os limites configurados |
+| `GET /operator/v1/tenants` | Por cliente: comunidades, bytes de log e de anexos, os limites configurados e de onde ele vem (`source`: `config` ou `operator`) |
+| `POST /operator/v1/tenants` | Cria um cliente sem reiniciar o nó. Corpo JSON: `name` (1 a 64 caracteres) e, opcionais, `max_communities`, `max_log_bytes`, `max_blob_bytes_total`. Responde `201` com o `token`, a única vez que ele aparece (o nó guarda só o SHA-256); `409 exists` se o nome já existe |
+| `POST /operator/v1/tenants/{name}/token` | Troca o token de um cliente criado pela API (perdido ou vazado) e desfaz uma revogação. O token antigo para de funcionar na hora |
+| `DELETE /operator/v1/tenants/{name}` | Revoga o token de um cliente criado pela API: ele não cria nem restaura mais comunidades. As que já existem continuam funcionando, com os mesmos limites, e podem se mudar |
 | `POST /operator/v1/communities/{id}/suspend` | Escritas são recusadas com `403 suspended`; leituras, exportação e `migrate` continuam funcionando |
 | `POST /operator/v1/communities/{id}/resume` | Desfaz uma suspensão |
 | `GET /operator/v1/communities/{id}/export` | O payload de restauração da comunidade (`application/cbor`), por exemplo para devolvê-lo ao encerrar uma conta |

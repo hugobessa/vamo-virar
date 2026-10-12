@@ -216,7 +216,11 @@ async fn main() {
         eprintln!("cannot open {}: {e}", db.display());
         std::process::exit(1);
     });
-    if config.provisioning_token.is_none() && !config.open_provisioning {
+    if config.provisioning_token.is_none()
+        && !config.open_provisioning
+        && config.tenants.is_empty()
+        && config.operator_listen.is_none()
+    {
         tracing::warn!(
             "provisioning is closed: set VV_PROVISIONING_TOKEN to allow creating communities"
         );
