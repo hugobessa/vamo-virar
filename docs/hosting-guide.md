@@ -4,11 +4,28 @@ Este guia é para quem vai **criar** uma comunidade no Vamo Virar. Quem só vai
 participar não precisa de nada disso: basta instalar o app e abrir o link de
 convite.
 
-> **Resumo:** o jeito mais fácil é o [caminho 1](#caminho-1-na-nuvem-sem-instalar-nada):
-> tudo pelo navegador, em uns 10 minutos, sem instalar nada e sem digitar
-> comandos, por US$ 5 por mês. Se você prefere não pagar nada e não tem medo de
-> um terminal, o [caminho 2](#caminho-2-gratis-num-computador-seu) roda o
-> servidor num computador seu.
+> **Resumo:** o jeito mais fácil é [pedir um lugar no servidor do Vamo
+> Virar](#sem-montar-nada-peca-um-lugar-no-servidor-do-vamo-virar): grátis, sem
+> instalar nada, e o código chega por email. Para ter um servidor só seu, o
+> [caminho 1](#caminho-1-na-nuvem-sem-instalar-nada) é tudo pelo navegador, em
+> uns 10 minutos, por US$ 5 por mês; e o
+> [caminho 2](#caminho-2-gratis-num-computador-seu) roda de graça num
+> computador seu, para quem não tem medo de um terminal.
+
+## Sem montar nada: peça um lugar no servidor do Vamo Virar
+
+O projeto mantém um servidor para comunidades que querem começar sem montar
+nem pagar nada:
+
+1. Preencha o pedido em [acesso.vamovirar.app](https://acesso.vamovirar.app/)
+   e confirme o seu email.
+2. Quando o pedido for aprovado, chega por email o endereço do servidor, o
+   código de criação e o passo a passo para criar a comunidade no app.
+
+É um servidor voluntário, sem garantia de que vai estar sempre no ar. Como o
+servidor só guarda dados cifrados, quem cuida dele não lê nada da comunidade. E
+dá para trocar por um servidor seu quando quiser, sem perder nada (veja
+[Mudar de servidor](#mudar-de-servidor)).
 
 ## O que é o servidor
 
@@ -28,6 +45,7 @@ anexados a tarefas (dá para mudar esse limite na configuração; veja
 
 | Onde | Custo | Dificuldade | Bom para |
 |---|---|---|---|
+| **[No servidor do Vamo Virar](#sem-montar-nada-peca-um-lugar-no-servidor-do-vamo-virar)** | Grátis | Nenhuma: um formulário | Quem quer começar já, sem montar nada |
 | **[Caminho 1](#caminho-1-na-nuvem-sem-instalar-nada): na nuvem, com o Railway** | US$ 5 por mês | Fácil: só cliques no navegador | Quem não é da área de tecnologia e quer o servidor sempre no ar |
 | **[Caminho 2](#caminho-2-gratis-num-computador-seu): num computador seu** (notebook velho, PC, Mac, Raspberry Pi) | Grátis | Média: instalar dois programas e colar comandos | Quem quer gastar zero e tem um computador que pode ficar ligado |
 | **[Caminho 2](#caminho-2-gratis-num-computador-seu) numa VPS** (servidor alugado) | Uns US$ 4 a 6 por mês | Média, com acesso por terminal (SSH) | Quem já mexe com servidores |
