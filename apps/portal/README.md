@@ -23,16 +23,16 @@ internet.
 
 ## Montar no Railway
 
-Dois serviços no mesmo projeto, cada um com o próprio domínio:
+Dois serviços no mesmo projeto, cada um com o próprio domínio e a imagem
+publicada a cada versão (`v*`) no GHCR:
 
-| Serviço | Domínio | Para quê |
-|---|---|---|
-| `node` | `servidor.vamovirar.app` | o servidor das comunidades (é o endereço que vai no app) |
-| `portal` | `acesso.vamovirar.app` | o formulário de pedidos e o `/admin` |
+| Serviço | Imagem | Domínio | Para quê |
+|---|---|---|---|
+| `node` | `ghcr.io/hugobessa/community-node:latest` | `servidor.vamovirar.app` | o servidor das comunidades (é o endereço que vai no app) |
+| `portal` | `ghcr.io/hugobessa/vamo-virar-portal:latest` | `acesso.vamovirar.app` | o formulário de pedidos e o `/admin` |
 
 O portal fala com a API de operador do nó pela rede privada do Railway
-(`node.railway.internal`), que não fica exposta na internet. Os dois são
-compilados direto do repositório, e cada merge na `main` faz um deploy novo.
+(`node.railway.internal`), que não fica exposta na internet.
 
 Antes de começar, gere três segredos (no terminal, `openssl rand -hex 32`; ou
 o botão de gerar do [guia do servidor](https://vamovirar.app/servidor/)):
@@ -41,14 +41,13 @@ para o `/admin`.
 
 ### 1. O serviço `node`
 
-1. No Railway, **New Project › Deploy from GitHub repo** e escolha
-   `hugobessa/vamo-virar` (na primeira vez ele pede para conectar o GitHub).
+1. No Railway, **New Project › Docker Image** e cole
+   `ghcr.io/hugobessa/community-node:latest`.
 2. Clique no serviço criado, abra **Settings** e mude o nome para `node`
    (exatamente assim: é o nome que o portal usa na rede privada).
 3. Em **Variables › Raw Editor**, cole e clique em **Update**:
 
    ```
-   RAILWAY_DOCKERFILE_PATH=deploy/Dockerfile
    RAILWAY_RUN_UID=0
    VV_TRUST_FORWARDED_FOR=1
    VV_OPERATOR_LISTEN=[::]:9787
@@ -63,12 +62,12 @@ para o `/admin`.
 
 ### 2. O serviço `portal`
 
-1. No mesmo projeto, **+ New › GitHub Repo › hugobessa/vamo-virar** de novo
-   e mude o nome do serviço para `portal`.
+1. No mesmo projeto, **+ New › Docker Image** e cole
+   `ghcr.io/hugobessa/vamo-virar-portal:latest`. Mude o nome do serviço
+   para `portal`.
 2. Em **Variables › Raw Editor**:
 
    ```
-   RAILWAY_DOCKERFILE_PATH=apps/portal/Dockerfile
    RAILWAY_RUN_UID=0
    PORTAL_PUBLIC_URL=https://acesso.vamovirar.app
    PORTAL_NODE_URL=https://servidor.vamovirar.app
@@ -107,6 +106,18 @@ Se o portal disser que não consegue falar com o nó, confira se o serviço se
 chama `node` e se o `VV_OPERATOR_TOKEN` é igual nos dois. Se ainda assim não
 der, troque `VV_OPERATOR_LISTEN` para `0.0.0.0:9787` (ambientes do Railway com
 rede privada IPv4).
+
+### Atualizar no Railway
+
+Depois de publicar uma versão nova (uma tag `v*`), abra cada serviço e mande
+fazer o deploy de novo (nos três pontinhos do último deploy, **Redeploy**). Os
+dados ficam nos volumes `/data` e não se perdem. Para fixar uma versão em vez
+de `latest`, use a tag na imagem (por exemplo,
+`ghcr.io/hugobessa/vamo-virar-portal:v0.2.0`).
+
+Prefere compilar direto do repositório? Crie os serviços com **GitHub Repo**
+em vez de **Docker Image** e acrescente `RAILWAY_DOCKERFILE_PATH=deploy/Dockerfile`
+(no `node`) ou `RAILWAY_DOCKERFILE_PATH=apps/portal/Dockerfile` (no `portal`).
 
 **Backup:** os dados ficam nos volumes do Railway. O celular de quem fundou
 cada comunidade consegue reconstruí-la em outro servidor, então um backup do

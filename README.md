@@ -193,7 +193,8 @@ Depois, sempre a partir de `apps/mobile`:
 
 Uma tag `v*` dispara `.github/workflows/release.yml`, que publica binários do
 nó (Linux x86-64/ARM64, macOS, Windows) num release em rascunho e imagens
-multi-arquitetura no GHCR.
+multi-arquitetura no GHCR: `community-node` (o nó) e `vamo-virar-portal` (o
+[portal de pedidos](apps/portal/README.md)).
 
 ## Estado
 
