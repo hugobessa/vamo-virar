@@ -10,7 +10,7 @@ import { MeTab } from "../../../ui/community/MeTab";
 import { DisabledScope } from "../../../ui/community/Disabled";
 import { PeopleTab } from "../../../ui/community/PeopleTab";
 import { TasksTab } from "../../../ui/community/TasksTab";
-import { Banner, Body, Screen, Segmented, Title } from "../../../ui/kit";
+import { Actions, Banner, Body, Screen, Segmented, Title } from "../../../ui/kit";
 import { fonts, space, useTheme } from "../../../ui/theme";
 import { WhatsAppButton } from "../../../ui/WhatsApp";
 
@@ -64,13 +64,17 @@ export default function Community() {
     blocked: entry.lastReport?.blocked,
   });
   return (
-    <Screen onRefresh={() => store.syncOne(entry.id)}>
+    <Screen width="board" onRefresh={() => store.syncOne(entry.id)}>
       <Stack.Screen options={{ title: state.community.name }} />
       <SyncStatus status={sync} />
       {entry.unseenRejections.map((x, i) => (
         <Banner key={i} animated tone="danger" text={`${t("rejectedChange")}: ${t(reasonKey(x.reason))}`} />
       ))}
-      {state.community.whatsapp ? <WhatsAppButton testID="community-whatsapp-open" link={state.community.whatsapp} /> : null}
+      {state.community.whatsapp ? (
+        <Actions>
+          <WhatsAppButton testID="community-whatsapp-open" link={state.community.whatsapp} />
+        </Actions>
+      ) : null}
       <Segmented<Tab>
         value={tab}
         onChange={(v) => {

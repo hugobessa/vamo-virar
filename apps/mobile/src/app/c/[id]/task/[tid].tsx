@@ -30,7 +30,7 @@ import {
   type SelfAction,
 } from "../../../../model/tasks";
 import { DisabledScope } from "../../../../ui/community/Disabled";
-import { Body, Button, Card, Chip, Enter, Field, Heading, MenuItem, MoreButton, Screen, Sheet, Title } from "../../../../ui/kit";
+import { Actions, Body, Button, Card, Chip, Columns, Enter, Field, Heading, MenuItem, MoreButton, Screen, Sheet, Title } from "../../../../ui/kit";
 import { Markdown } from "../../../../ui/Markdown";
 import { AttachmentList } from "../../../../ui/tasks/Attachments";
 import { ChecklistProgress, Choices, DueLine, Label, nameOf, PeopleSheet, PriorityChip, StatusChip, Tags } from "../../../../ui/tasks/TaskBits";
@@ -157,110 +157,119 @@ export default function TaskScreen() {
 
   const menuComment = task.comments.find((x) => x.comment_id === commentMenu);
 
-  return (
-    <Screen>
-      <Stack.Screen options={{ title: t("taskScreenTitle") }} />
-      <DisabledScope entry={entry}>
-        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.s }}>
-          <View style={{ flex: 1 }}>
-            <Title caps={false}>{task.title}</Title>
-          </View>
-          {menuItems.length > 0 ? <MoreButton testID="task-menu" label={t("taskMore")} onPress={() => setMenu(true)} /> : null}
+  // The task, who is on it and what to do next.
+  const main = (
+    <>
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.s }}>
+        <View style={{ flex: 1 }}>
+          <Title caps={false}>{task.title}</Title>
         </View>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.s }}>
-          <StatusChip status={task.status} />
-          <PriorityChip priority={task.priority} />
-        </View>
-        {scope && task.event_id ? (
-          <Text
-            accessibilityRole="link"
-            style={{ color: c.primary, fontFamily: fonts.text, fontSize: 15, fontWeight: "600" }}
-            onPress={() => router.push({ pathname: "/c/[id]/event/[eid]", params: { id: entry.id, eid: task.event_id! } })}
-          >
-            {scope}
-          </Text>
-        ) : null}
-        <DueLine task={task} now={now} />
-        <Tags tags={task.tags} />
-        {task.description ? (
-          <Markdown testID="task-description" source={task.description} onToggle={editable ? (line) => submit("task.update", { description: toggleCheck(task.description, line) }) : undefined} />
-        ) : null}
-        <ChecklistProgress source={task.description} />
-        <AttachmentList entry={entry} attachments={task.attachments} />
+        {menuItems.length > 0 ? <MoreButton testID="task-menu" label={t("taskMore")} onPress={() => setMenu(true)} /> : null}
+      </View>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.s }}>
+        <StatusChip status={task.status} />
+        <PriorityChip priority={task.priority} />
+      </View>
+      {scope && task.event_id ? (
+        <Text
+          accessibilityRole="link"
+          style={{ color: c.primary, fontFamily: fonts.text, fontSize: 15, fontWeight: "600" }}
+          onPress={() => router.push({ pathname: "/c/[id]/event/[eid]", params: { id: entry.id, eid: task.event_id! } })}
+        >
+          {scope}
+        </Text>
+      ) : null}
+      <DueLine task={task} now={now} />
+      <Tags tags={task.tags} />
+      {task.description ? (
+        <Markdown testID="task-description" source={task.description} onToggle={editable ? (line) => submit("task.update", { description: toggleCheck(task.description, line) }) : undefined} />
+      ) : null}
+      <ChecklistProgress source={task.description} />
+      <AttachmentList entry={entry} attachments={task.attachments} />
 
-        <Card>
-          <Label>{t("taskAssignedTo")}</Label>
-          <Body>{task.assignee !== undefined ? nameOf(state, task.assignee, "?") : t("taskNobodyYet")}</Body>
-          {task.volunteers.length > 0 ? (
-            <>
-              <Label>{t("taskHelpers")}</Label>
-              <Body>{task.volunteers.map((v) => nameOf(state, v, "?")).join(", ")}</Body>
-            </>
-          ) : null}
-        </Card>
-
-        {primary && pending === null ? <Button testID={primary.testID} kind={primary.kind ?? "primary"} haptic={primaryAction === "take" ? "confirm" : "light"} label={primary.label} onPress={primary.run} /> : null}
-
-        {statusRow.length > 1 ? (
-          <View style={{ gap: space.xs }}>
-            <Label>{t("taskStatusLabel")}</Label>
-            <Choices<TaskStatus>
-              testID="status"
-              value={pending ?? task.status}
-              onChange={choose}
-              options={[...statusRow].sort((a, b) => STATUS_ORDER.indexOf(a) - STATUS_ORDER.indexOf(b)).map((s) => ({ value: s, label: t(STATUS_TEXT[s]) }))}
-            />
-          </View>
-        ) : null}
-        {pending ? (
-          <Enter>
-            <Card>
-              <Field testID="status-note" label={t("taskNoteOptional")} value={note} onChangeText={setNote} />
-              <Button testID="status-confirm" haptic={pending === "done" ? "confirm" : "light"} label={fill(t("taskConfirmStatus"), { status: statusName(pending) })} onPress={confirmStatus} />
-              <Button kind="secondary" compact label={t("cancel")} onPress={() => setPending(null)} />
-            </Card>
-          </Enter>
-        ) : null}
-
-        <Heading>{t("taskComments")}</Heading>
-        {items.map((item) =>
-          item.kind === "status" ? (
-            <Text key={`s${item.seq}`} style={{ color: c.muted, fontFamily: fonts.text, fontSize: 14 }}>
-              {item.seq === task.created_seq
-                ? `${nameOf(state, item.change.by, "?")} ${t("taskCreatedBy")}`
-                : `${nameOf(state, item.change.by, "?")} ${t("taskStatusChanged")} ${statusName(item.change.status)}${item.change.note ? `: ${item.change.note}` : ""}`}
-            </Text>
-          ) : (
-            <Card key={item.comment.comment_id} testID={`comment-${item.comment.comment_id.slice(0, 8)}`}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space.s }}>
-                <Text style={{ flex: 1, color: c.text, fontFamily: fonts.text, fontSize: 15, fontWeight: "700" }}>{nameOf(state, item.comment.author, "?")}</Text>
-                {item.comment.edited_seq !== undefined ? <Chip label={t("taskCommentEdited")} /> : null}
-                {editing !== item.comment.comment_id && (item.comment.author === me?.member_id || canDeleteComment(state, task, item.comment, me)) ? (
-                  <MoreButton label={t("taskCommentActions")} onPress={() => setCommentMenu(item.comment.comment_id)} />
-                ) : null}
-              </View>
-              {editing === item.comment.comment_id ? (
-                <>
-                  <Field label={t("taskCommentEdit")} value={editText} onChangeText={setEditText} multiline />
-                  <Button
-                    label={t("save")}
-                    disabled={!editText.trim() || editText.trim() === item.comment.body}
-                    onPress={() => {
-                      submit("task.comment_edit", { comment_id: item.comment.comment_id, body: editText.trim() });
-                      setEditing(null);
-                    }}
-                  />
-                  <Button kind="secondary" compact label={t("cancel")} onPress={() => setEditing(null)} />
-                </>
-              ) : (
-                <Markdown source={item.comment.body} />
-              )}
-            </Card>
-          ),
-        )}
-        {canComment(state, task, me) ? (
+      <Card>
+        <Label>{t("taskAssignedTo")}</Label>
+        <Body>{task.assignee !== undefined ? nameOf(state, task.assignee, "?") : t("taskNobodyYet")}</Body>
+        {task.volunteers.length > 0 ? (
           <>
-            <Field testID="comment-text" label={t("taskCommentNew")} placeholder={t("taskCommentPlaceholder")} value={comment} onChangeText={setComment} multiline />
+            <Label>{t("taskHelpers")}</Label>
+            <Body>{task.volunteers.map((v) => nameOf(state, v, "?")).join(", ")}</Body>
+          </>
+        ) : null}
+      </Card>
+
+      {primary && pending === null ? (
+        <Actions>
+          <Button testID={primary.testID} kind={primary.kind ?? "primary"} haptic={primaryAction === "take" ? "confirm" : "light"} label={primary.label} onPress={primary.run} />
+        </Actions>
+      ) : null}
+
+      {statusRow.length > 1 ? (
+        <View style={{ gap: space.xs }}>
+          <Label>{t("taskStatusLabel")}</Label>
+          <Choices<TaskStatus>
+            testID="status"
+            value={pending ?? task.status}
+            onChange={choose}
+            options={[...statusRow].sort((a, b) => STATUS_ORDER.indexOf(a) - STATUS_ORDER.indexOf(b)).map((s) => ({ value: s, label: t(STATUS_TEXT[s]) }))}
+          />
+        </View>
+      ) : null}
+      {pending ? (
+        <Enter>
+          <Card>
+            <Field testID="status-note" label={t("taskNoteOptional")} value={note} onChangeText={setNote} />
+            <Button testID="status-confirm" haptic={pending === "done" ? "confirm" : "light"} label={fill(t("taskConfirmStatus"), { status: statusName(pending) })} onPress={confirmStatus} />
+            <Button kind="secondary" compact label={t("cancel")} onPress={() => setPending(null)} />
+          </Card>
+        </Enter>
+      ) : null}
+    </>
+  );
+
+  // The conversation: beside the task where there is room, under it otherwise.
+  const aside = (
+    <>
+      <Heading>{t("taskComments")}</Heading>
+      {items.map((item) =>
+        item.kind === "status" ? (
+          <Text key={`s${item.seq}`} style={{ color: c.muted, fontFamily: fonts.text, fontSize: 14 }}>
+            {item.seq === task.created_seq
+              ? `${nameOf(state, item.change.by, "?")} ${t("taskCreatedBy")}`
+              : `${nameOf(state, item.change.by, "?")} ${t("taskStatusChanged")} ${statusName(item.change.status)}${item.change.note ? `: ${item.change.note}` : ""}`}
+          </Text>
+        ) : (
+          <Card key={item.comment.comment_id} testID={`comment-${item.comment.comment_id.slice(0, 8)}`}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.s }}>
+              <Text style={{ flex: 1, color: c.text, fontFamily: fonts.text, fontSize: 15, fontWeight: "700" }}>{nameOf(state, item.comment.author, "?")}</Text>
+              {item.comment.edited_seq !== undefined ? <Chip label={t("taskCommentEdited")} /> : null}
+              {editing !== item.comment.comment_id && (item.comment.author === me?.member_id || canDeleteComment(state, task, item.comment, me)) ? (
+                <MoreButton label={t("taskCommentActions")} onPress={() => setCommentMenu(item.comment.comment_id)} />
+              ) : null}
+            </View>
+            {editing === item.comment.comment_id ? (
+              <>
+                <Field label={t("taskCommentEdit")} value={editText} onChangeText={setEditText} multiline />
+                <Button
+                  label={t("save")}
+                  disabled={!editText.trim() || editText.trim() === item.comment.body}
+                  onPress={() => {
+                    submit("task.comment_edit", { comment_id: item.comment.comment_id, body: editText.trim() });
+                    setEditing(null);
+                  }}
+                />
+                <Button kind="secondary" compact label={t("cancel")} onPress={() => setEditing(null)} />
+              </>
+            ) : (
+              <Markdown source={item.comment.body} />
+            )}
+          </Card>
+        ),
+      )}
+      {canComment(state, task, me) ? (
+        <>
+          <Field testID="comment-text" label={t("taskCommentNew")} placeholder={t("taskCommentPlaceholder")} value={comment} onChangeText={setComment} multiline />
+          <Actions>
             <Button
               testID="comment-send"
               kind="secondary"
@@ -271,8 +280,17 @@ export default function TaskScreen() {
                 setComment("");
               }}
             />
-          </>
-        ) : null}
+          </Actions>
+        </>
+      ) : null}
+    </>
+  );
+
+  return (
+    <Screen width="board">
+      <Stack.Screen options={{ title: t("taskScreenTitle") }} />
+      <DisabledScope entry={entry}>
+        <Columns main={main} aside={aside} />
 
         <Sheet visible={menu} onClose={() => setMenu(false)} title={task.title} testID="task-menu-sheet">
           {menuItems.map((m) => (

@@ -7,7 +7,7 @@ import { Platform, Switch, View } from "react-native";
 import { deviceCalendarsSupported, type SourceId } from "../lib/matching";
 import { useApp, useCalendarService } from "../lib/context";
 import type { StringKey } from "../model/i18n";
-import { Banner, Body, Button, Card, Field, Heading, Screen } from "../ui/kit";
+import { Actions, Banner, Body, Button, Card, Field, Heading, Screen } from "../ui/kit";
 import { PlacesSettings } from "../ui/PlacesSettings";
 import { space } from "../ui/theme";
 import { errorText } from "../model/errors";
@@ -78,21 +78,23 @@ export default function Settings() {
     return (
       <Card key={source} testID={`calendar-${source}`}>
         <Body>{on ? t(connectedLabel) : t(connectLabel)}</Body>
-        {on && !reauth ? (
-          <Button kind="secondary" label={t("disconnect")} busy={busy === source} onPress={async () => {
-            setBusy(source);
-            await calendar.disconnect(source).finally(() => setBusy(null));
-          }} />
-        ) : (
-          <Button label={reauth ? t("reconnect") : t(connectLabel)} busy={busy === source} onPress={async () => {
-            setBusy(source);
-            try {
-              await connect();
-            } finally {
-              setBusy(null);
-            }
-          }} />
-        )}
+        <Actions>
+          {on && !reauth ? (
+            <Button kind="secondary" label={t("disconnect")} busy={busy === source} onPress={async () => {
+              setBusy(source);
+              await calendar.disconnect(source).finally(() => setBusy(null));
+            }} />
+          ) : (
+            <Button label={reauth ? t("reconnect") : t(connectLabel)} busy={busy === source} onPress={async () => {
+              setBusy(source);
+              try {
+                await connect();
+              } finally {
+                setBusy(null);
+              }
+            }} />
+          )}
+        </Actions>
       </Card>
     );
   };

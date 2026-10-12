@@ -1,12 +1,16 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { Platform, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider, useApp } from "../lib/context";
+import { SidebarShown, useLayout, useSidebarFits } from "../ui/layout";
+import { Sidebar } from "../ui/Sidebar";
 import { fonts, useTheme } from "../ui/theme";
 
 function Nav() {
   const { t } = useApp();
   const c = useTheme();
+  const l = useLayout();
   return (
     <Stack
       screenOptions={{
@@ -14,6 +18,8 @@ function Nav() {
         headerTintColor: c.text,
         headerShadowVisible: false,
         headerTitleStyle: { fontFamily: fonts.display, fontWeight: "900" },
+        // The content sits in a centred column on a wider window; the title goes with it.
+        ...(Platform.OS === "web" && !l.compact ? { headerTitleAlign: "center" as const } : {}),
         contentStyle: { backgroundColor: c.bg },
         headerBackTitle: t("back"),
       }}
@@ -32,12 +38,28 @@ function Nav() {
   );
 }
 
+/** On a wide web window the communities sit in a sidebar beside the screens. */
+function Shell() {
+  const c = useTheme();
+  const sidebar = useSidebarFits();
+  return (
+    <SidebarShown.Provider value={sidebar}>
+      <View style={{ flex: 1, flexDirection: "row", backgroundColor: c.bg }}>
+        {sidebar ? <Sidebar /> : null}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Nav />
+        </View>
+      </View>
+    </SidebarShown.Provider>
+  );
+}
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AppProvider>
         <StatusBar style="auto" />
-        <Nav />
+        <Shell />
       </AppProvider>
     </SafeAreaProvider>
   );

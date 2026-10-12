@@ -6,7 +6,8 @@ import type { CommunityEntry } from "../../lib/store";
 import { fromHex, toHex } from "@vamo-virar/protocol";
 import { Text } from "react-native";
 import { NodeClient } from "@vamo-virar/sync";
-import { Banner, Body, Button, Card, Collapsible, Field, Heading } from "../kit";
+import { Actions, Banner, Body, Button, Card, Collapsible, Columns, Field, Heading } from "../kit";
+import { useLayout } from "../layout";
 import { useTheme } from "../theme";
 import { errorText } from "../../model/errors";
 import { WhatsAppEditor } from "../WhatsApp";
@@ -20,91 +21,111 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
   const [code, setCode] = useState("");
   const [recoverMsg, setRecoverMsg] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
   const c = useTheme();
+  const l = useLayout();
   const recovery = r.recoveryKey;
   if (!me) return <Body muted>{t("syncRemoved")}</Body>;
   const removed = me.status !== "active";
-  return (
+  if (removed) {
+    return (
+      <>
+        <Heading>{me.profile?.display_name}</Heading>
+        {r.view?.community.description ? <Body muted>{r.view.community.description}</Body> : null}
+        <Body muted>{t("syncRemoved")}</Body>
+      </>
+    );
+  }
+  // This person in the community.
+  const main = (
     <>
       <Heading>{me.profile?.display_name}</Heading>
       {r.view?.community.description ? <Body muted>{r.view.community.description}</Body> : null}
-      {removed ? (
-        <Body muted>{t("syncRemoved")}</Body>
-      ) : (
-        <>
-          <Field testID="my-name" label={t("editName")} value={name} onChangeText={setName} />
-          <Button
-            kind="secondary"
-            label={t("save")}
-            disabled={!name.trim() || name.trim() === me.profile?.display_name}
-            onPress={() => store.submit(entry.id, "member.profile", { profile: { ...me.profile, display_name: name.trim() } })}
-          />
+      <Field testID="my-name" label={t("editName")} value={name} onChangeText={setName} />
+      <Actions>
+        <Button
+          kind="secondary"
+          label={t("save")}
+          disabled={!name.trim() || name.trim() === me.profile?.display_name}
+          onPress={() => store.submit(entry.id, "member.profile", { profile: { ...me.profile, display_name: name.trim() } })}
+        />
+      </Actions>
+      {/* With the sidebar on screen these two are already there. */}
+      {l.sidebar ? null : (
+        <Actions>
           <Button kind="secondary" label={t("calendarsTitle")} allowReadOnly onPress={() => router.push("/settings")} />
           <Button testID="me-safety" kind="secondary" label={t("safetyTitle")} allowReadOnly onPress={() => router.push("/safety")} />
-          {r.isAdmin ? (
-            <WhatsAppEditor
-              key={r.view?.community.whatsapp ?? ""}
-              testID="community-whatsapp-editor"
-              title={t("whatsappCommunityTitle")}
-              current={r.view?.community.whatsapp}
-              onSave={(link) => store.submit(entry.id, "community.update", { whatsapp: link })}
-            />
-          ) : null}
-          {/* Recovery, moving servers and disabling the community are rare: folded away under "Avançado". */}
-          <Collapsible title={t("advanced")} testID="advanced">
-            {recovery ? (
-              <Card>
-                <Heading>{t("recoveryTitle")}</Heading>
-                <Body muted>{t("recoveryHelp")}</Body>
-                {showCode ? (
-                  <Text selectable testID="recovery-code" style={{ color: c.text, fontFamily: "monospace", fontSize: 16 }}>
-                    {toHex(recovery).match(/.{4}/g)!.join(" ")}
-                  </Text>
-                ) : null}
-                <Button kind="secondary" label={showCode ? t("recoveryHide") : t("recoveryShow")} allowReadOnly onPress={() => setShowCode(!showCode)} />
-              </Card>
-            ) : null}
-            {!r.isAdmin ? (
-              <Card>
-                <Heading>{t("recoverTitle")}</Heading>
-                <Body muted>{t("recoverHelp")}</Body>
-                <Field label={t("recoverCode")} value={code} onChangeText={setCode} autoCapitalize="none" autoCorrect={false} />
-                <Button
-                  kind="secondary"
-                  label={t("recoverButton")}
-                  allowReadOnly
-                  disabled={code.replace(/\s/g, "").length !== 64}
-                  onPress={async () => {
-                    setRecoverMsg(null);
-                    try {
-                      const seed = fromHex(code.replace(/\s/g, "").toLowerCase());
-                      await store.admin(entry.id, async (rep) => {
-                        await rep.recoverAdmins(seed, [rep.memberId]);
-                        await rep.rotateIntakeKey();
-                      });
-                      setCode("");
-                      setRecoverMsg({ tone: "ok", text: t("recoverDone") });
-                    } catch (e) {
-                      setRecoverMsg({ tone: "danger", text: errorText(e) });
-                    }
-                  }}
-                />
-                {recoverMsg ? <Banner tone={recoverMsg.tone} text={recoverMsg.text} /> : null}
-              </Card>
-            ) : null}
-            {r.isAdmin ? <MoveCard entry={entry} /> : null}
-            {r.isAdmin ? <DisableCard entry={entry} /> : null}
-          </Collapsible>
-          <Button
-            kind="danger"
-            label={t("leave")}
-            onPress={async () => {
-              if (await confirm(t("leaveConfirm"), t("yes"), t("no"))) store.submit(entry.id, "member.leave", {});
-            }}
-          />
-        </>
+        </Actions>
       )}
     </>
   );
+  // The community's settings, and leaving it.
+  const aside = (
+    <>
+      {r.isAdmin ? (
+        <WhatsAppEditor
+          key={r.view?.community.whatsapp ?? ""}
+          testID="community-whatsapp-editor"
+          title={t("whatsappCommunityTitle")}
+          current={r.view?.community.whatsapp}
+          onSave={(link) => store.submit(entry.id, "community.update", { whatsapp: link })}
+        />
+      ) : null}
+      {/* Recovery, moving servers and disabling the community are rare: folded away under "Avançado". */}
+      <Collapsible title={t("advanced")} testID="advanced">
+        {recovery ? (
+          <Card>
+            <Heading>{t("recoveryTitle")}</Heading>
+            <Body muted>{t("recoveryHelp")}</Body>
+            {showCode ? (
+              <Text selectable testID="recovery-code" style={{ color: c.text, fontFamily: "monospace", fontSize: 16 }}>
+                {toHex(recovery).match(/.{4}/g)!.join(" ")}
+              </Text>
+            ) : null}
+            <Button kind="secondary" label={showCode ? t("recoveryHide") : t("recoveryShow")} allowReadOnly onPress={() => setShowCode(!showCode)} />
+          </Card>
+        ) : null}
+        {!r.isAdmin ? (
+          <Card>
+            <Heading>{t("recoverTitle")}</Heading>
+            <Body muted>{t("recoverHelp")}</Body>
+            <Field label={t("recoverCode")} value={code} onChangeText={setCode} autoCapitalize="none" autoCorrect={false} />
+            <Button
+              kind="secondary"
+              label={t("recoverButton")}
+              allowReadOnly
+              disabled={code.replace(/\s/g, "").length !== 64}
+              onPress={async () => {
+                setRecoverMsg(null);
+                try {
+                  const seed = fromHex(code.replace(/\s/g, "").toLowerCase());
+                  await store.admin(entry.id, async (rep) => {
+                    await rep.recoverAdmins(seed, [rep.memberId]);
+                    await rep.rotateIntakeKey();
+                  });
+                  setCode("");
+                  setRecoverMsg({ tone: "ok", text: t("recoverDone") });
+                } catch (e) {
+                  setRecoverMsg({ tone: "danger", text: errorText(e) });
+                }
+              }}
+            />
+            {recoverMsg ? <Banner tone={recoverMsg.tone} text={recoverMsg.text} /> : null}
+          </Card>
+        ) : null}
+        {r.isAdmin ? <MoveCard entry={entry} /> : null}
+        {r.isAdmin ? <DisableCard entry={entry} /> : null}
+      </Collapsible>
+      <Actions>
+        <Button
+          kind="danger"
+          label={t("leave")}
+          onPress={async () => {
+            if (await confirm(t("leaveConfirm"), t("yes"), t("no"))) store.submit(entry.id, "member.leave", {});
+          }}
+        />
+      </Actions>
+    </>
+  );
+  return <Columns main={main} aside={aside} />;
 }
 
 /**

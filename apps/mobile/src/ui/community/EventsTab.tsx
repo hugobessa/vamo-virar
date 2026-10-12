@@ -6,7 +6,7 @@ import { canOrganize, confirmedCount, past, STATUS_TEXT, statusOf, upcoming } fr
 import { fill } from "../../model/i18n";
 import { dateBlock, formatHours, groupByDay } from "../../model/time";
 import { AvailabilityChip } from "../AvailabilityChip";
-import { Body, Button, Card, Chip, EmptyState, Enter, Heading, Progress } from "../kit";
+import { Actions, Body, Button, Card, Chip, EmptyState, Enter, Heading, Progress } from "../kit";
 import { fonts, motion, space, useTheme } from "../theme";
 
 export function EventsTab({ entry }: { entry: CommunityEntry }) {
@@ -66,7 +66,11 @@ export function EventsTab({ entry }: { entry: CommunityEntry }) {
   let index = 0;
   return (
     <>
-      {organizer && next.length > 0 ? <Button testID="new-event" label={t("newEvent")} onPress={newEvent} /> : null}
+      {organizer && next.length > 0 ? (
+        <Actions>
+          <Button testID="new-event" label={t("newEvent")} onPress={newEvent} />
+        </Actions>
+      ) : null}
       <Heading>{t("upcoming")}</Heading>
       {next.length === 0 ? (
         <EmptyState

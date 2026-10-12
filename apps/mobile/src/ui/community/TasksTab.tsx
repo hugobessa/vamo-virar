@@ -12,7 +12,8 @@ import type { CommunityEntry } from "../../lib/store";
 import { canManage as canManageEvent } from "../../model/events";
 import { fill } from "../../model/i18n";
 import { allTags, awaitingCount, byStatus, lastSeq, NEWS_TEXT, newsFor, STATUS_TEXT, visibleTasks, type TaskFilter, type TaskNews } from "../../model/tasks";
-import { Body, Button, Card, EmptyState, Enter, Segmented, Sheet } from "../kit";
+import { Body, Button, Card, EmptyState, Enter, Grid, Segmented, Sheet } from "../kit";
+import { useLayout } from "../layout";
 import { fonts, motion, radius, space, touch, useTheme } from "../theme";
 import { Choices, Label, nameOf, TaskCard } from "../tasks/TaskBits";
 
@@ -51,6 +52,7 @@ function NewsCard({ news, entry, onPress }: { news: TaskNews; entry: CommunityEn
 export function TasksTab({ entry }: { entry: CommunityEntry }) {
   const { t, store } = useApp();
   const c = useTheme();
+  const l = useLayout();
   const now = useNow();
   const r = entry.replica;
   const state = r.view!;
@@ -113,14 +115,15 @@ export function TasksTab({ entry }: { entry: CommunityEntry }) {
             ]}
           />
           {canFilter || mayCreate ? (
+            // Two half-width buttons on a phone; where there is room they hug their labels.
             <View style={{ flexDirection: "row", gap: space.s }}>
               {canFilter ? (
-                <View style={{ flex: 1 }}>
+                <View style={l.compact ? { flex: 1 } : null}>
                   <Button testID="open-filters" kind="secondary" compact allowReadOnly label={active ? fill(t("taskFiltersActive"), { n: active }) : t("taskFilters")} onPress={() => setFiltering(true)} />
                 </View>
               ) : null}
               {mayCreate ? (
-                <View style={{ flex: 1 }}>
+                <View style={l.compact ? { flex: 1 } : null}>
                   <Button testID="new-task" compact label={`+ ${t("newTask")}`} onPress={newTask} />
                 </View>
               ) : null}
@@ -146,11 +149,13 @@ export function TasksTab({ entry }: { entry: CommunityEntry }) {
                   {t("taskNewsSeenAll")}
                 </Text>
               </View>
-              {news.slice(0, 3).map((n, i) => (
-                <Enter key={n.task.task_id} delay={i * motion.stagger}>
-                  <NewsCard news={n} entry={entry} onPress={() => openTask(n.task.task_id)} />
-                </Enter>
-              ))}
+              <Grid columns={l.listColumns}>
+                {news.slice(0, 3).map((n, i) => (
+                  <Enter key={n.task.task_id} delay={i * motion.stagger}>
+                    <NewsCard news={n} entry={entry} onPress={() => openTask(n.task.task_id)} />
+                  </Enter>
+                ))}
+              </Grid>
             </View>
           ) : null}
 
@@ -160,11 +165,13 @@ export function TasksTab({ entry }: { entry: CommunityEntry }) {
               <Text style={{ color: c.muted, fontFamily: fonts.display, fontSize: 12, fontWeight: "800", letterSpacing: 2, textTransform: "uppercase" }}>
                 {`${t(STATUS_TEXT[g.status])} · ${g.tasks.length}`}
               </Text>
-              {g.tasks.map((task) => (
-                <Enter key={task.task_id} delay={Math.min(index++, 6) * motion.stagger}>
-                  <TaskCard task={task} state={state} now={now} isNew={fresh.has(task.task_id)} onPress={() => openTask(task.task_id)} />
-                </Enter>
-              ))}
+              <Grid columns={l.listColumns}>
+                {g.tasks.map((task) => (
+                  <Enter key={task.task_id} delay={Math.min(index++, 6) * motion.stagger}>
+                    <TaskCard task={task} state={state} now={now} isNew={fresh.has(task.task_id)} onPress={() => openTask(task.task_id)} />
+                  </Enter>
+                ))}
+              </Grid>
             </View>
           ))}
 

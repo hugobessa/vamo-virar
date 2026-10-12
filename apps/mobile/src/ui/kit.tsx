@@ -1,13 +1,16 @@
 // Small UI kit: large touch targets, high contrast, readable type, and a
 // little physical motion (buttons with a depth edge that collapses when
 // pressed, a tab pill that slides, bars that fill). Every animation respects
-// the system's reduced-motion setting through `useReducedMotion`.
+// the system's reduced-motion setting through `useReducedMotion`. Layout
+// follows the room there is (see layout.ts): one column on a phone, a centred
+// column with side-by-side pieces on anything wider.
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { Children, createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Animated, LayoutAnimation, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { tap, type Tap } from "../lib/haptics";
 import { BrandBox, FlagStripe } from "./brand";
+import { columns, useLayout } from "./layout";
 import { fonts, motion, palette, radius, shear, space, touch, type, useReducedMotion, useTheme } from "./theme";
 
 /**
@@ -17,10 +20,39 @@ import { fonts, motion, palette, radius, shear, space, touch, type, useReducedMo
  */
 export const ReadOnly = createContext(false);
 
-export function Screen({ children, scroll = true, onRefresh }: { children: ReactNode; scroll?: boolean; onRefresh?: () => Promise<unknown> | void }) {
+/**
+ * A screen's scrolling body. The content sits in a centred column: a reading
+ * measure by default, or `width="board"` for lists and two-column screens.
+ */
+export function Screen({
+  children,
+  scroll = true,
+  onRefresh,
+  width = "reading",
+}: {
+  children: ReactNode;
+  scroll?: boolean;
+  onRefresh?: () => Promise<unknown> | void;
+  width?: keyof typeof columns;
+}) {
   const c = useTheme();
+  const l = useLayout();
   const [refreshing, setRefreshing] = useState(false);
-  const body = <View style={{ padding: space.l, gap: space.m }}>{children}</View>;
+  const body = (
+    <View
+      style={{
+        width: "100%",
+        maxWidth: columns[width],
+        alignSelf: "center",
+        paddingHorizontal: l.gutter,
+        paddingTop: l.compact ? space.l : space.xl,
+        paddingBottom: l.compact ? space.l : space.xxl,
+        gap: space.m,
+      }}
+    >
+      {children}
+    </View>
+  );
   // Pull to refresh in the flag's colours (Android cycles through them; iOS takes the first).
   const refresh = onRefresh ? (
     <RefreshControl
@@ -51,16 +83,17 @@ export function Screen({ children, scroll = true, onRefresh }: { children: React
   );
 }
 
-/** `caps={false}` for titles people wrote themselves, which read better as typed. */
+/** `caps={false}` for titles people wrote themselves, which read better as typed. A little larger where there is room. */
 export function Title({ children, caps = true }: { children: ReactNode; caps?: boolean }) {
   const c = useTheme();
+  const l = useLayout();
   return (
     <Text
       accessibilityRole="header"
       style={
         caps
-          ? { color: c.text, fontFamily: fonts.condensed, fontSize: 34, lineHeight: 36, fontWeight: "900", textTransform: "uppercase" }
-          : { color: c.text, fontFamily: fonts.text, fontSize: 28, lineHeight: 34, fontWeight: "800", letterSpacing: -0.3 }
+          ? { color: c.text, fontFamily: fonts.condensed, fontSize: l.compact ? 34 : 44, lineHeight: l.compact ? 36 : 46, fontWeight: "900", textTransform: "uppercase" }
+          : { color: c.text, fontFamily: fonts.text, fontSize: l.compact ? 28 : 32, lineHeight: l.compact ? 34 : 38, fontWeight: "800", letterSpacing: -0.3 }
       }
     >
       {children}
@@ -136,6 +169,8 @@ export function Button({
   const sink = useRef(new Animated.Value(0)).current;
   const press = (down: boolean) =>
     Animated.timing(sink, { toValue: down ? buttonDepth : 0, duration: reduced ? 0 : motion.fast, easing: motion.easing.out, useNativeDriver: true }).start();
+  // A pointer over the button (web, or a mouse on a tablet) lightens it a touch.
+  const [hover, setHover] = useState(false);
   return (
     <Pressable
       testID={testID}
@@ -145,11 +180,13 @@ export function Button({
       disabled={off}
       onPressIn={() => press(true)}
       onPressOut={() => press(false)}
+      onHoverIn={() => setHover(true)}
+      onHoverOut={() => setHover(false)}
       onPress={() => {
         if (haptic) tap(haptic);
         onPress();
       }}
-      style={{ paddingBottom: buttonDepth, opacity: flat ? 1 : off ? 0.5 : 1 }}
+      style={{ paddingBottom: buttonDepth, opacity: flat ? 1 : off ? 0.5 : hover ? 0.9 : 1 }}
     >
       <View pointerEvents="none" style={[styles.depth, { backgroundColor: depth }]} />
       <Animated.View style={[styles.button, compact ? styles.compact : null, { backgroundColor: bg, borderColor: edge, transform: [{ translateY: sink }] }]}>
@@ -229,9 +266,18 @@ export function FormSection({ title, children }: { title: string; children: Reac
 /** `accent` adds a brand-coloured edge on the left, for cards that open something. */
 export function Card({ children, onPress, testID, accent }: { children: ReactNode; onPress?: () => void; testID?: string; accent?: boolean }) {
   const c = useTheme();
-  const style = [styles.card, { backgroundColor: c.surface, borderColor: c.border }, accent ? { borderLeftWidth: 6, borderLeftColor: c.brand } : null];
+  // A card that opens something rises a little under the pointer.
+  const [hover, setHover] = useState(false);
+  const style = [styles.card, { backgroundColor: c.surface, borderColor: hover ? c.muted : c.border }, accent ? { borderLeftWidth: 6, borderLeftColor: c.brand } : null];
   return onPress ? (
-    <Pressable testID={testID} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [...style, { opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }]}>
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      onPress={onPress}
+      onHoverIn={() => setHover(true)}
+      onHoverOut={() => setHover(false)}
+      style={({ pressed }) => [...style, { opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.985 : 1 }, { translateY: hover && !pressed ? -2 : 0 }] }]}
+    >
       {children}
     </Pressable>
   ) : (
@@ -253,20 +299,32 @@ export function Chip({ label, tone = "neutral" }: { label: string; tone?: ChipTo
   );
 }
 
-/** Tabs with a pill that slides to the selected option. */
-/** `badge` puts a count next to an option's label, for things waiting there. */
+/** Width of one tab where the tab bar does not fill the column. */
+const tabWidth = 148;
+
+/**
+ * Tabs with a pill that slides to the selected option. On a phone they share
+ * the width; where there is room each tab has the same fixed width and the
+ * bar hugs them, so it does not stretch across a wide column.
+ * `badge` puts a count next to an option's label, for things waiting there.
+ */
 export function Segmented<T extends string>({ options, value, onChange }: { options: { value: T; label: string; badge?: number }[]; value: T; onChange: (v: T) => void }) {
   const c = useTheme();
   const reduced = useReducedMotion();
+  const l = useLayout();
   const [width, setWidth] = useState(0);
   const index = Math.max(0, options.findIndex((o) => o.value === value));
   const x = useRef(new Animated.Value(0)).current;
-  const slot = width > 0 ? (width - 8) / options.length : 0;
+  const slot = l.compact ? (width > 0 ? (width - 8) / options.length : 0) : tabWidth;
   useEffect(() => {
     Animated.timing(x, { toValue: index * slot, duration: reduced ? 0 : motion.base, easing: motion.easing.out, useNativeDriver: true }).start();
   }, [index, slot, reduced, x]);
   return (
-    <View accessibilityRole="tablist" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ flexDirection: "row", backgroundColor: c.surface, borderRadius: radius, padding: 4 }}>
+    <View
+      accessibilityRole="tablist"
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      style={{ flexDirection: "row", alignSelf: l.compact ? "stretch" : "flex-start", backgroundColor: c.surface, borderRadius: radius, padding: 4 }}
+    >
       {slot > 0 ? (
         <Animated.View
           pointerEvents="none"
@@ -282,7 +340,7 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
             accessibilityLabel={o.badge ? `${o.label} (${o.badge})` : o.label}
             accessibilityState={{ selected: on }}
             onPress={() => onChange(o.value)}
-            style={{ flex: 1, minHeight: touch - 8, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", borderRadius: radius - 4 }}
+            style={[l.compact ? { flex: 1 } : { width: tabWidth }, { minHeight: touch - 8, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", borderRadius: radius - 4 }]}
           >
             <Text style={{ color: c.text, fontWeight: on ? "700" : "500", fontSize: 16 }}>{o.label}</Text>
             {o.badge ? <CountBadge n={o.badge} /> : null}
@@ -451,24 +509,106 @@ export function MoreButton({ label, onPress, testID }: { label: string; onPress:
   );
 }
 
-/** A panel that slides up from the bottom over a dimmed screen. Tapping outside closes it. */
+/**
+ * A panel over a dimmed screen. On a phone it slides up from the bottom; where
+ * there is room it is a dialog in the middle of the window, with a close
+ * button. Tapping outside closes it either way.
+ */
 export function Sheet({ visible, onClose, title, children, testID }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode; testID?: string }) {
   const c = useTheme();
   const readOnly = useContext(ReadOnly);
+  const l = useLayout();
+  const dialog = !l.compact;
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: "flex-end" }}>
+    <Modal visible={visible} transparent animationType={dialog ? "fade" : "slide"} onRequestClose={onClose}>
+      <View style={dialog ? { flex: 1, justifyContent: "center", alignItems: "center", padding: space.xl } : { flex: 1, justifyContent: "flex-end" }}>
         <Pressable accessibilityLabel="Fechar" onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.4)" }]} />
-        <SafeAreaView edges={["bottom"]} testID={testID} style={{ backgroundColor: c.bg, borderTopLeftRadius: radius * 2, borderTopRightRadius: radius * 2, maxHeight: "85%" }}>
-          <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: c.border, marginTop: space.s }} />
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space.l, gap: space.m }}>
-            {title ? <Text style={{ color: c.text, fontFamily: fonts.text, ...type.h3 }}>{title}</Text> : null}
+        <SafeAreaView
+          edges={dialog ? [] : ["bottom"]}
+          testID={testID}
+          style={
+            dialog
+              ? { width: "100%", maxWidth: 520, maxHeight: "85%", backgroundColor: c.bg, borderRadius: radius * 2, borderWidth: 1, borderColor: c.border }
+              : { backgroundColor: c.bg, borderTopLeftRadius: radius * 2, borderTopRightRadius: radius * 2, maxHeight: "85%" }
+          }
+        >
+          {dialog ? null : <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: c.border, marginTop: space.s }} />}
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: dialog ? space.xl : space.l, gap: space.m }}>
+            {title || dialog ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.m }}>
+                <Text style={{ flex: 1, color: c.text, fontFamily: fonts.text, ...type.h3 }}>{title}</Text>
+                {dialog ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Fechar"
+                    onPress={onClose}
+                    hitSlop={8}
+                    style={({ pressed }) => ({ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.chip : "transparent" })}
+                  >
+                    <Text style={{ color: c.muted, fontSize: 20, fontWeight: "900", lineHeight: 24 }}>✕</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
             <ReadOnly.Provider value={readOnly}>{children}</ReadOnly.Provider>
           </ScrollView>
         </SafeAreaView>
       </View>
     </Modal>
   );
+}
+
+/**
+ * Two columns where there is room (`main` wider, on the left), one column
+ * otherwise, with `main` on top. Sheets and other modals do not belong in
+ * either: put them after it.
+ */
+export function Columns({ main, aside }: { main: ReactNode; aside: ReactNode }) {
+  const l = useLayout();
+  if (!l.wide) {
+    return (
+      <>
+        {main}
+        {aside}
+      </>
+    );
+  }
+  return (
+    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.xxl }}>
+      <View style={{ flex: 3, minWidth: 0, gap: space.m }}>{main}</View>
+      <View style={{ flex: 2, minWidth: 0, gap: space.m }}>{aside}</View>
+    </View>
+  );
+}
+
+/** Cards in `columns` columns of equal width; one column just lays them out in a row each. */
+export function Grid({ children, columns: n }: { children: ReactNode; columns: number }) {
+  const items = Children.toArray(children).filter(Boolean);
+  if (n <= 1) return <>{items}</>;
+  const rows: ReactNode[][] = [];
+  for (let i = 0; i < items.length; i += n) rows.push(items.slice(i, i + n));
+  return (
+    <View style={{ gap: space.m }}>
+      {rows.map((row, i) => (
+        <View key={i} style={{ flexDirection: "row", gap: space.m }}>
+          {row.map((item, j) => (
+            <View key={j} style={{ flex: 1, minWidth: 0 }}>
+              {item}
+            </View>
+          ))}
+          {Array.from({ length: n - row.length }, (_, j) => (
+            <View key={`pad${j}`} style={{ flex: 1 }} />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Buttons stacked on a phone, side by side (wrapping) where there is room. */
+export function Actions({ children }: { children: ReactNode }) {
+  const l = useLayout();
+  return <View style={l.compact ? { gap: space.m } : { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: space.m }}>{children}</View>;
 }
 
 /** One row of a menu inside a Sheet. `danger` rows are red. */

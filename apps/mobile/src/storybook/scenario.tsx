@@ -376,6 +376,8 @@ export interface Scenario {
   entries: MockEntry[];
   /** Route params, as `useLocalSearchParams` returns them. */
   params: Record<string, string>;
+  /** The screen's path, for the sidebar's highlight; derived from `params.id` when absent. */
+  pathname?: string;
   calendar: MockCalendar;
 }
 
