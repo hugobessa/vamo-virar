@@ -548,6 +548,24 @@ export function CountBadge({ n }: { n: number }) {
   );
 }
 
+/** A bell for the header, with how many notifications wait. */
+export function BellButton({ count, label, onPress, testID }: { count: number; label: string; onPress: () => void; testID?: string }) {
+  const c = useTheme();
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={count ? `${label} (${count})` : label}
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => ({ minWidth: 40, height: 40, borderRadius: 20, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 6, backgroundColor: pressed ? c.chip : "transparent" })}
+    >
+      <Text style={{ color: count ? c.brand : c.muted, fontSize: 20, lineHeight: 24 }}>{count ? "🔔" : "🔕"}</Text>
+      {count ? <CountBadge n={count} /> : null}
+    </Pressable>
+  );
+}
+
 /** A round "⋯" button that opens more options. */
 export function MoreButton({ label, onPress, testID }: { label: string; onPress: () => void; testID?: string }) {
   const c = useTheme();

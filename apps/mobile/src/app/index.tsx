@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { ActivityIndicator, Animated, Text, View } from "react-native";
 import { useApp, useNow } from "../lib/context";
 import { insecureStorage } from "../lib/storage";
-import { taskNewsCount, toAnswerCount } from "../model/attention";
+import { noticeCount, taskNewsCount, toAnswerCount } from "../model/attention";
 import { upcoming } from "../model/events";
 import { fill } from "../model/i18n";
 import { dateBlock, formatHours } from "../model/time";
@@ -106,6 +106,7 @@ export default function Home() {
               // Things waiting for this person: questions from the organizers and open invitations.
               const toAnswer = toAnswerCount(view, e.replica.memberId, e.replica.incomingProbes.length);
               const taskNews = taskNewsCount(view, e.replica.memberId, e.replica.taskMarks, status === "active");
+              const notices = noticeCount(view, e.replica.memberId, e.replica.noticeMarks, status === "active");
               return (
                 <Enter key={e.id} delay={i * motion.stagger}>
                   <Card accent testID={`community-${e.id}`} onPress={() => router.push({ pathname: "/c/[id]", params: { id: e.id } })}>
@@ -116,6 +117,7 @@ export default function Home() {
                     {status === "active" && view ? (
                       <Body muted>{next && when ? `${t("homeNext")}: ${next.title} · ${when.heading}, ${formatHours(next.starts_at, next.ends_at, locale, next.tz).split(" – ")[0]}` : t("homeNoNext")}</Body>
                     ) : null}
+                    {notices > 0 ? <Chip label={notices === 1 ? t("homeNoticesOne") : fill(t("homeNoticesMany"), { n: notices })} tone="warn" /> : null}
                     {taskNews > 0 ? <Chip label={taskNews === 1 ? t("homeTaskNewsOne") : fill(t("homeTaskNewsMany"), { n: taskNews })} tone="warn" /> : null}
                     {status === "joining" ? <Chip label={t("waitingTitle")} tone="warn" /> : null}
                     {status === "rejected" ? <Chip label={t("rejectedTitle")} tone="danger" /> : null}

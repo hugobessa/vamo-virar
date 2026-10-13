@@ -66,7 +66,9 @@ Regras de implementação para o código TypeScript (`packages/crypto`) e Rust
 
 - Nada de SDKs de analytics ou de relatório de falhas de terceiros que enviem dados para fora do dispositivo por
   padrão. Relatórios de falha, se houver, são opt-in e higienizados.
-- Notificações push não têm conteúdo (protocolo §14).
+- Notificações push não têm conteúdo (protocolo §14): o que chega de fora é
+  um texto fixo; o aviso com nome e tarefa é montado no aparelho, a partir
+  do estado decifrado, e nunca sai dele.
 - Não peça a permissão de localização "sempre"; apenas "durante o uso" ou
   pontos de referência manuais.
 - O acesso ao calendário é somente leitura e usado apenas para a correspondência local.

@@ -9,7 +9,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useApp } from "../lib/context";
 import type { CommunityEntry } from "../lib/store";
-import { taskNewsCount, toAnswerCount } from "../model/attention";
+import { attentionCount, noticeCount, taskNewsCount, toAnswerCount } from "../model/attention";
 import { awaitingCount } from "../model/tasks";
 import { useJoinRequests } from "./admin/hooks";
 import { Eyebrow, FlagStripe, Wordmark } from "./brand";
@@ -83,6 +83,7 @@ function CommunitySections({ entry, pathname }: { entry: CommunityEntry; pathnam
       {row("tasks", t("tabTasks"), news || awaitingCount(view) || undefined)}
       {row("people", t("tabPeople"))}
       {row("me", t("tabMe"))}
+      {row("notifications", t("notifications"), noticeCount(view, r.memberId, r.noticeMarks, true) || undefined)}
       {mod ? row("admin", t("adminTitle"), pending) : null}
     </>
   );
@@ -109,7 +110,7 @@ export function Sidebar() {
         {communities.map((e) => {
           const r = e.replica;
           const open = at(`/c/${e.id}`) || pathname.startsWith(`/c/${e.id}/`);
-          const waiting = toAnswerCount(r.view, r.memberId, r.incomingProbes.length) + taskNewsCount(r.view, r.memberId, r.taskMarks, r.status === "active");
+          const waiting = attentionCount(r.view, r.memberId, r.incomingProbes.length, r.taskMarks, r.noticeMarks, r.status === "active");
           return (
             <View key={e.id}>
               <NavRow

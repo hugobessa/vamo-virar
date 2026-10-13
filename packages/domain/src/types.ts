@@ -156,6 +156,12 @@ export type ParticipationStatus =
 export interface Participation {
   status: ParticipationStatus;
   updated_seq: number;
+  /**
+   * The organizer behind the last change, when it was not the member's own
+   * (`invite`, `revoke`, `approve`, `reject`); absent after a self action.
+   * Lets the invited person see who invited them.
+   */
+  by?: MemberId;
 }
 
 export interface Event {
@@ -220,6 +226,12 @@ export interface TaskComment {
   body: string;
   seq: number;
   edited_seq?: number;
+  /**
+   * Members addressed with `@` in the body, sorted and unique; absent when
+   * none. Explicit ids, not names, so a mention survives a rename and the
+   * notification goes to the person the author picked.
+   */
+  mentions?: MemberId[];
 }
 
 /** One line of a task's status history, oldest first. */
@@ -244,6 +256,11 @@ export interface Task {
   due_at?: number;
   /** The one person responsible. An open task without one is `awaiting_volunteer`. */
   assignee?: MemberId;
+  /**
+   * Who made `assignee` responsible, and at which log position. Present
+   * exactly when `assignee` is; `by === assignee` when they took it themselves.
+   */
+  assigned?: { by: MemberId; seq: number };
   /** Other members helping, sorted. Never includes `assignee`. */
   volunteers: MemberId[];
   attachments: Attachment[];

@@ -31,6 +31,7 @@ function Nav() {
       <Stack.Screen name="safety" options={{ title: t("safetyTitle") }} />
       <Stack.Screen name="c/[id]/(tabs)" options={{ title: "" }} />
       <Stack.Screen name="c/[id]/admin" options={{ title: t("adminTitle") }} />
+      <Stack.Screen name="c/[id]/notifications" options={{ title: t("notifications") }} />
       <Stack.Screen name="c/[id]/new-event" options={{ title: t("newEvent"), presentation: "modal" }} />
       <Stack.Screen name="c/[id]/event/[eid]" options={{ title: "" }} />
       <Stack.Screen name="c/[id]/task-form" options={{ title: t("newTask"), presentation: "modal" }} />

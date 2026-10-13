@@ -7,6 +7,7 @@ import {
   type EncryptionKeyPair,
   type Rng,
 } from "@vamo-virar/crypto";
+import type { NoticeKind } from "@vamo-virar/domain";
 import { concatBytes, decode, encode, fromHex, toHex, utf8, type CborValue } from "@vamo-virar/protocol";
 
 export interface Invite {
@@ -90,6 +91,13 @@ export type MailMessage =
   /** A member's answer, signed by their MSK so the organizer knows who answered. */
   | { kind: "probe_reply"; probe_id: Uint8Array; member_id: string; answer: ProbeAnswer; sig: Uint8Array }
   /**
+   * "Open the app: something in the log is for you" (§14). Sent when a
+   * device submits a mention, an assignment or an invitation; the node turns
+   * it into a content-free push. What it is about comes from the log, so the
+   * body only says why, sealed like any other mail.
+   */
+  | { kind: "ping"; what: NoticeKind }
+  /**
    * A member reporting another member to the admins. One copy is sealed to
    * each admin's MEK, so neither the node nor the reported person can read
    * it; signed by the reporter's MSK so admins know who sent it.
@@ -106,6 +114,7 @@ export type MailMessage =
 
 export type ProbeAnswer = "eligible" | "maybe" | "not_eligible";
 const ANSWERS: ProbeAnswer[] = ["eligible", "maybe", "not_eligible"];
+const NOTICE_KINDS: NoticeKind[] = ["mention", "assigned", "invited"];
 
 export type ReportReason = "harassment" | "spam" | "impersonation" | "unsafe" | "other";
 export const REPORT_REASONS: readonly ReportReason[] = ["harassment", "spam", "impersonation", "unsafe", "other"];
@@ -152,6 +161,9 @@ export function openMail(cid: Uint8Array, kind: string, me: EncryptionKeyPair, c
       const m: MailMessage = { kind, report_id: body.report_id, reporter: body.reporter, member_id: body.member_id, reason: body.reason as ReportReason, sig: body.sig };
       if (typeof body.details === "string") m.details = body.details;
       return m;
+    }
+    if (kind === "ping") {
+      return NOTICE_KINDS.includes(body.what as NoticeKind) ? { kind, what: body.what as NoticeKind } : null;
     }
     if (kind === "removed") {
       const m: MailMessage = { kind };

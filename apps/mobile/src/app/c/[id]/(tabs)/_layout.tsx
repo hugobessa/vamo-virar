@@ -8,10 +8,12 @@ import { router, Stack, Tabs, useLocalSearchParams } from "expo-router";
 import type { ComponentProps } from "react";
 import { View } from "react-native";
 import { useApp, useCommunity } from "../../../../lib/context";
-import { taskNewsCount, toAnswerCount } from "../../../../model/attention";
+import { noticeCount, taskNewsCount, toAnswerCount } from "../../../../model/attention";
 import { AdminButton, useAdminPending } from "../../../../ui/community/AdminButton";
 import { TAB_KEYS, TabBar, type TabKey } from "../../../../ui/community/TabBar";
+import { BellButton } from "../../../../ui/kit";
 import { useLayout } from "../../../../ui/layout";
+import { space } from "../../../../ui/theme";
 
 type BarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
@@ -52,15 +54,20 @@ export default function CommunityLayout() {
   };
 
   const title = state?.community.name ?? t(r?.status === "rejected" ? "rejectedTitle" : "waitingTitle");
+  // The header's right side: the notifications bell, and, for moderation on a phone, the administration (the sidebar lists it on a wide window).
+  const unread = r && state && active ? noticeCount(state, r.memberId, r.noticeMarks, true) : 0;
+  const headerRight =
+    entry && active
+      ? () => (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+            <BellButton testID="notifications-open" count={unread} label={t("notifications")} onPress={() => router.push({ pathname: "/c/[id]/notifications", params: { id: entry.id } })} />
+            {mod && !l.sidebar ? <AdminButton pending={pending} onPress={() => router.push({ pathname: "/c/[id]/admin", params: { id: entry.id } })} /> : null}
+          </View>
+        )
+      : undefined;
   return (
     <View style={{ flex: 1 }}>
-      <Stack.Screen
-        options={{
-          title,
-          // With the sidebar on screen the administration is already a link there.
-          headerRight: mod && !l.sidebar && entry ? () => <AdminButton pending={pending} onPress={() => router.push({ pathname: "/c/[id]/admin", params: { id: entry.id } })} /> : undefined,
-        }}
-      />
+      <Stack.Screen options={{ title, headerRight }} />
       <Tabs tabBar={bar} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: "transparent" } }} backBehavior="initialRoute">
         <Tabs.Screen name="index" options={{ title: labels.index }} />
         <Tabs.Screen name="tasks" options={{ title: labels.tasks }} />

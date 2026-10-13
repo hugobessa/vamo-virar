@@ -1,8 +1,11 @@
 import { probeAnswer } from "@vamo-virar/matching";
+import { router } from "expo-router";
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AppState } from "react-native";
-import { translator, type StringKey } from "../model/i18n";
+import { fill, translator, type StringKey } from "../model/i18n";
+import { NOTICE_TEXT, noticeSubject } from "../model/notifications";
 import { MatchingService } from "./matching";
+import * as notifications from "./notifications";
 import { AppStore, type CommunityEntry } from "./store";
 
 interface Ctx {
@@ -37,6 +40,28 @@ export function AppProvider({ children, store: injected }: { children: ReactNode
         await entry.replica.answerProbe(p.probeId, probeAnswer(e.verdict));
       }
     };
+    // System notifications are worded here, on the phone, from the decrypted state.
+    const t = translator();
+    store.notifier = {
+      pushToken: () => notifications.pushToken(),
+      announce: async (entry, notices) => {
+        const state = entry.replica.canonical!;
+        for (const n of notices) {
+          const who = state.members[n.by]?.profile?.display_name ?? "?";
+          const body = `${fill(t(NOTICE_TEXT[n.kind]), { name: who })} · ${noticeSubject(n)}`;
+          await notifications.show(state.community.name, body, {
+            community: entry.id,
+            ...(n.task ? { task: n.task.task_id } : {}),
+            ...(n.event ? { event: n.event.event_id } : {}),
+          });
+        }
+      },
+    };
+    const stopNotifications = notifications.configure((target) => {
+      if (target.task) router.push({ pathname: "/c/[id]/task/[tid]", params: { id: target.community, tid: target.task } });
+      else if (target.event) router.push({ pathname: "/c/[id]/event/[eid]", params: { id: target.community, eid: target.event } });
+      else router.push({ pathname: "/c/[id]/notifications", params: { id: target.community } });
+    });
     let alive = true;
     void store.init().then(() => alive && store.start());
     void calendar.refreshStale();
@@ -51,6 +76,7 @@ export function AppProvider({ children, store: injected }: { children: ReactNode
     return () => {
       alive = false;
       sub.remove();
+      stopNotifications();
       store.stop();
     };
   }, [store, calendar]);

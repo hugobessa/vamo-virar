@@ -2,8 +2,10 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { action } from "storybook/actions";
+import { noticeCount } from "../model/attention";
 import { AdminButton, useAdminPending } from "../ui/community/AdminButton";
 import { TAB_KEYS, TabBar } from "../ui/community/TabBar";
+import { BellButton } from "../ui/kit";
 import { SidebarShown, useSidebarFits, WidthOverride } from "../ui/layout";
 import { Sidebar } from "../ui/Sidebar";
 import { fonts, space, useTheme } from "../ui/theme";
@@ -17,13 +19,20 @@ function Bar() {
   return <TabBar items={TAB_KEYS.map((key) => ({ key, label: labels[key], active: key === s.tab }))} onPress={action("tabBar.press")} />;
 }
 
-/** On a section screen, the way into the administration on the header's right, as the tabs layout puts it. */
+/** On a section screen, the header's right as the tabs layout puts it: the notifications bell and, for moderation, the administration. */
 function HeaderRight() {
   const s = useScenario();
   const entry = s.tab ? s.entries.find((e) => e.id === s.params["id"]) : undefined;
   const { mod, pending } = useAdminPending(entry as never);
-  if (!entry || !mod) return null;
-  return <AdminButton pending={pending} onPress={action("router.push")} />;
+  if (!entry || entry.replica.status !== "active" || !entry.replica.view) return null;
+  const r = entry.replica;
+  const unread = noticeCount(r.view, r.memberId, r.noticeMarks, true);
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+      <BellButton count={unread} label={t("notifications")} onPress={action("router.push")} />
+      {mod ? <AdminButton pending={pending} onPress={action("router.push")} /> : null}
+    </View>
+  );
 }
 
 /** What a screen asks of the frame's header: a title, and something on the right (the administration button). */

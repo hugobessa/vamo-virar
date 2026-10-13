@@ -63,6 +63,15 @@ pub struct Config {
     /// Managed hosting: customers who may provision communities with their
     /// own token, each with optional limits.
     pub tenants: Vec<Tenant>,
+    /// Push gateway (§14): where to POST a content-free wake-up when a
+    /// mailbox receives a `ping`, `probe` or `join_result`. Expo's push API
+    /// for the official app; off when unset (devices then poll).
+    pub push_gateway: Option<String>,
+    /// Bearer token for the gateway, when it requires one.
+    pub push_access_token: Option<String>,
+    /// At most one push per mailbox in this many seconds; later wake-ups in
+    /// the window ride on the first.
+    pub push_min_interval_secs: u64,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -91,6 +100,11 @@ impl Config {
         }
         if self.max_blob_bytes == 0 {
             return Err("max_blob_bytes must be at least 1".into());
+        }
+        if let Some(g) = &self.push_gateway {
+            if !(g.starts_with("https://") || g.starts_with("http://")) {
+                return Err("push_gateway must be an http(s) URL".into());
+            }
         }
         let mut names = std::collections::HashSet::new();
         for t in &self.tenants {
@@ -144,6 +158,9 @@ impl Default for Config {
             operator_listen: None,
             operator_token: None,
             tenants: Vec::new(),
+            push_gateway: None,
+            push_access_token: None,
+            push_min_interval_secs: 60,
         }
     }
 }
@@ -215,6 +232,10 @@ pub struct App {
     pub sessions: Mutex<HashMap<String, Session>>,
     streams: Mutex<HashMap<Cid, broadcast::Sender<Notice>>>,
     rate: Mutex<HashMap<String, (u64, u32)>>,
+    /// When each mailbox was last pushed to, for `push_min_interval_secs`.
+    pub(crate) pushed_at: Mutex<HashMap<(Cid, [u8; 32]), u64>>,
+    /// One client for every gateway call, so connections are reused.
+    pub(crate) http: reqwest::Client,
 }
 
 pub fn random<const N: usize>() -> [u8; N] {
@@ -244,7 +265,17 @@ impl App {
             sessions: Mutex::new(HashMap::new()),
             streams: Mutex::new(HashMap::new()),
             rate: Mutex::new(HashMap::new()),
+            pushed_at: Mutex::new(HashMap::new()),
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(15))
+                .build()
+                .expect("HTTP client"),
         })
+    }
+
+    /// Whether wake-ups are forwarded to a push gateway (§14).
+    pub fn push_enabled(&self) -> bool {
+        self.config.push_gateway.is_some()
     }
 
     /// A tenant by name: from the config file, or one the operator API
@@ -348,6 +379,11 @@ impl App {
             .lock()
             .unwrap()
             .retain(|_, (start, _)| now - *start <= 3_600_000);
+        let push_window = self.config.push_min_interval_secs * 1000;
+        self.pushed_at
+            .lock()
+            .unwrap()
+            .retain(|_, at| now.saturating_sub(*at) <= push_window);
 
         let mut st = self.store.lock().unwrap();
         let tx = st.tx()?;
