@@ -2,8 +2,19 @@
 // persisted through SealedStore and synced in the background while the app
 // is open.
 
-import { toHex } from "@vamo-virar/protocol";
-import { NodeClient, NodeError, parseInvite, Replica, type SyncReport } from "@vamo-virar/sync";
+import { equalBytes, toHex } from "@vamo-virar/protocol";
+import {
+  NodeClient,
+  NodeError,
+  offerDeviceLink,
+  parseDeviceLink,
+  parseInvite,
+  receiveDeviceLink,
+  Replica,
+  type LinkBundle,
+  type LinkOffer,
+  type SyncReport,
+} from "@vamo-virar/sync";
 import { SealedStore } from "./storage";
 import { isNetworkError } from "../model/errors";
 
@@ -17,6 +28,26 @@ export interface CommunityEntry {
   lastReport: SyncReport | null;
   /** Rejections of this person's own changes not yet shown to them. */
   unseenRejections: { type: string; reason: string }[];
+}
+
+/** A bundle received from another device, before it is applied. */
+export interface IncomingLink {
+  bundle: LinkBundle;
+  /** Communities this device already has as a different member (joined here separately). */
+  conflicts: { id: string; name: string }[];
+}
+
+/**
+ * One device as the person sees it, across their communities. Each device
+ * uses one name in all of them (the app keeps it unique when linking), so
+ * the name is what ties the per-community entries together.
+ */
+export interface DeviceSummary {
+  label: string;
+  me: boolean;
+  /** Main device in every community it is in. */
+  main: boolean;
+  communities: string[];
 }
 
 const SYNC_EVERY_MS = 20_000;
@@ -130,10 +161,17 @@ export class AppStore {
     if (!e) return;
     try {
       const report = await e.replica.sync();
+      // Another of this person's devices unlinked this one (§10.5.6): forget it here.
+      if (e.replica.unlinked) {
+        await this.forget(id);
+        return;
+      }
+      // Work nobody asked for runs on one device only: the main one (§10.5.4).
+      const main = e.replica.isMainDevice;
       // Moderators who left keep node access until an admin updates the set.
-      if (e.replica.isAdmin) await e.replica.tidyModerators().catch(() => undefined);
+      if (main && e.replica.isAdmin) await e.replica.tidyModerators().catch(() => undefined);
       // Files whose task is gone stay on the node until someone with moderation drops them.
-      if (e.replica.canModerate && Date.now() - (this.lastTidy.get(id) ?? 0) > TIDY_BLOBS_EVERY_MS) {
+      if (main && e.replica.canModerate && Date.now() - (this.lastTidy.get(id) ?? 0) > TIDY_BLOBS_EVERY_MS) {
         this.lastTidy.set(id, Date.now());
         await e.replica.tidyBlobs().catch(() => undefined);
       }
@@ -141,7 +179,7 @@ export class AppStore {
       e.lastSync = Date.now();
       e.lastReport = report;
       e.unseenRejections.push(...report.rejected.map((r) => ({ type: r.type, reason: r.reason })));
-      if (this.autoAnswer && e.replica.incomingProbes.length) await this.autoAnswer(e).catch(() => undefined);
+      if (main && this.autoAnswer && e.replica.incomingProbes.length) await this.autoAnswer(e).catch(() => undefined);
       await this.persist(e);
     } catch (err) {
       // Marked for deletion and past the date: the server deleted it, so this phone forgets it too.
@@ -187,6 +225,140 @@ export class AppStore {
     return out;
   }
 
+  // --- linked devices (protocol.md §10.5) ----------------------------------
+
+  /** Memberships that can go to another device. */
+  linkable(): CommunityEntry[] {
+    return this.list().filter((e) => e.replica.status === "active" && !e.replica.disabled);
+  }
+
+  /** Source device: seals every active membership into a link for ten minutes. */
+  async offerLink(label: string, base?: string): Promise<LinkOffer> {
+    const entries = this.linkable();
+    const offer = await offerDeviceLink(
+      entries.map((e) => e.replica),
+      label,
+      base ? { base } : {},
+    );
+    // Linking made this device part of a device set; keep its new key.
+    for (const e of entries) await this.persist(e);
+    this.bump();
+    return offer;
+  }
+
+  /** New device: fetches and opens the bundle. Nothing changes here until `applyLink`. */
+  async receiveLink(link: string, code: string): Promise<IncomingLink> {
+    const bundle = await receiveDeviceLink(parseDeviceLink(link), code);
+    const conflicts = bundle.communities.flatMap((c) => {
+      const e = this.entries.get(toHex(c.cid));
+      if (!e || equalBytes(e.replica.keys.signing.sk, c.msk)) return [];
+      return [{ id: e.id, name: e.replica.view?.community.name ?? e.id.slice(0, 8) }];
+    });
+    return { bundle, conflicts };
+  }
+
+  /**
+   * Adds the memberships from a link. For a community this device already
+   * has as another member, `replace` decides: the old membership leaves the
+   * community first (§10.5.5), or the community is skipped.
+   */
+  async applyLink(incoming: IncomingLink, label: string, replace: ReadonlySet<string> = new Set()): Promise<string[]> {
+    const name = uniqueLabel(label, incoming.bundle);
+    const added: string[] = [];
+    for (const c of incoming.bundle.communities) {
+      const id = toHex(c.cid);
+      const existing = this.entries.get(id);
+      if (existing && equalBytes(existing.replica.keys.signing.sk, c.msk)) {
+        existing.replica.absorbLink(c, name);
+        await this.persist(existing);
+        added.push(id);
+        continue;
+      }
+      if (existing) {
+        if (!replace.has(id)) continue;
+        await this.leave(existing);
+      }
+      const e = this.track(Replica.fromLink(new NodeClient(c.node), c, name));
+      await this.persist(e);
+      added.push(id);
+    }
+    this.bump();
+    await Promise.all(added.map((id) => this.syncOne(id)));
+    if (this.timer) {
+      this.stop();
+      this.start();
+    }
+    return added;
+  }
+
+  /** Leaves a community for good and forgets it here; refuses if the leave did not reach the node. */
+  private async leave(e: CommunityEntry): Promise<void> {
+    if (e.replica.status === "active") {
+      e.replica.submit("member.leave", {});
+      await e.replica.sync();
+      if (e.replica.pending.length) throw new Error("could not leave the old membership; check the connection and try again");
+    }
+    await this.forget(e.id);
+  }
+
+  /** This person's devices across their communities. Empty when this is the only one. */
+  devices(): DeviceSummary[] {
+    const byLabel = new Map<string, DeviceSummary>();
+    for (const e of this.list()) {
+      for (const d of e.replica.linkedDevices) {
+        const s = byLabel.get(d.label) ?? { label: d.label, me: d.me, main: true, communities: [] };
+        s.me ||= d.me;
+        s.main &&= d.main;
+        s.communities.push(e.id);
+        byLabel.set(d.label, s);
+      }
+    }
+    return [...byLabel.values()].sort((a, b) => Number(b.me) - Number(a.me) || a.label.localeCompare(b.label));
+  }
+
+  /** "Make this the main device", in every community this device is linked in. */
+  async makeThisMain(): Promise<void> {
+    for (const e of this.list()) {
+      if (!e.replica.linkedDevices.some((d) => d.me) || e.replica.isMainDevice) continue;
+      await e.replica.makeMainDevice();
+      await this.persist(e);
+    }
+    this.bump();
+  }
+
+  /** Unlinks another device, by name, everywhere it is linked. */
+  async unlinkDevice(label: string): Promise<void> {
+    for (const e of this.list()) {
+      const d = e.replica.linkedDevices.find((x) => x.label === label && !x.me);
+      if (!d) continue;
+      await e.replica.unlinkDevice(d.id);
+      await this.persist(e);
+    }
+    this.bump();
+  }
+
+  /** Takes this device out of every device set and forgets those communities here. */
+  async unlinkThisDevice(): Promise<void> {
+    for (const e of this.list()) {
+      const devices = e.replica.linkedDevices;
+      const me = devices.find((x) => x.me);
+      if (!me || devices.length < 2) continue; // the only device: nothing to leave
+      await e.replica.unlinkDevice(me.id);
+      await this.forget(e.id);
+    }
+  }
+
+  async renameThisDevice(label: string): Promise<void> {
+    const name = label.trim();
+    if (this.devices().some((d) => !d.me && d.label === name)) throw new Error("another device already has this name");
+    for (const e of this.list()) {
+      if (!e.replica.linkedDevices.some((d) => d.me)) continue;
+      await e.replica.renameDevice(label);
+      await this.persist(e);
+    }
+    this.bump();
+  }
+
   async forget(id: string): Promise<void> {
     this.stops.get(id)?.();
     this.stops.delete(id);
@@ -216,6 +388,14 @@ export class AppStore {
     for (const s of this.stops.values()) s();
     this.stops.clear();
   }
+}
+
+/** The new device's name, made unique among the devices already linked, so it can stand for the device everywhere. */
+function uniqueLabel(label: string, bundle: LinkBundle): string {
+  const taken = new Set(bundle.communities.flatMap((c) => c.devices?.devices.map((d) => d.label) ?? []));
+  const base = label.trim().slice(0, 56) || "Dispositivo";
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;
 }
 
 function isOffline(err: unknown): boolean {

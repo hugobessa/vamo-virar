@@ -27,7 +27,8 @@
       ],
       "blockedPermissions": [
         "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -40,6 +41,13 @@
       "expo-router",
       "expo-secure-store",
       "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O Vamo Virar usa a câmera só para ler o código que liga este aparelho a outro seu. Nenhuma imagem é guardada ou enviada.",
+          "recordAudioAndroid": false
+        }
+      ],
       [
         "expo-calendar",
         {

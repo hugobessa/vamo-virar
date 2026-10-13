@@ -1,6 +1,12 @@
 export { movedTo, NodeClient, NodeError } from "./client.js";
 export type { BlobInfo, IntakeItem, IntakeMode, MailboxItem, NodeClientOptions, RestoreInput, SubmitResult } from "./client.js";
+export { DEVICE_LABEL_MAX, MAX_DEVICES } from "./devices.js";
+export type { DeviceEntry, DeviceSet } from "./devices.js";
 export { inviteLink, openMail, parseInvite, REPORT_DETAILS_MAX, REPORT_REASONS, sealMail } from "./invite.js";
 export type { Invite, MailMessage, ProbeAnswer, ReportReason } from "./invite.js";
+export { deviceLinkUrl, isDeviceLink, LINK_BASE, LINK_TTL_MS, LinkError, parseDeviceLink, receiveDeviceLink } from "./link.js";
+export type { DeviceLink, LinkBundle, LinkEntry, LinkErrorCode } from "./link.js";
+export { offerDeviceLink } from "./offer.js";
+export type { LinkOffer } from "./offer.js";
 export { Replica } from "./replica.js";
-export type { IncomingProbe, OutboxItem, MemberReport, PendingJoin, ReplicaData, SentProbe, Status, SyncReport, TaskMarks } from "./replica.js";
+export type { IncomingProbe, LinkedDevice, OutboxItem, MemberReport, PendingJoin, ReplicaData, SentProbe, Status, SyncReport, TaskMarks } from "./replica.js";

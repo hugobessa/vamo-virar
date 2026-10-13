@@ -84,7 +84,9 @@ export function Sidebar() {
         })}
         <NavRow href="/create" label={t("createCommunity")} active={at("/create")} />
         <NavRow href="/join" label={t("joinCommunity")} active={at("/join")} />
+        {communities.length === 0 ? <NavRow href="/link" label={t("linkHaveOther")} active={at("/link")} /> : null}
         <View style={{ flex: 1, minHeight: space.xl }} />
+        {communities.length > 0 ? <NavRow href="/devices" label={t("devicesTitle")} active={at("/devices") || at("/link-offer")} /> : null}
         <NavRow href="/settings" label={t("calendarsTitle")} active={at("/settings")} />
         <NavRow href="/safety" label={t("safetyTitle")} active={at("/safety")} />
       </ScrollView>
