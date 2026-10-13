@@ -84,6 +84,9 @@ Tudo tem um valor padrão. Precedência: ambiente > flags > arquivo de configura
 | `intake_per_ip_per_hour` / `intake_per_community_per_hour` | | 20 / 200 | limites de pedidos de entrada |
 | `operator_listen` | `VV_OPERATOR_LISTEN` | desligado | hospedagem gerenciada: endereço privado para a API de operador |
 | `operator_token` | `VV_OPERATOR_TOKEN` | nenhum | obrigatório com `operator_listen` (≥ 16 caracteres) |
+| `push_gateway` | `VV_PUSH_GATEWAY` | desligado | para onde mandar avisos sem conteúdo quando alguém é mencionado, recebe uma tarefa ou um convite (protocolo §14). Para o app oficial: `https://exp.host/--/api/v2/push/send`. Desligado, o app só descobre as novidades ao abrir |
+| `push_access_token` | `VV_PUSH_TOKEN` | nenhum | token do gateway, se ele exigir um ("enhanced push security" na Expo) |
+| `push_min_interval_secs` | | 60 | no máximo um aviso por aparelho nesse intervalo |
 | `[[tenants]]` | | nenhum | hospedagem gerenciada: clientes (tenants) com seu próprio token de provisionamento e limites |
 
 Rodar um nó para comunidades de outras pessoas (clientes, cotas, a

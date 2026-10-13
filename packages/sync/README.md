@@ -35,6 +35,12 @@ opacas, e fluxos de admin: pedidos de entrada, aprovar/rejeitar, remover membro
 tornar admin, snapshots, convites, modo de entrada e reconstrução da comunidade
 em outro nó (`restoreTo`, depois `moveTo` nos outros dispositivos).
 
+Avisos (protocolo §14): `submit` de uma menção, de uma atribuição ou de um
+convite enfileira um `ping` selado para cada pessoa visada, enviado logo
+depois das operações na próxima sincronização; `registerPush(token)` diz ao
+nó onde acordar este dispositivo. `noticeMarks` / `markNoticesSeen` guardam,
+só neste dispositivo, até onde a pessoa viu suas notificações.
+
 ## Testes
 
 `test/integration.test.ts` roda contra o binário real `community-node`

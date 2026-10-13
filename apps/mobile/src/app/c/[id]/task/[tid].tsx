@@ -12,6 +12,7 @@ import { confirm } from "../../../../lib/confirm";
 import { useApp, useCommunity, useNow } from "../../../../lib/context";
 import { fill } from "../../../../model/i18n";
 import { toggleCheck } from "../../../../model/markdown";
+import { extractMentions, mentionables } from "../../../../model/mentions";
 import {
   canComment,
   canDeleteComment,
@@ -33,6 +34,7 @@ import { DisabledScope } from "../../../../ui/community/Disabled";
 import { Actions, Body, Button, Card, Chip, Columns, Enter, Field, Heading, MenuItem, MoreButton, Screen, Sheet, Title } from "../../../../ui/kit";
 import { Markdown } from "../../../../ui/Markdown";
 import { AttachmentList } from "../../../../ui/tasks/Attachments";
+import { MentionField } from "../../../../ui/tasks/MentionField";
 import { ChecklistProgress, Choices, DueLine, Label, nameOf, PeopleSheet, PriorityChip, StatusChip, Tags } from "../../../../ui/tasks/TaskBits";
 import { fonts, space, useTheme } from "../../../../ui/theme";
 
@@ -79,6 +81,13 @@ export default function TaskScreen() {
   const targets = statusTargets(state, task, me);
   const items = timeline(task);
   const editable = canEdit(state, task, me);
+  // Who can be `@`-mentioned, and the ids a finished text names (what the op carries).
+  const people = mentionables(state, me);
+  const everyone = mentionables(state, undefined);
+  const commentBody = (text: string) => {
+    const mentions = extractMentions(text, people);
+    return { body: text.trim(), ...(mentions.length ? { mentions } : {}) };
+  };
 
   const selfLabel = (a: SelfAction) => {
     if (a === "take" && task.assignee !== undefined) return t("taskTakeOver");
@@ -122,7 +131,7 @@ export default function TaskScreen() {
 
   // The "Situação" row, for whoever is on it or manages it once someone is responsible.
   const statusRow = open && task.assignee !== undefined && (on || manager) ? WORKING.filter((s) => s === task.status || targets.includes(s)) : [];
-  const people = Object.values(state.members)
+  const assignable = Object.values(state.members)
     .filter((m) => m.status === "active" && m.member_id !== task.assignee)
     .sort((a, b) => (a.profile?.display_name ?? "").localeCompare(b.profile?.display_name ?? ""));
 
@@ -249,26 +258,26 @@ export default function TaskScreen() {
             </View>
             {editing === item.comment.comment_id ? (
               <>
-                <Field label={t("taskCommentEdit")} value={editText} onChangeText={setEditText} multiline />
+                <MentionField testID="comment-edit-text" label={t("taskCommentEdit")} people={people} value={editText} onChangeText={setEditText} />
                 <Button
                   label={t("save")}
                   disabled={!editText.trim() || editText.trim() === item.comment.body}
                   onPress={() => {
-                    submit("task.comment_edit", { comment_id: item.comment.comment_id, body: editText.trim() });
+                    submit("task.comment_edit", { comment_id: item.comment.comment_id, ...commentBody(editText) });
                     setEditing(null);
                   }}
                 />
                 <Button kind="secondary" compact label={t("cancel")} onPress={() => setEditing(null)} />
               </>
             ) : (
-              <Markdown source={item.comment.body} />
+              <Markdown source={item.comment.body} mentions={everyone} />
             )}
           </Card>
         ),
       )}
       {canComment(state, task, me) ? (
         <>
-          <Field testID="comment-text" label={t("taskCommentNew")} placeholder={t("taskCommentPlaceholder")} value={comment} onChangeText={setComment} multiline />
+          <MentionField testID="comment-text" label={t("taskCommentNew")} placeholder={t("taskCommentPlaceholder")} people={people} value={comment} onChangeText={setComment} />
           <Actions>
             <Button
               testID="comment-send"
@@ -276,7 +285,7 @@ export default function TaskScreen() {
               label={t("taskCommentSend")}
               disabled={!comment.trim()}
               onPress={() => {
-                submit("task.comment", { comment_id: toHex(ExpoCrypto.getRandomBytes(16)), body: comment.trim() });
+                submit("task.comment", { comment_id: toHex(ExpoCrypto.getRandomBytes(16)), ...commentBody(comment) });
                 setComment("");
               }}
             />
@@ -334,7 +343,7 @@ export default function TaskScreen() {
           visible={assigning}
           onClose={() => setAssigning(false)}
           title={t("taskAssignOther")}
-          people={people}
+          people={assignable}
           value={null}
           me={me?.member_id}
           testID="assign"

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-native-web-vite";
+import { userEvent, within } from "storybook/test";
 import Community from "../../app/c/[id]/index";
 import TaskForm from "../../app/c/[id]/task-form";
 import TaskScreen from "../../app/c/[id]/task/[tid]";
@@ -48,6 +49,14 @@ export const TarefaEmAndamentoCoordenacao: Story = task("t1", { me: "ana" });
 export const TarefaNaFila: Story = task("t2", { me: "duda" });
 export const TarefaTravada: Story = task("t3", { me: "bia" });
 export const TarefaFeita: Story = task("t6", { me: "ana" });
+/** Typing `@ca` in the comment box offers Caio; the comments above show who was mentioned. */
+export const TarefaMencionando: Story = {
+  ...task("t1", { me: "bia" }),
+  play: async ({ canvasElement }) => {
+    const box = await within(canvasElement).findByLabelText("Novo comentário");
+    await userEvent.type(box, "Combinado, @ca");
+  },
+};
 export const TarefaEmComunidadeMarcada: Story = task("t1", { me: "bia", disabledBy: "ana" });
 
 export const NovaTarefa: Story = form({});

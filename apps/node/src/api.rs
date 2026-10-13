@@ -21,6 +21,7 @@ use vv_crypto::primitives::{hash_ctx, verify};
 use vv_crypto::snapshot::SnapshotEnvelope;
 
 use crate::app::{hex, random, same_secret, unhex, App, Notice, Scope, Session};
+use crate::push;
 use crate::sequencer::{self, Reject, SeqError};
 use crate::store::{self, Cid};
 
@@ -49,6 +50,7 @@ pub fn router(app: Shared) -> Router {
             post(post_mailbox).get(get_mailbox),
         )
         .route("/v1/c/{cid}/mailbox/{mbx}/{id}", delete(delete_mailbox))
+        .route("/v1/c/{cid}/push", put(put_push).delete(delete_push))
         .route("/v1/c/{cid}/intake", post(post_intake).get(get_intake))
         .route("/v1/c/{cid}/intake/{id}", delete(delete_intake))
         .route(
@@ -416,8 +418,9 @@ fn tenant_has_room(
 
 async fn well_known(State(app): State<Shared>) -> Response {
     let body = format!(
-        "{{\"protocol\":\"{PROTOCOL}\",\"node_id\":\"{}\",\"api\":\"/v1\",\"limits\":{{\"max_batch\":{},\"max_op_bytes\":65536,\"max_blob_bytes\":{}}}}}",
+        "{{\"protocol\":\"{PROTOCOL}\",\"node_id\":\"{}\",\"api\":\"/v1\",\"push\":{},\"limits\":{{\"max_batch\":{},\"max_op_bytes\":65536,\"max_blob_bytes\":{}}}}}",
         hex(&app.node_id),
+        app.push_enabled(),
         app.config.max_batch,
         app.config.max_blob_bytes
     );
@@ -894,7 +897,48 @@ async fn post_mailbox(
         st.conn().last_insert_rowid() as u64
     };
     app.notify(&cid, Notice::Mailbox(mbx));
+    push::wake(&app, cid, mbx, kind);
     ok(Value::map([("id", int(id))]))
+}
+
+// --- push tokens (§14): registered by the mailbox's own device ----------------
+
+const MAX_PUSH_TOKEN: usize = 512;
+
+async fn put_push(
+    State(app): State<Shared>,
+    Path(cid): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Response, ApiError> {
+    let cid = cid_param(&cid)?;
+    let s = authorize(&app, &headers, &cid, Scope::Mailbox)?;
+    hosted(&app, &cid)?;
+    let v = parse(&body)?;
+    let token = field(&v, "token")?
+        .as_text()
+        .filter(|t| !t.is_empty() && t.len() <= MAX_PUSH_TOKEN && !t.chars().any(char::is_control))
+        .ok_or_else(|| ApiError::bad("token"))?;
+    let now = app.clock.now();
+    store::set_push_token(
+        app.store.lock().unwrap().conn(),
+        &cid,
+        &s.mailbox,
+        token,
+        now,
+    )?;
+    ok(Value::map([("push", Value::Bool(app.push_enabled()))]))
+}
+
+async fn delete_push(
+    State(app): State<Shared>,
+    Path(cid): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let cid = cid_param(&cid)?;
+    let s = authorize(&app, &headers, &cid, Scope::Mailbox)?;
+    store::delete_push_token(app.store.lock().unwrap().conn(), &cid, &s.mailbox, None)?;
+    ok(Value::map([("ok", Value::Bool(true))]))
 }
 
 fn require_own_mailbox(s: &Session, mbx: &[u8; 32]) -> Result<(), ApiError> {

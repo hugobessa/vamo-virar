@@ -6,7 +6,7 @@ import { Link, usePathname, type Href } from "expo-router";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useApp } from "../lib/context";
-import { taskNewsCount, toAnswerCount } from "../model/attention";
+import { attentionCount } from "../model/attention";
 import { Eyebrow, FlagStripe, Wordmark } from "./brand";
 import { CountBadge } from "./kit";
 import { SIDEBAR_WIDTH } from "./layout";
@@ -70,7 +70,7 @@ export function Sidebar() {
         </View>
         {communities.map((e) => {
           const r = e.replica;
-          const waiting = toAnswerCount(r.view, r.memberId, r.incomingProbes.length) + taskNewsCount(r.view, r.memberId, r.taskMarks, r.status === "active");
+          const waiting = attentionCount(r.view, r.memberId, r.incomingProbes.length, r.taskMarks, r.noticeMarks, r.status === "active");
           return (
             <NavRow
               key={e.id}

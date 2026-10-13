@@ -55,7 +55,7 @@ comunidade, clientes iOS/Android. Números de seção (§) referem-se a `protoco
 |---|---|
 | Spam / assédio via entrada (A9) | Limites de taxa; política só por convite; questão em aberto §17.7. |
 | Análise de tráfego ligando uma pessoa entre comunidades | Mitigada por chaves por comunidade. Não mitigada: mesmo IP / mesmo token de push entre comunidades (A1 + A8). |
-| Vazamento de conteúdo em notificações push | Apenas pushes sem conteúdo; tokens selados para o gateway. §14 |
+| Vazamento de conteúdo em notificações push | Apenas pushes sem conteúdo e com texto fixo; o texto com conteúdo ("Bia mencionou você") é montado no dispositivo. O aviso entre dispositivos (`ping`) é correspondência selada. O nó guarda o token de push em claro (A1 vê que uma caixa postal tem um aparelho registrado e quando ele é acordado; com o token, só consegue mandar o aviso fixo). §14 |
 | Consultas de disponibilidade "Quem poderia vir?" revelando agendas | As respostas trazem um de três vereditos, seladas para o organizador que perguntou e assinadas pelo membro; sem horários, locais ou distâncias. O nó vê que N itens foram postados e aproximadamente quando as respostas voltaram (metadados). A resposta automática vem desligada por padrão. protocolo §10.4 |
 | Histórico de localização | Nunca coletado. Os lugares são escolhidos pela pessoa; "onde estou agora" é uma única leitura aproximada (≈ 1 km) mantida por um dia, apenas no dispositivo. A localização em segundo plano do iOS/Android é desativada no build. |
 | Coerção (alguém obriga um membro a desbloquear o celular) | Fora do escopo da v0. Candidato **[LATER]**: "ocultar esta comunidade" por comunidade, com PIN separado. |

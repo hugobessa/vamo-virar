@@ -148,6 +148,17 @@ const MIGRATIONS: &[&str] = &[
       revoked_at           INTEGER
     );
     "#,
+    // 6 — push tokens (§14): where to send a content-free wake-up for a
+    // mailbox. One per mailbox; the device replaces it when it changes.
+    r#"
+    CREATE TABLE IF NOT EXISTS push_tokens (
+      cid        BLOB NOT NULL REFERENCES communities(cid),
+      mbx        BLOB NOT NULL,
+      token      TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (cid, mbx)
+    );
+    "#,
 ];
 
 pub const SCHEMA_VERSION: usize = MIGRATIONS.len();
@@ -692,6 +703,53 @@ pub fn blobs(c: &Connection, cid: &Cid) -> rusqlite::Result<Vec<BlobInfo>> {
     rows.collect()
 }
 
+// --- push tokens (§14) ------------------------------------------------------
+
+pub fn push_token(c: &Connection, cid: &Cid, mbx: &[u8; 32]) -> rusqlite::Result<Option<String>> {
+    c.query_row(
+        "SELECT token FROM push_tokens WHERE cid = ?1 AND mbx = ?2",
+        params![cid, mbx],
+        |r| r.get(0),
+    )
+    .optional()
+}
+
+pub fn set_push_token(
+    c: &Connection,
+    cid: &Cid,
+    mbx: &[u8; 32],
+    token: &str,
+    now: u64,
+) -> rusqlite::Result<()> {
+    c.execute(
+        "INSERT INTO push_tokens (cid, mbx, token, updated_at) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT (cid, mbx) DO UPDATE SET token = excluded.token, updated_at = excluded.updated_at",
+        params![cid, mbx, token, now],
+    )?;
+    Ok(())
+}
+
+/// Drops the token; with `only` set, only when it is still that token (a
+/// gateway said it is dead, but the device may have registered a new one).
+pub fn delete_push_token(
+    c: &Connection,
+    cid: &Cid,
+    mbx: &[u8; 32],
+    only: Option<&str>,
+) -> rusqlite::Result<bool> {
+    let n = match only {
+        Some(t) => c.execute(
+            "DELETE FROM push_tokens WHERE cid = ?1 AND mbx = ?2 AND token = ?3",
+            params![cid, mbx, t],
+        )?,
+        None => c.execute(
+            "DELETE FROM push_tokens WHERE cid = ?1 AND mbx = ?2",
+            params![cid, mbx],
+        )?,
+    };
+    Ok(n > 0)
+}
+
 /// Removes every row of a community. Irreversible; the operator API asks for confirmation.
 pub fn delete_community(c: &Connection, cid: &Cid) -> rusqlite::Result<bool> {
     for table in [
@@ -704,6 +762,7 @@ pub fn delete_community(c: &Connection, cid: &Cid) -> rusqlite::Result<bool> {
         "invites",
         "directory",
         "blobs",
+        "push_tokens",
     ] {
         c.execute(&format!("DELETE FROM {table} WHERE cid = ?1"), [cid])?;
     }

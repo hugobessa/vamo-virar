@@ -184,10 +184,11 @@ export class NodeClient {
   // API
   // -------------------------------------------------------------------------
 
-  async wellKnown(): Promise<{ protocol: string; node_id: string }> {
+  /** `push` says whether this node forwards wake-ups to a push gateway (§14). */
+  async wellKnown(): Promise<{ protocol: string; node_id: string; push?: boolean }> {
     const res = await this.fetchImpl(`${this.baseUrl}/.well-known/vamo-virar`);
     if (!res.ok) throw new NodeError(res.status, "http_error", "well-known");
-    return (await res.json()) as { protocol: string; node_id: string };
+    return (await res.json()) as { protocol: string; node_id: string; push?: boolean };
   }
 
   private provisionHeaders(): Record<string, string> {
@@ -271,6 +272,17 @@ export class NodeClient {
 
   async ackMailbox(cid: Uint8Array, me: SigningKeyPair, mailbox: Uint8Array, id: number): Promise<void> {
     await this.authed("DELETE", `/v1/c/${toHex(cid)}/mailbox/${toHex(mailbox)}/${id}`, cid, "mailbox", me);
+  }
+
+  // --- push (§14): a device's platform token, kept per mailbox so the node can wake it ---
+
+  /** Registers (or replaces) this device's push token for the mailbox `me` signs for. */
+  async putPush(cid: Uint8Array, me: SigningKeyPair, token: string): Promise<void> {
+    await this.authed("PUT", `/v1/c/${toHex(cid)}/push`, cid, "mailbox", me, { token });
+  }
+
+  async deletePush(cid: Uint8Array, me: SigningKeyPair): Promise<void> {
+    await this.authed("DELETE", `/v1/c/${toHex(cid)}/push`, cid, "mailbox", me);
   }
 
   async submitJoinRequest(cid: Uint8Array, sealed: HpkeSealed, invite?: Uint8Array): Promise<number> {

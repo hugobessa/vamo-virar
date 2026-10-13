@@ -6,6 +6,7 @@ import { toHex } from "@vamo-virar/protocol";
 import { NodeClient, NodeError, parseInvite, Replica, type SyncReport } from "@vamo-virar/sync";
 import { SealedStore } from "./storage";
 import { isNetworkError } from "../model/errors";
+import { latestSeq, noticesFor, type Notice } from "../model/notifications";
 
 export type Connectivity = "ok" | "offline";
 
@@ -22,6 +23,16 @@ export interface CommunityEntry {
 const SYNC_EVERY_MS = 20_000;
 /** How often an admin or moderator device looks for orphaned attachments on the node (§9.7). */
 const TIDY_BLOBS_EVERY_MS = 60 * 60_000;
+/** System notifications shown for one sync; the rest wait in the list. */
+const ANNOUNCE_MAX = 3;
+
+/** The phone's notification system, as the app wires it (null on the web). */
+export interface Notifier {
+  /** This install's push token, or null when there is none to register. */
+  pushToken(): Promise<string | null>;
+  /** Shows notices that arrived with a sync, on the device, with content. */
+  announce(entry: CommunityEntry, notices: Notice[]): Promise<void>;
+}
 
 export class AppStore {
   private readonly entries = new Map<string, CommunityEntry>();
@@ -33,6 +44,9 @@ export class AppStore {
   ready = false;
   /** Set by the app: answers pending probes when the person allowed it. */
   autoAnswer: ((e: CommunityEntry) => Promise<void>) | null = null;
+  /** Set by the app: system notifications and the push token (§14). */
+  notifier: Notifier | null = null;
+  private pushToken: string | null = null;
 
   constructor(private readonly store: SealedStore = new SealedStore()) {}
 
@@ -128,8 +142,12 @@ export class AppStore {
   async syncOne(id: string): Promise<void> {
     const e = this.entries.get(id);
     if (!e) return;
+    // Pin where notices stand before the sync, so only what it brings is announced.
+    const notifiedBefore = e.replica.noticeMarks.notified;
     try {
       const report = await e.replica.sync();
+      if (report.pulled > 0) await this.announce(e, notifiedBefore);
+      await this.registerPush(e);
       // Moderators who left keep node access until an admin updates the set.
       if (e.replica.isAdmin) await e.replica.tidyModerators().catch(() => undefined);
       // Files whose task is gone stay on the node until someone with moderation drops them.
@@ -158,6 +176,43 @@ export class AppStore {
 
   async syncAll(): Promise<void> {
     await Promise.all([...this.entries.keys()].map((id) => this.syncOne(id)));
+  }
+
+  /** Shows what a sync brought for this person, newest first, and remembers how far it got. */
+  private async announce(e: CommunityEntry, notifiedBefore: number): Promise<void> {
+    const state = e.replica.canonical;
+    if (!state || e.replica.status !== "active") return;
+    const fresh = noticesFor(state, state.members[e.replica.memberId]).filter((n) => n.seq > notifiedBefore);
+    if (fresh.length === 0) return;
+    e.replica.markNoticesNotified(latestSeq(fresh));
+    if (this.notifier) await this.notifier.announce(e, fresh.slice(0, ANNOUNCE_MAX)).catch(() => undefined);
+  }
+
+  /** Gives the node this install's push token for an active community, once per token. */
+  private async registerPush(e: CommunityEntry): Promise<void> {
+    if (!this.pushToken || e.replica.status !== "active" || e.replica.pushToken === this.pushToken) return;
+    await e.replica.registerPush(this.pushToken).catch(() => undefined); // next sync tries again
+  }
+
+  /** Looks up the push token (asking the system, not the person) and registers it everywhere. */
+  async refreshPush(): Promise<void> {
+    if (!this.notifier) return;
+    const token = await this.notifier.pushToken().catch(() => null);
+    if (!token || token === this.pushToken) return;
+    this.pushToken = token;
+    for (const e of this.entries.values()) {
+      await this.registerPush(e);
+      if (e.replica.pushToken === token) void this.persist(e);
+    }
+  }
+
+  /** This person looked at their notices in a community, up to `seq`. Only on this device. */
+  markNoticesSeen(id: string, seq: number): void {
+    const e = this.entries.get(id);
+    if (!e) return;
+    const before = e.replica.noticeMarks.seen;
+    e.replica.markNoticesSeen(seq);
+    if (e.replica.noticeMarks.seen !== before) void this.persist(e);
   }
 
   clearRejections(id: string): void {
@@ -199,7 +254,7 @@ export class AppStore {
 
   start(): void {
     if (this.timer) return;
-    void this.syncAll();
+    void this.refreshPush().then(() => this.syncAll());
     this.timer = setInterval(() => void this.syncAll(), SYNC_EVERY_MS);
     for (const [id, e] of this.entries) {
       if (e.replica.status !== "active" || this.stops.has(id)) continue;

@@ -50,4 +50,12 @@ describe("sealed mail", () => {
     expect(openMail(cid, "ik_env", me, ik2)).toEqual({ kind: "ik_env", ik_sk: new Uint8Array(32).fill(9) });
     expect(openMail(cid, "ik_env", me, new Uint8Array([1, 2, 3]))).toBeNull();
   });
+
+  it("a ping says only why, and only one of the known reasons", () => {
+    const me = generateEncryptionKeyPair();
+    const ct = sealMail(cid, me.pk, { kind: "ping", what: "mention" });
+    expect(openMail(cid, "ping", me, ct)).toEqual({ kind: "ping", what: "mention" });
+    const bogus = sealMail(cid, me.pk, { kind: "ping", what: "spam" as never });
+    expect(openMail(cid, "ping", me, bogus)).toBeNull();
+  });
 });

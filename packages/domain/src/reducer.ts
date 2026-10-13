@@ -25,6 +25,7 @@ import type {
   RejectReason,
   Role,
   Task,
+  TaskComment,
   TaskPriority,
   TaskStatus,
 } from "./types.js";
@@ -48,6 +49,8 @@ export const TASK_LIMITS = {
   attachmentBytes: 10 * 1024 * 1024,
   comments: 200,
   comment: 2000,
+  /** People one comment may address with `@`. */
+  mentions: 20,
   note: 500,
   history: 50,
 } as const;
@@ -804,6 +807,8 @@ function participation(action: ParticipationAction): Handler {
       reject("capacity_full");
     }
     const p: Participation = { status: to, updated_seq: e.seq };
+    // An organizer's doing: keep who, so the invited person knows who asked.
+    if (!SELF_ACTIONS.has(action)) p.by = author.member_id;
     ev.participations[targetId] = p;
   };
 }
@@ -905,6 +910,7 @@ function dropFromTask(s: CommunityState, task: Task, memberId: MemberId): void {
   }
   if (task.assignee === memberId) {
     delete task.assignee;
+    delete task.assigned;
     if (task.status !== "awaiting_volunteer") setTaskStatus(s, task, "awaiting_volunteer", memberId, seq);
     else touchTask(task, seq);
   }
@@ -1022,7 +1028,10 @@ function taskCreate(s: CommunityState, op: DecodedOp, author: MemberRecord, e: E
   };
   if (eventId !== undefined) task.event_id = eventId;
   if (f.due_at !== undefined) task.due_at = f.due_at;
-  if (assignee !== undefined) task.assignee = assignee;
+  if (assignee !== undefined) {
+    task.assignee = assignee;
+    task.assigned = { by: author.member_id, seq: e.seq };
+  }
   (s.tasks ??= {})[task.task_id] = task;
 }
 
@@ -1072,6 +1081,7 @@ function taskAssign(s: CommunityState, op: DecodedOp, author: MemberRecord, e: E
   if (s.members[target]?.status !== "active") reject("unknown_target");
   if (task.assignee === target) reject("illegal_transition");
   task.assignee = target;
+  task.assigned = { by: author.member_id, seq: e.seq };
   task.volunteers = task.volunteers.filter((id) => id !== target);
   if (task.status === "awaiting_volunteer") setTaskStatus(s, task, "todo", author.member_id, e.seq);
   else touchTask(task, e.seq);
@@ -1084,6 +1094,7 @@ function taskUnassign(s: CommunityState, op: DecodedOp, author: MemberRecord, e:
   if (task.assignee === undefined) reject("illegal_transition");
   if (task.assignee !== author.member_id) requireTaskManager(s, author, task);
   delete task.assignee;
+  delete task.assigned;
   setTaskStatus(s, task, "awaiting_volunteer", author.member_id, e.seq);
 }
 
@@ -1154,7 +1165,10 @@ function taskComment(s: CommunityState, op: DecodedOp, author: MemberRecord, e: 
   if (!canSeeTask(s, author, task)) reject("not_authorized");
   if (task.comments.some((c) => c.comment_id === b.comment_id)) reject("already_exists");
   if (task.comments.length >= TASK_LIMITS.comments) reject("capacity_full");
-  task.comments.push({ comment_id: b.comment_id, author: author.member_id, body: b.body, seq: e.seq });
+  const mentions = parseMentions(s, b.mentions);
+  const c: TaskComment = { comment_id: b.comment_id, author: author.member_id, body: b.body, seq: e.seq };
+  if (mentions.length > 0) c.mentions = mentions;
+  task.comments.push(c);
   touchTask(task, e.seq);
 }
 
@@ -1165,9 +1179,20 @@ function taskCommentEdit(s: CommunityState, op: DecodedOp, author: MemberRecord,
   const c = task.comments.find((x) => x.comment_id === b.comment_id);
   if (!c) reject("unknown_target");
   if (c.author !== author.member_id) reject("not_authorized");
+  const mentions = parseMentions(s, b.mentions);
   c.body = b.body;
   c.edited_seq = e.seq;
+  if (mentions.length > 0) c.mentions = mentions;
+  else delete c.mentions;
   touchTask(task, e.seq);
+}
+
+/** `@` mentions: active members only, so a mention always reaches someone who can read it. Absent means none. */
+function parseMentions(s: CommunityState, v: unknown): MemberId[] {
+  if (v === undefined) return [];
+  const ids = parseMemberList(v, TASK_LIMITS.mentions) ?? reject("malformed");
+  requireActiveMembers(s, ids);
+  return ids;
 }
 
 /** The author, or whoever manages the task (moderation). */

@@ -246,9 +246,12 @@ try {
     await bia.getByRole("checkbox").filter({ hasText: "cabo P10" }).last().click({ timeout: 15000 });
     await seen(bia, "1 de 2 itens feitos").first().waitFor({ timeout: 15000 });
     await seen(bia, "A fazer").first().waitFor({ timeout: 15000 });
-    await byId(bia, "comment-text").last().fill("Pego a caixa com o **Zé** na quinta.");
+    // Typing "@an" offers Ana; picking her puts "@Ana " in, and the sent comment carries her id.
+    await byId(bia, "comment-text").last().fill("Pego a caixa com o **Zé** na quinta, @an");
+    await byId(bia, "comment-text-suggestions").last().getByRole("button", { name: "@Ana" }).click({ timeout: 15000 });
     await byId(bia, "comment-send").last().click();
     await seen(bia, "Zé").first().waitFor({ timeout: 15000 });
+    await bia.getByText("@Ana", { exact: true }).filter({ visible: true }).first().waitFor({ timeout: 15000 });
     await byId(bia, "status-in_progress").last().click();
     await byId(bia, "status-confirm").last().click();
     await seen(bia, "Em andamento").first().waitFor({ timeout: 15000 });
@@ -258,13 +261,23 @@ try {
     await bia.getByText("Tudo em dia").last().waitFor({ timeout: 15000 });
   });
 
-  await step("Ana sees Bia on the task", async () => {
+  await step("Ana sees Bia on the task, and the mention in her notifications", async () => {
     await ana.reload();
-    await ana.getByRole("tab", { name: "Tarefas" }).last().click();
-    await seen(ana, "Em andamento · 1").first().waitFor({ timeout: 20000 });
+    // The bell counts the unread mention; the list says who and where.
+    await ana.getByRole("button", { name: "Notificações (1)" }).last().waitFor({ timeout: 20000 });
+    await byId(ana, "notifications-open").last().click();
+    await seen(ana, "Bia mencionou você").first().waitFor({ timeout: 15000 });
+    await seen(ana, "Levar a caixa de som").first().waitFor({ timeout: 15000 });
+    await shot(ana, "12e-notifications");
     await seen(ana, "Levar a caixa de som").first().click();
     await seen(ana, "Pego a caixa com o").first().waitFor({ timeout: 15000 });
     await shot(ana, "12e-task-as-admin");
+    // Seen: back on the community, the bell is quiet.
+    await ana.goto(appUrl);
+    await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
+    await ana.getByRole("button", { name: "Notificações", exact: true }).last().waitFor({ timeout: 15000 });
+    await ana.getByRole("tab", { name: "Tarefas" }).last().click();
+    await seen(ana, "Em andamento · 1").first().waitFor({ timeout: 20000 });
     // Back to the action page, where the next steps expect Ana to be.
     await ana.goto(appUrl);
     await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });

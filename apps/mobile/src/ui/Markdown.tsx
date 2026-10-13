@@ -2,22 +2,45 @@
 // With `onToggle`, check boxes are real check boxes: tapping one reports its
 // source line. Without it they are drawn as a quiet status, not as controls.
 
-import { Fragment, useContext, type ReactNode } from "react";
+import { createContext, Fragment, useContext, type ReactNode } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 import { parseMarkdown, type Block, type Inline, type ListItem } from "../model/markdown";
+import { splitMentions, type Mentionable } from "../model/mentions";
 import { ReadOnly } from "./kit";
 import { fonts, radius, space, touch, type, useTheme } from "./theme";
 
-export function Markdown({ source, muted, testID, onToggle }: { source: string; muted?: boolean; testID?: string; onToggle?: (line: number) => void }) {
+/** With `mentions`, every `@Name` of one of those people stands out. */
+export function Markdown({ source, muted, testID, onToggle, mentions }: { source: string; muted?: boolean; testID?: string; onToggle?: (line: number) => void; mentions?: Mentionable[] }) {
   const c = useTheme();
   const color = muted ? c.muted : c.text;
   const blocks = parseMarkdown(source);
   return (
-    <View testID={testID} style={{ gap: space.s }}>
-      {blocks.map((b, i) => (
-        <BlockView key={i} block={b} color={color} onToggle={onToggle} />
-      ))}
-    </View>
+    <Mentions.Provider value={mentions ?? NO_MENTIONS}>
+      <View testID={testID} style={{ gap: space.s }}>
+        {blocks.map((b, i) => (
+          <BlockView key={i} block={b} color={color} onToggle={onToggle} />
+        ))}
+      </View>
+    </Mentions.Provider>
+  );
+}
+
+const NO_MENTIONS: Mentionable[] = [];
+const Mentions = createContext<Mentionable[]>(NO_MENTIONS);
+
+/** Plain text, with the mentions in it set in the brand colour. */
+function MentionText({ text }: { text: string }) {
+  const c = useTheme();
+  const people = useContext(Mentions);
+  if (people.length === 0 || !text.includes("@")) return <>{text}</>;
+  return splitMentions(text, people).map((piece, i) =>
+    piece.mention ? (
+      <Text key={i} testID={`mention-${piece.mention.member_id.slice(0, 8)}`} style={{ color: c.primary, fontWeight: "700" }}>
+        {piece.text}
+      </Text>
+    ) : (
+      <Fragment key={i}>{piece.text}</Fragment>
+    ),
   );
 }
 
@@ -129,7 +152,7 @@ function Inlines({ nodes, color }: { nodes: Inline[]; color: string }): ReactNod
   return nodes.map((n, i) => {
     switch (n.kind) {
       case "text":
-        return <Fragment key={i}>{n.text}</Fragment>;
+        return <MentionText key={i} text={n.text} />;
       case "strong":
         return (
           <Text key={i} style={{ fontWeight: "700" }}>

@@ -1,8 +1,9 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { useApp, useCommunity } from "../../../lib/context";
 import { reasonKey } from "../../../model/i18n";
+import { unreadNotices } from "../../../model/notifications";
 import { syncStatusKey } from "../../../model/sync-status";
 import { newsFor } from "../../../model/tasks";
 import { EventsTab } from "../../../ui/community/EventsTab";
@@ -10,7 +11,7 @@ import { MeTab } from "../../../ui/community/MeTab";
 import { DisabledScope } from "../../../ui/community/Disabled";
 import { PeopleTab } from "../../../ui/community/PeopleTab";
 import { TasksTab } from "../../../ui/community/TasksTab";
-import { Actions, Banner, Body, Screen, Segmented, Title } from "../../../ui/kit";
+import { Actions, Banner, BellButton, Body, Screen, Segmented, Title } from "../../../ui/kit";
 import { fonts, space, useTheme } from "../../../ui/theme";
 import { WhatsAppButton } from "../../../ui/WhatsApp";
 
@@ -63,10 +64,16 @@ export default function Community() {
     pending: r.pending.length,
     blocked: entry.lastReport?.blocked,
   });
+  const unread = unreadNotices(state, state.members[r.memberId], r.noticeMarks).length;
+  const bell = <BellButton testID="notifications-open" count={unread} label={t("notifications")} onPress={() => router.push({ pathname: "/c/[id]/notifications", params: { id: entry.id } })} />;
   return (
     <Screen width="board" onRefresh={() => store.syncOne(entry.id)}>
       <Stack.Screen options={{ title: state.community.name }} />
-      <SyncStatus status={sync} />
+      {/* The bell and the sync status share the first row, on every platform and in Storybook alike. */}
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.s }}>
+        {bell}
+        <SyncStatus status={sync} />
+      </View>
       {entry.unseenRejections.map((x, i) => (
         <Banner key={i} animated tone="danger" text={`${t("rejectedChange")}: ${t(reasonKey(x.reason))}`} />
       ))}
