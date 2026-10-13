@@ -166,7 +166,7 @@ abuso ou exploração infantil, devem:
 - remover a ação envolvida (**Apagar ação**), o que apaga também as tarefas
   dela, ou a tarefa (**Apagar tarefa**), o comentário ou o arquivo envolvido;
   ao apagar, o app pede ao servidor que descarte os arquivos;
-- bloquear a pessoa (**Bloquear**, na aba **Pessoas**), que sai da comunidade
+- bloquear a pessoa (**Bloquear**, na tela **Administração**), que sai da comunidade
   e não pode voltar;
 - desativar a comunidade quando ela existir para esse fim;
 - denunciar às autoridades (seção 6) e avisar a gente (seção 5);

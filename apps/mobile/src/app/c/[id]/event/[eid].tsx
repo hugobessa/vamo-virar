@@ -178,7 +178,7 @@ export default function EventScreen() {
             ) : null}
             {tasks.length > 0 ? (
               <View style={{ flex: 1 }}>
-                <Button kind="secondary" label={t("taskSeeBoard")} allowReadOnly onPress={() => router.push({ pathname: "/c/[id]", params: { id: entry.id, tab: "tasks" } })} />
+                <Button kind="secondary" label={t("taskSeeBoard")} allowReadOnly onPress={() => router.push({ pathname: "/c/[id]/tasks", params: { id: entry.id } })} />
               </View>
             ) : null}
           </View>

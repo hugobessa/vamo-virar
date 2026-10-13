@@ -376,8 +376,10 @@ export interface Scenario {
   entries: MockEntry[];
   /** Route params, as `useLocalSearchParams` returns them. */
   params: Record<string, string>;
-  /** The screen's path, for the sidebar's highlight; derived from `params.id` when absent. */
+  /** The screen's path, for the sidebar's highlight; derived from `params.id` and `tab` when absent. */
   pathname?: string;
+  /** The community section the screen is: draws the tab bar under it with this one open. */
+  tab?: "index" | "tasks" | "people" | "me";
   calendar: MockCalendar;
 }
 

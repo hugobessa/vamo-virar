@@ -161,6 +161,87 @@ export function isOverdue(task: Task, now: number): boolean {
   return isOpen(task) && task.due_at !== undefined && task.due_at < now;
 }
 
+// --- the board's views -----------------------------------------------------------
+
+/** The four ways of looking at the board: this person's work, the pool, everyone's work, everything. */
+export type BoardView = "mine" | "pool" | "team" | "all";
+
+export const BOARD_VIEWS: readonly BoardView[] = ["mine", "pool", "team", "all"];
+
+export const BOARD_VIEW_TEXT: Record<BoardView, StringKey> = {
+  mine: "taskViewMine",
+  pool: "taskViewPool",
+  team: "taskViewTeam",
+  all: "taskViewAll",
+};
+
+/** The numbers at the top of the board, over the tasks this person may see. */
+export interface BoardSummary {
+  open: number;
+  overdue: number;
+  pool: number;
+  /** Open tasks this person is responsible for or helps with. */
+  mine: number;
+  done: number;
+}
+
+export function boardSummary(tasks: readonly Task[], me: MemberRecord | undefined, now: number): BoardSummary {
+  const s: BoardSummary = { open: 0, overdue: 0, pool: 0, mine: 0, done: 0 };
+  for (const t of tasks) {
+    if (t.status === "done") s.done++;
+    if (!isOpen(t)) continue;
+    s.open++;
+    if (isOverdue(t, now)) s.overdue++;
+    if (t.status === "awaiting_volunteer") s.pool++;
+    if (me && isOnTask(me, t)) s.mine++;
+  }
+  return s;
+}
+
+/** "Minhas": the open tasks this person is responsible for, helps with, and created but handed to others. */
+export interface MyTasks {
+  assigned: Task[];
+  helping: Task[];
+  created: Task[];
+}
+
+export function myTasks(tasks: readonly Task[], me: MemberRecord | undefined): MyTasks {
+  const out: MyTasks = { assigned: [], helping: [], created: [] };
+  if (!me) return out;
+  for (const t of tasks) {
+    if (!isOpen(t)) continue;
+    if (t.assignee === me.member_id) out.assigned.push(t);
+    else if (t.volunteers.includes(me.member_id)) out.helping.push(t);
+    else if (t.created_by === me.member_id) out.created.push(t);
+  }
+  return out;
+}
+
+/** The view to open the board on: this person's work when they have some, everything otherwise. */
+export function defaultView(tasks: readonly Task[], me: MemberRecord | undefined): BoardView {
+  const mine = myTasks(tasks, me);
+  return mine.assigned.length + mine.helping.length > 0 ? "mine" : "all";
+}
+
+/** "Equipe": open tasks by the person responsible, by name, the ones without anyone last. */
+export function byAssignee(state: CommunityState, tasks: readonly Task[]): { assignee: string | undefined; tasks: Task[] }[] {
+  const groups = new Map<string | undefined, Task[]>();
+  for (const t of tasks) {
+    if (!isOpen(t)) continue;
+    const list = groups.get(t.assignee);
+    if (list) list.push(t);
+    else groups.set(t.assignee, [t]);
+  }
+  const name = (id: string | undefined) => (id === undefined ? "" : (state.members[id]?.profile?.display_name ?? ""));
+  return [...groups.entries()]
+    .map(([assignee, list]) => ({ assignee, tasks: list }))
+    .sort((a, b) => {
+      if (a.assignee === undefined) return 1;
+      if (b.assignee === undefined) return -1;
+      return name(a.assignee).localeCompare(name(b.assignee)) || b.tasks.length - a.tasks.length;
+    });
+}
+
 const DAY = 86_400_000;
 const dayOf = (ms: number) => {
   const d = new Date(ms);

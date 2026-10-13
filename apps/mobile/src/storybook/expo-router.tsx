@@ -14,10 +14,13 @@ export function useLocalSearchParams<T extends Record<string, string>>(): Partia
   return useScenario().params as Partial<T>;
 }
 
-/** The path of the story's screen: the community's, when the params name one. */
+/** The path of the story's screen: the community's section, when the params name one. */
 export function usePathname(): string {
   const s = useScenario();
-  return s.pathname ?? (s.params["id"] ? `/c/${s.params["id"]}` : "/");
+  if (s.pathname) return s.pathname;
+  const id = s.params["id"];
+  if (!id) return "/";
+  return s.tab && s.tab !== "index" ? `/c/${id}/${s.tab}` : `/c/${id}`;
 }
 
 /** A link that logs where it would go; with `asChild` the child does the rendering. */
@@ -26,12 +29,14 @@ export function Link({ href, children }: { href: unknown; asChild?: boolean; chi
   return isValidElement<{ onPress?: () => void }>(children) ? cloneElement(children, { onPress: go }) : <>{children}</>;
 }
 
-function Screen({ options }: { options?: { title?: string } }) {
-  const setTitle = useHeaderTitle();
+/** `<Stack.Screen options>` reaches the frame's header: its title, and a button on the right. */
+function Screen({ options }: { options?: { title?: string; headerRight?: () => ReactNode } }) {
+  const setHeader = useHeaderTitle();
   const title = options?.title;
+  const right = options?.headerRight;
   useEffect(() => {
-    if (title) setTitle(title);
-  }, [title, setTitle]);
+    setHeader({ title, right: right?.() });
+  }, [title, right, setHeader]);
   return null;
 }
 

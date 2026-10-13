@@ -137,7 +137,7 @@ celulares dos admins podem reconstruir a comunidade em qualquer lugar, mesmo dep
 
 ## Mover uma comunidade para dentro ou para fora (protocol.md §11.3)
 
-Pelo app: **Eu → Mudar de servidor**, informe o endereço do novo servidor
+Pelo app: **Administração → Ajustes → Mudar de servidor**, informe o endereço do novo servidor
 e, se ele pedir, seu código de configuração (o token de provisionamento do nó
 ou um token de cliente). Por baixo dos panos, `Replica.migrateTo`:
 
