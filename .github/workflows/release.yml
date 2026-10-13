@@ -101,3 +101,22 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/vamo-virar-portal:${{ github.ref_name }}
             ghcr.io/${{ github.repository_owner }}/vamo-virar-portal:latest
+
+  # Points the Railway services at this release's images and waits for them
+  # to come up (scripts/deploy-railway.mjs). Skipped without the
+  # RAILWAY_TOKEN secret; see apps/portal/README.md, "Atualizar no Railway".
+  deploy-railway:
+    needs: [image, portal-image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/deploy-railway.mjs
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          IMAGE_TAG: ${{ github.ref_name }}
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          RAILWAY_NODE_SERVICE: ${{ vars.RAILWAY_NODE_SERVICE || 'node' }}
+          RAILWAY_PORTAL_SERVICE: ${{ vars.RAILWAY_PORTAL_SERVICE || 'portal' }}
