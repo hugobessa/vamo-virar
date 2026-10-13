@@ -105,6 +105,9 @@ npx expo run:ios              # development build no simulador ou num iPhone (s�
 - Google Agenda e Outlook só aparecem quando há IDs de cliente OAuth
   configurados em `apps/mobile/app.json`; o passo a passo está em
   [`docs/calendars.md`](docs/calendars.md).
+- A busca de locais ao criar uma ação usa o Photon (OpenStreetMap), sem chave
+  nem conta; a lista de cidades embutida responde mesmo sem rede. Detalhes em
+  [`docs/calendars.md`](docs/calendars.md#busca-de-locais-das-ações-photon).
 
 ### Design system e landing page (Storybook)
 
