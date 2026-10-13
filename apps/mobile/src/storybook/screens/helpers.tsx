@@ -19,8 +19,8 @@ export function entryNamed(name: string, o: EntryOptions = {}) {
   return makeEntry({ ...o, state });
 }
 
-/** Clicks a tab of the community screen, like a person would. */
-export const openTab = (label: string) => async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+/** Clicks a tab (of the community screen, the board or the administration), like a person would. A regexp ignores a count after the label. */
+export const openTab = (label: string | RegExp) => async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   await userEvent.click(await within(canvasElement).findByRole("tab", { name: label }));
 };
 

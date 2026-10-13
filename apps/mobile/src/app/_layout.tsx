@@ -29,7 +29,8 @@ function Nav() {
       <Stack.Screen name="join" options={{ title: t("joinCommunity") }} />
       <Stack.Screen name="settings" options={{ title: `${t("calendarsTitle")} · ${t("placesTitle")}` }} />
       <Stack.Screen name="safety" options={{ title: t("safetyTitle") }} />
-      <Stack.Screen name="c/[id]/index" options={{ title: "" }} />
+      <Stack.Screen name="c/[id]/(tabs)" options={{ title: "" }} />
+      <Stack.Screen name="c/[id]/admin" options={{ title: t("adminTitle") }} />
       <Stack.Screen name="c/[id]/notifications" options={{ title: t("notifications") }} />
       <Stack.Screen name="c/[id]/new-event" options={{ title: t("newEvent"), presentation: "modal" }} />
       <Stack.Screen name="c/[id]/event/[eid]" options={{ title: "" }} />
