@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { useApp } from "../lib/context";
 import { Banner, Body, Button, Field, FormSection, Screen } from "../ui/kit";
-import { errorText } from "../model/errors";
+import { errorDetail, errorText } from "../model/errors";
 import { parseWhatsApp, WhatsAppField } from "../ui/WhatsApp";
 
 export default function Create() {
@@ -15,6 +15,7 @@ export default function Create() {
   const [setupCode, setSetupCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
 
   const wa = parseWhatsApp(whatsapp);
   const ok = name.trim() && displayName.trim() && /^https?:\/\/\S+$/.test(node.trim()) && !wa.invalid;
@@ -22,6 +23,7 @@ export default function Create() {
   async function submit() {
     setBusy(true);
     setError(null);
+    setDetail(null);
     try {
       const id = await store.create({
         node: node.trim(),
@@ -35,6 +37,7 @@ export default function Create() {
     } catch (e) {
       console.warn("create failed", e);
       setError(errorText(e));
+      setDetail(errorDetail(e));
     } finally {
       setBusy(false);
     }
@@ -65,6 +68,7 @@ export default function Create() {
         <Field testID="setup-code" label={t("setupCode")} value={setupCode} onChangeText={setSetupCode} autoCapitalize="none" secureTextEntry />
       </FormSection>
       {error ? <Banner tone="danger" text={error} /> : null}
+      {detail ? <Body muted>{`${t("errorDetail")} ${detail}`}</Body> : null}
       <Button testID="create-submit" label={busy ? t("creating") : t("create")} busy={busy} disabled={!ok} onPress={submit} />
     </Screen>
   );
