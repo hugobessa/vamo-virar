@@ -1,12 +1,38 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { action } from "storybook/actions";
+import { AdminButton, useAdminPending } from "../ui/community/AdminButton";
+import { TAB_KEYS, TabBar } from "../ui/community/TabBar";
 import { SidebarShown, useSidebarFits, WidthOverride } from "../ui/layout";
 import { Sidebar } from "../ui/Sidebar";
 import { fonts, space, useTheme } from "../ui/theme";
-import { ScenarioProvider, type Scenario } from "./scenario";
+import { ScenarioProvider, t, useScenario, type Scenario } from "./scenario";
 
-const HeaderTitle = createContext<(title: string) => void>(() => {});
+/** The community's tab bar under a section screen, with the scenario's section open; nothing for other screens. */
+function Bar() {
+  const s = useScenario();
+  if (!s.tab) return null;
+  const labels = { index: t("tabEvents"), tasks: t("tabTasks"), people: t("tabPeople"), me: t("tabMe") };
+  return <TabBar items={TAB_KEYS.map((key) => ({ key, label: labels[key], active: key === s.tab }))} onPress={action("tabBar.press")} />;
+}
+
+/** On a section screen, the way into the administration on the header's right, as the tabs layout puts it. */
+function HeaderRight() {
+  const s = useScenario();
+  const entry = s.tab ? s.entries.find((e) => e.id === s.params["id"]) : undefined;
+  const { mod, pending } = useAdminPending(entry as never);
+  if (!entry || !mod) return null;
+  return <AdminButton pending={pending} onPress={action("router.push")} />;
+}
+
+/** What a screen asks of the frame's header: a title, and something on the right (the administration button). */
+export interface HeaderBits {
+  title?: string;
+  right?: ReactNode;
+}
+
+const HeaderTitle = createContext<(bits: HeaderBits) => void>(() => {});
 
 /**
  * "phone" draws the rounded device frame; "bare" fills the viewport with a
@@ -29,13 +55,14 @@ export function useHeaderTitle() {
  */
 export function Phone({ title, scenario, children }: { title: string; scenario: Partial<Scenario>; children: ReactNode }) {
   const c = useTheme();
-  const [override, setOverride] = useState<string | null>(null);
+  const [override, setOverride] = useState<HeaderBits>({});
   const frame = useContext(PhoneFrame);
   const header = (
-    <View style={{ height: 52, justifyContent: "center", paddingHorizontal: space.l, backgroundColor: c.bg }}>
-      <Text numberOfLines={1} style={{ color: c.text, fontFamily: fonts.display, fontSize: 17, fontWeight: "900", textAlign: frame === "desktop" ? "center" : "left" }}>
-        {override ?? title}
+    <View style={{ height: 52, flexDirection: "row", alignItems: "center", gap: space.s, paddingHorizontal: space.l, backgroundColor: c.bg }}>
+      <Text numberOfLines={1} style={{ flex: 1, color: c.text, fontFamily: fonts.display, fontSize: 17, fontWeight: "900", textAlign: frame === "desktop" ? "center" : "left" }}>
+        {override.title ?? title}
       </Text>
+      {override.right ?? <HeaderRight />}
     </View>
   );
   if (frame === "bare") {
@@ -47,6 +74,7 @@ export function Phone({ title, scenario, children }: { title: string; scenario: 
               <StatusBar />
               {header}
               <View style={{ flex: 1 }}>{children}</View>
+              <Bar />
             </View>
           </HeaderTitle.Provider>
         </SafeAreaProvider>
@@ -73,6 +101,7 @@ export function Phone({ title, scenario, children }: { title: string; scenario: 
               <View style={{ width: 390, maxWidth: "100%", height: 780, borderRadius: 36, borderWidth: 8, borderColor: c.frame, overflow: "hidden", backgroundColor: c.bg }}>
                 {header}
                 <View style={{ flex: 1 }}>{children}</View>
+                <Bar />
               </View>
             </View>
           </WidthOverride.Provider>
@@ -93,6 +122,8 @@ function Desktop({ header, children }: { header: ReactNode; children: ReactNode 
         <View style={{ flex: 1, minWidth: 0 }}>
           {header}
           <View style={{ flex: 1 }}>{children}</View>
+          {/* With the sidebar the sections are links there, as in the app. */}
+          {sidebar ? null : <Bar />}
         </View>
       </View>
     </SidebarShown.Provider>

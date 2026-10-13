@@ -1,44 +1,43 @@
+// This person in the community: their name, the app's own screens, the way
+// back in if the coordination is lost, and leaving. The community's settings
+// are on the administration screen.
+
+import { fromHex } from "@vamo-virar/protocol";
 import { router } from "expo-router";
 import { useState } from "react";
 import { confirm } from "../../lib/confirm";
 import { useApp } from "../../lib/context";
 import type { CommunityEntry } from "../../lib/store";
-import { fromHex, toHex } from "@vamo-virar/protocol";
-import { Text } from "react-native";
-import { NodeClient } from "@vamo-virar/sync";
-import { Actions, Banner, Body, Button, Card, Collapsible, Columns, Field, Heading } from "../kit";
-import { useLayout } from "../layout";
-import { useTheme } from "../theme";
 import { errorText } from "../../model/errors";
-import { WhatsAppEditor } from "../WhatsApp";
+import { roleKey } from "../../model/events";
+import { Actions, Banner, Body, Button, Card, Chip, Collapsible, Columns, Field, Heading } from "../kit";
+import { useLayout } from "../layout";
 
 export function MeTab({ entry }: { entry: CommunityEntry }) {
   const { t, store } = useApp();
   const r = entry.replica;
-  const me = r.view?.members[r.memberId];
+  const state = r.view;
+  const me = state?.members[r.memberId];
   const [name, setName] = useState(me?.profile?.display_name ?? "");
-  const [showCode, setShowCode] = useState(false);
   const [code, setCode] = useState("");
   const [recoverMsg, setRecoverMsg] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
-  const c = useTheme();
   const l = useLayout();
-  const recovery = r.recoveryKey;
-  if (!me) return <Body muted>{t("syncRemoved")}</Body>;
+  if (!me || !state) return <Body muted>{t("syncRemoved")}</Body>;
   const removed = me.status !== "active";
   if (removed) {
     return (
       <>
         <Heading>{me.profile?.display_name}</Heading>
-        {r.view?.community.description ? <Body muted>{r.view.community.description}</Body> : null}
+        {state.community.description ? <Body muted>{state.community.description}</Body> : null}
         <Body muted>{t("syncRemoved")}</Body>
       </>
     );
   }
-  // This person in the community.
   const main = (
     <>
       <Heading>{me.profile?.display_name}</Heading>
-      {r.view?.community.description ? <Body muted>{r.view.community.description}</Body> : null}
+      <Chip label={t(roleKey(state, me))} />
+      {state.community.description ? <Body muted>{state.community.description}</Body> : null}
       <Field testID="my-name" label={t("editName")} value={name} onChangeText={setName} />
       <Actions>
         <Button
@@ -57,33 +56,11 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
       )}
     </>
   );
-  // The community's settings, and leaving it.
   const aside = (
     <>
-      {r.isAdmin ? (
-        <WhatsAppEditor
-          key={r.view?.community.whatsapp ?? ""}
-          testID="community-whatsapp-editor"
-          title={t("whatsappCommunityTitle")}
-          current={r.view?.community.whatsapp}
-          onSave={(link) => store.submit(entry.id, "community.update", { whatsapp: link })}
-        />
-      ) : null}
-      {/* Recovery, moving servers and disabling the community are rare: folded away under "Avançado". */}
-      <Collapsible title={t("advanced")} testID="advanced">
-        {recovery ? (
-          <Card>
-            <Heading>{t("recoveryTitle")}</Heading>
-            <Body muted>{t("recoveryHelp")}</Body>
-            {showCode ? (
-              <Text selectable testID="recovery-code" style={{ color: c.text, fontFamily: "monospace", fontSize: 16 }}>
-                {toHex(recovery).match(/.{4}/g)!.join(" ")}
-              </Text>
-            ) : null}
-            <Button kind="secondary" label={showCode ? t("recoveryHide") : t("recoveryShow")} allowReadOnly onPress={() => setShowCode(!showCode)} />
-          </Card>
-        ) : null}
-        {!r.isAdmin ? (
+      {/* Taking over a community whose coordination lost every phone is rare: folded away under "Avançado". */}
+      {!r.isAdmin ? (
+        <Collapsible title={t("advanced")} testID="advanced">
           <Card>
             <Heading>{t("recoverTitle")}</Heading>
             <Body muted>{t("recoverHelp")}</Body>
@@ -110,10 +87,8 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
             />
             {recoverMsg ? <Banner tone={recoverMsg.tone} text={recoverMsg.text} /> : null}
           </Card>
-        ) : null}
-        {r.isAdmin ? <MoveCard entry={entry} /> : null}
-        {r.isAdmin ? <DisableCard entry={entry} /> : null}
-      </Collapsible>
+        </Collapsible>
+      ) : null}
       <Actions>
         <Button
           kind="danger"
@@ -126,100 +101,4 @@ export function MeTab({ entry }: { entry: CommunityEntry }) {
     </>
   );
   return <Columns main={main} aside={aside} />;
-}
-
-/**
- * Admins: mark the community for deletion (§11.5), or, for another admin,
- * cancel it. While disabled the rest of the tab is read-only; the enable
- * button is not.
- */
-function DisableCard({ entry }: { entry: CommunityEntry }) {
-  const { t, store } = useApp();
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const r = entry.replica;
-  const d = r.disabled;
-  const iDisabledIt = !!d && d.by === r.view?.members[r.memberId]?.msk;
-  async function run(question: string, f: () => Promise<void>) {
-    if (!(await confirm(question, t("yes"), t("no")))) return;
-    setBusy(true);
-    setMsg(null);
-    try {
-      await store.admin(entry.id, f);
-    } catch (e) {
-      setMsg(errorText(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Card testID="disable-card">
-      <Heading>{t(d ? "enableTitle" : "disableTitle")}</Heading>
-      {!d ? (
-        <>
-          <Body muted>{t("disableHelp")}</Body>
-          <Button testID="disable-community" kind="danger" label={t("disableButton")} busy={busy} onPress={() => run(t("disableConfirm"), () => r.disableCommunity())} />
-        </>
-      ) : iDisabledIt ? (
-        <Body muted>{t("enableNeedsOther")}</Body>
-      ) : (
-        <>
-          <Body muted>{t("enableHelp")}</Body>
-          <Button testID="enable-community" label={t("enableButton")} busy={busy} allowReadOnly onPress={() => run(t("enableConfirm"), () => r.enableCommunity())} />
-        </>
-      )}
-      {msg ? <Banner tone="danger" text={msg} /> : null}
-    </Card>
-  );
-}
-
-/** Admins: move the community to another server (managed ↔ self-hosted). */
-function MoveCard({ entry }: { entry: CommunityEntry }) {
-  const { t, store } = useApp();
-  const [address, setAddress] = useState("");
-  const [setupCode, setSetupCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
-  const valid = /^https?:\/\/\S+$/.test(address.trim());
-  return (
-    <Card>
-      <Heading>{t("moveTitle")}</Heading>
-      <Body muted>{t("moveHelp")}</Body>
-      <Body muted>{`${t("movedFrom")}: ${entry.replica.node}`}</Body>
-      <Field
-        testID="move-address"
-        label={t("serverAddress")}
-        value={address}
-        onChangeText={setAddress}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="url"
-      />
-      <Field testID="move-setup-code" label={t("setupCode")} value={setupCode} onChangeText={setSetupCode} autoCapitalize="none" autoCorrect={false} />
-      <Button
-        testID="move-button"
-        kind="secondary"
-        label={t("moveButton")}
-        busy={busy}
-        disabled={!valid || busy}
-        onPress={async () => {
-          if (!(await confirm(t("moveConfirm"), t("yes"), t("no")))) return;
-          setBusy(true);
-          setMsg(null);
-          try {
-            const target = new NodeClient(address.trim(), setupCode.trim() ? { provisioningToken: setupCode.trim() } : {});
-            await store.admin(entry.id, (rep) => rep.migrateTo(target));
-            setAddress("");
-            setSetupCode("");
-            setMsg({ tone: "ok", text: t("moveDone") });
-          } catch (e) {
-            setMsg({ tone: "danger", text: errorText(e) });
-          } finally {
-            setBusy(false);
-          }
-        }}
-      />
-      {msg ? <Banner tone={msg.tone} text={msg.text} /> : null}
-    </Card>
-  );
 }

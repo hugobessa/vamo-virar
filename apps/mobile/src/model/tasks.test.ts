@@ -4,7 +4,24 @@
 
 import { DEFAULT_POLICY, fold, memberIdOf, reduce, type CommunityState, type Entry, type Task, type TaskStatus } from "@vamo-virar/domain";
 import { describe, expect, it } from "vitest";
-import { allTags, byStatus, dueLabel, lastSeq, newsFor, parseTagInput, selfActions, statusTargets, taskNews, timeline, visibleTasks, type SelfAction } from "./tasks";
+import {
+  allTags,
+  boardSummary,
+  byAssignee,
+  byStatus,
+  defaultView,
+  dueLabel,
+  lastSeq,
+  myTasks,
+  newsFor,
+  parseTagInput,
+  selfActions,
+  statusTargets,
+  taskNews,
+  timeline,
+  visibleTasks,
+  type SelfAction,
+} from "./tasks";
 
 const hex = (n: number, bytes: number) => n.toString(16).padStart(2, "0").repeat(bytes);
 const ana = { msk: hex(1, 32), mek: hex(2, 32) }; // admin
@@ -114,6 +131,61 @@ describe("the board", () => {
 
   it("cleans typed tags like the reducer", () => {
     expect(parseTagInput(" Som, arte ,SOM\n,,")).toEqual(["arte", "som"]);
+  });
+});
+
+describe("the board's views", () => {
+  /** Four tasks: the pool task from the log, one Bia runs, one Caio helps Bia with, one Bia created and handed to Duda, one done. */
+  function board() {
+    const s = fold(log()).state;
+    const base = s.tasks![TASK]!;
+    const add = (n: number, t: Partial<Task>) => {
+      const task: Task = { ...base, task_id: hex(n, 16), tags: [], volunteers: [], ...t };
+      s.tasks![task.task_id] = task;
+      return task;
+    };
+    const running = add(20, { status: "in_progress", assignee: id("bia"), volunteers: [id("caio")], due_at: 5_000 });
+    const handed = add(21, { status: "todo", assignee: id("duda"), created_by: id("bia") });
+    const done = add(22, { status: "done", assignee: id("bia") });
+    return { s, pool: base, running, handed, done };
+  }
+
+  it("sums up what an admin sees", () => {
+    const { s } = board();
+    const all = visibleTasks(s, s.members[id("ana")]);
+    expect(boardSummary(all, s.members[id("ana")], 10_000)).toEqual({ open: 3, overdue: 1, pool: 1, mine: 0, done: 1 });
+    expect(boardSummary(all, s.members[id("bia")], 1_000)).toMatchObject({ overdue: 0, mine: 1 });
+  });
+
+  it("splits a person's own work into responsible, helping and handed over", () => {
+    const { s, running, handed } = board();
+    const bia = myTasks(visibleTasks(s, s.members[id("bia")]), s.members[id("bia")]);
+    expect(bia.assigned.map((t) => t.task_id)).toEqual([running.task_id]);
+    expect(bia.helping).toEqual([]);
+    // Bia also created the pool task; the done one is left out.
+    expect(bia.created.map((t) => t.task_id).sort()).toEqual([TASK, handed.task_id].sort());
+    const caio = myTasks(visibleTasks(s, s.members[id("caio")]), s.members[id("caio")]);
+    expect(caio.assigned).toEqual([]);
+    expect(caio.helping.map((t) => t.task_id)).toEqual([running.task_id]);
+    expect(myTasks([], undefined)).toEqual({ assigned: [], helping: [], created: [] });
+  });
+
+  it("opens on a person's own work only when they have some", () => {
+    const { s } = board();
+    expect(defaultView(visibleTasks(s, s.members[id("bia")]), s.members[id("bia")])).toBe("mine");
+    expect(defaultView(visibleTasks(s, s.members[id("caio")]), s.members[id("caio")])).toBe("mine"); // helping counts
+    expect(defaultView(visibleTasks(s, s.members[id("ana")]), s.members[id("ana")])).toBe("all"); // created-only does not
+    expect(defaultView(visibleTasks(s, s.members[id("duda")]), s.members[id("duda")])).toBe("mine");
+  });
+
+  it("groups open work by who is responsible, by name, nobody last", () => {
+    const { s, pool, running, handed } = board();
+    const groups = byAssignee(s, visibleTasks(s, s.members[id("ana")]));
+    expect(groups.map((g) => [g.assignee, g.tasks.map((t) => t.task_id)])).toEqual([
+      [id("bia"), [running.task_id]],
+      [id("duda"), [handed.task_id]],
+      [undefined, [pool.task_id]],
+    ]);
   });
 });
 
