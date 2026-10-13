@@ -45,6 +45,7 @@ export default function Join() {
       });
       router.replace({ pathname: "/c/[id]", params: { id } });
     } catch (e) {
+      console.warn("join failed", e);
       setError(errorText(e));
     } finally {
       setBusy(false);

@@ -48,6 +48,11 @@ describe("error text", () => {
     const { errorText } = await import("./errors");
     expect(errorText(new NodeError(409, "moved", "this community moved"))).toBe("A comunidade mudou de servidor. Tente de novo em instantes.");
     expect(errorText(new NodeError(0, "stream", "could not open stream"))).toMatch(/^Sem conexão/);
+    expect(errorText(new TypeError("Network request failed"))).toMatch(/^Sem conexão/);
+    expect(errorText(new NodeError(502, "http_error", "Application failed to respond"))).toMatch(/^O servidor não está respondendo/);
+    expect(errorText(new NodeError(403, "forbidden", "provisioning token required"))).toMatch(/código de criação/);
+    // A bug is not a connection problem.
+    expect(errorText(new TypeError("Cannot read property 'x' of undefined"))).toBe("Algo deu errado.");
     expect(errorText(new Error("this recovery code is not for this community"))).toBe("Esse código de recuperação não é desta comunidade.");
     expect(errorText(new Error("something internal and English"))).toBe("Algo deu errado.");
   });

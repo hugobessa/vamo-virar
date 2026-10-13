@@ -33,6 +33,7 @@ export default function Create() {
       });
       router.replace({ pathname: "/c/[id]", params: { id } });
     } catch (e) {
+      console.warn("create failed", e);
       setError(errorText(e));
     } finally {
       setBusy(false);

@@ -47,13 +47,26 @@ const BY_MESSAGE: [RegExp, string][] = [
   [/^attachment failed verification/, "Esse arquivo não confere com o que foi anexado."],
 ];
 
+// What fetch rejects with when the request never got an answer: React Native,
+// Chrome, Safari and Firefox, in that order. Any other TypeError is a bug.
+const NETWORK_FAILURE = /^(network request (failed|timed out)|failed to fetch|load failed|networkerror)/i;
+
+/** True when the server could not be reached at all (as opposed to answering with an error). */
+export function isNetworkError(e: unknown): boolean {
+  if (e instanceof NodeError) return e.status === 0;
+  return e instanceof TypeError && NETWORK_FAILURE.test(e.message);
+}
+
+/** True when the server, or the proxy in front of it, answered that it is down. */
+function isServerDown(e: unknown): boolean {
+  return e instanceof NodeError && e.status >= 502 && e.status <= 504;
+}
+
 /** A Portuguese sentence for any error; never the raw English text. */
 export function errorText(e: unknown, fallback = "Algo deu errado."): string {
-  if (e instanceof NodeError) {
-    if (e.status === 0 || e.status >= 502) return "Sem conexão com o servidor. Confira a internet e tente de novo.";
-    return BY_CODE[e.code] ?? fallback;
-  }
-  if (e instanceof TypeError) return "Sem conexão com o servidor. Confira a internet e tente de novo.";
+  if (isNetworkError(e)) return "Sem conexão com o servidor. Confira a internet e o endereço do servidor e tente de novo.";
+  if (isServerDown(e)) return "O servidor não está respondendo agora. Tente de novo daqui a pouco.";
+  if (e instanceof NodeError) return BY_CODE[e.code] ?? fallback;
   const msg = e instanceof Error ? e.message : String(e);
   return BY_MESSAGE.find(([re]) => re.test(msg))?.[1] ?? fallback;
 }
