@@ -107,15 +107,18 @@ export class AppStore {
 
   async create(input: { node: string; setupCode?: string; name: string; description?: string; whatsapp?: string; displayName: string }): Promise<string> {
     const client = new NodeClient(input.node, input.setupCode ? { provisioningToken: input.setupCode } : {});
-    const replica = await Replica.found(client, {
-      name: input.name,
-      description: input.description ?? "",
-      whatsapp: input.whatsapp,
-      displayName: input.displayName,
-    });
+    const replica = await Replica.found(
+      client,
+      { name: input.name, description: input.description ?? "", whatsapp: input.whatsapp, displayName: input.displayName },
+      undefined,
+      { sync: false },
+    );
+    // Save the keys the moment the node holds the community; the first sync
+    // can fail and retry later like any other.
     const e = this.track(replica);
     await this.persist(e);
     this.bump();
+    await this.syncOne(e.id);
     return e.id;
   }
 

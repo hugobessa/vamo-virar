@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Platform } from "react-native";
 import { useApp } from "../lib/context";
 import { Banner, Body, Button, Field, FormSection, Screen } from "../ui/kit";
-import { errorText } from "../model/errors";
+import { errorDetail, errorText } from "../model/errors";
 
 export default function Join() {
   const { store, t } = useApp();
@@ -24,6 +24,7 @@ export default function Join() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
 
   const linkOk = useMemo(() => {
     try {
@@ -37,6 +38,7 @@ export default function Join() {
   async function submit() {
     setBusy(true);
     setError(null);
+    setDetail(null);
     try {
       const id = await store.join(link, {
         displayName: displayName.trim(),
@@ -47,6 +49,7 @@ export default function Join() {
     } catch (e) {
       console.warn("join failed", e);
       setError(errorText(e));
+      setDetail(errorDetail(e));
     } finally {
       setBusy(false);
     }
@@ -71,6 +74,7 @@ export default function Join() {
         <Field label={t("messageToOrganizers")} value={message} onChangeText={setMessage} multiline />
       </FormSection>
       {error ? <Banner tone="danger" text={error} /> : null}
+      {detail ? <Body muted>{`${t("errorDetail")} ${detail}`}</Body> : null}
       <Button
         testID="join-submit"
         label={busy ? t("requesting") : t("requestToJoin")}

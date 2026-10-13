@@ -56,4 +56,14 @@ describe("error text", () => {
     expect(errorText(new Error("this recovery code is not for this community"))).toBe("Esse código de recuperação não é desta comunidade.");
     expect(errorText(new Error("something internal and English"))).toBe("Algo deu errado.");
   });
+
+  it("gives the raw error only where there is no sentence for it", async () => {
+    const { NodeError } = await import("@vamo-virar/sync");
+    const { errorDetail } = await import("./errors");
+    expect(errorDetail(new TypeError("Cannot read property 'x' of undefined"))).toBe("TypeError: Cannot read property 'x' of undefined");
+    expect(errorDetail(new NodeError(418, "teapot", "short and stout"))).toBe("418 teapot: short and stout");
+    expect(errorDetail(new TypeError("Network request failed"))).toBeNull();
+    expect(errorDetail(new NodeError(507, "quota_exceeded", "no room"))).toBeNull();
+    expect(errorDetail(new Error("this recovery code is not for this community"))).toBeNull();
+  });
 });
