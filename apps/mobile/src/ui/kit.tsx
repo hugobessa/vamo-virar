@@ -23,6 +23,8 @@ export const ReadOnly = createContext(false);
 /**
  * A screen's scrolling body. The content sits in a centred column: a reading
  * measure by default, or `width="board"` for lists and two-column screens.
+ * On iOS the scroll view insets itself above the keyboard and keeps the
+ * focused field in view (Android resizes the window instead).
  */
 export function Screen({
   children,
@@ -73,7 +75,7 @@ export function Screen({
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["bottom", "left", "right"]}>
       <FlagStripe height={4} />
       {scroll ? (
-        <ScrollView keyboardShouldPersistTaps="handled" refreshControl={refresh}>
+        <ScrollView keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets keyboardDismissMode="interactive" refreshControl={refresh}>
           {body}
         </ScrollView>
       ) : (
@@ -533,7 +535,7 @@ export function Sheet({ visible, onClose, title, children, testID }: { visible: 
           }
         >
           {dialog ? null : <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: c.border, marginTop: space.s }} />}
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: dialog ? space.xl : space.l, gap: space.m }}>
+          <ScrollView keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ padding: dialog ? space.xl : space.l, gap: space.m }}>
             {title || dialog ? (
               <View style={{ flexDirection: "row", alignItems: "center", gap: space.m }}>
                 <Text style={{ flex: 1, color: c.text, fontFamily: fonts.text, ...type.h3 }}>{title}</Text>

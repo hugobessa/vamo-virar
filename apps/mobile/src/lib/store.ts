@@ -5,6 +5,7 @@
 import { toHex } from "@vamo-virar/protocol";
 import { NodeClient, NodeError, parseInvite, Replica, type SyncReport } from "@vamo-virar/sync";
 import { SealedStore } from "./storage";
+import { isNetworkError } from "../model/errors";
 
 export type Connectivity = "ok" | "offline";
 
@@ -218,6 +219,5 @@ export class AppStore {
 }
 
 function isOffline(err: unknown): boolean {
-  if (err instanceof NodeError) return err.status === 0 || err.status >= 502;
-  return err instanceof TypeError; // fetch network failure
+  return isNetworkError(err) || (err instanceof NodeError && err.status >= 502);
 }
