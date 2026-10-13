@@ -71,6 +71,10 @@ Regras de implementação para o código TypeScript (`packages/crypto`) e Rust
   do estado decifrado, e nunca sai dele.
 - Não peça a permissão de localização "sempre"; apenas "durante o uso" ou
   pontos de referência manuais.
+- A única chamada a um serviço de terceiros fora dos calendários é a busca de
+  locais ao criar uma ação (Photon, sobre dados do OpenStreetMap): só o texto
+  digitado no campo "Local" sai do aparelho; os lugares da própria pessoa
+  nunca passam por ela (docs/calendars.md).
 - O acesso ao calendário é somente leitura e usado apenas para a correspondência local.
 - Arquivos entram só pelo seletor de documentos do sistema (um arquivo por
   vez, sem permissão ampla de armazenamento, câmera ou galeria) e saem só

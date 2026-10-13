@@ -21,6 +21,7 @@ import { tasksOfEvent } from "../../../../model/tasks";
 import { formatWhen } from "../../../../model/time";
 import { TaskCard } from "../../../../ui/tasks/TaskBits";
 import { AvailabilityChip } from "../../../../ui/AvailabilityChip";
+import { EventMap } from "../../../../ui/EventMap";
 import { StarBurst } from "../../../../ui/brand";
 import { ProbeQuestion, ProbeResults } from "../../../../ui/ProbeSections";
 import { DisabledScope } from "../../../../ui/community/Disabled";
@@ -127,6 +128,8 @@ export default function EventScreen() {
       <Title>{ev.title}</Title>
       <Body>{formatWhen(ev.starts_at, ev.ends_at, locale, ev.tz)}</Body>
       <Body muted>{ev.location.label}</Body>
+      {/* The exact point is for organizers and confirmed people; others see the cell around it (§9.6). */}
+      <EventMap testID="event-map" area={ev.location.area} approximate={!manage && mine !== "confirmed" && mine !== "reconfirm"} radiusM={ev.location.radius_m} />
       {ev.description ? <Body>{ev.description}</Body> : null}
       {ev.status === "scheduled" && ev.capacity !== undefined ? (
         <Progress

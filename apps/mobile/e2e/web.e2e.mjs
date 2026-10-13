@@ -174,9 +174,10 @@ try {
     await ana.getByRole("tab", { name: "Ações" }).click();
     await byId(ana, "new-event").click();
     await byId(ana, "event-title").fill("Plenária no Derby");
-    await byId(ana, "event-place").fill("Praça do Derby");
-    await byId(ana, "event-area").fill("recife");
+    // The built-in city list answers at once; the name stays editable after picking.
+    await byId(ana, "event-place").fill("recife");
     await byId(ana, "area-Recife, PE").click();
+    await byId(ana, "event-place").fill("Praça do Derby");
     await shot(ana, "08-new-event");
     await byId(ana, "event-save").click();
     await seen(ana, "Plenária no Derby").first().waitFor();

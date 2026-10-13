@@ -61,6 +61,38 @@ Os provedores só aparecem no app quando um client ID está configurado em
 Calendários do dispositivo exigem um development build (`npx expo run:ios|android` ou
 EAS): `expo-calendar` não está incluído no Expo Go.
 
+## Busca de locais das ações (Photon)
+
+Ao criar uma ação, o campo "Local" completa enquanto a pessoa digita
+(`src/ui/LocationPicker.tsx`). Duas fontes respondem na mesma lista:
+
+- a lista de cidades embutida (`src/model/places.ts`), na hora e sem rede;
+- o [Photon](https://github.com/komoot/photon) (`photon.komoot.io`), um
+  geocodificador de código aberto sobre dados do OpenStreetMap, feito para
+  busca ao digitar. Sem chave, sem conta, sem faturamento. O pedido é um GET
+  com o texto digitado, limitado ao Brasil (`bbox`), e já devolve as
+  coordenadas, então escolher um resultado não faz um segundo pedido
+  (`src/lib/geocode.ts`).
+
+Ao escolher, o nome do lugar preenche o campo e as coordenadas ficam
+guardadas; o nome continua editável ("Praça do Derby, portão norte") até
+"Trocar lugar" começar outra busca. A tela da ação mostra o rótulo e um botão
+"Abrir no Google Maps", que é só um link (sem chave); para quem ainda não
+confirmou presença o link aponta para o centro da célula de ~1 km em volta do
+ponto (protocolo §9.6), não para o ponto exato.
+
+O servidor público do Photon é mantido pela komoot em regime de uso justo,
+sem garantias: pode limitar ou mudar sem aviso. Por isso o app o trata como
+melhor esforço: se a busca falhar, aparece um aviso e a lista de cidades
+continua valendo. Se o volume crescer, dá para rodar uma instância própria
+(o Photon publica o índice do OpenStreetMap pronto) e trocar a URL em
+`src/lib/geocode.ts`. A atribuição exigida pela licença ODbL aparece sob as
+sugestões ("dados © OpenStreetMap").
+
+O que sai do aparelho: só o texto digitado no campo "Local" (mais o IP),
+enquanto a pessoa digita na tela de nova ação. "Seus lugares" (configurações)
+nunca usa o Photon: continua na lista embutida ou na leitura única de GPS.
+
 ## Lugares (Fase 7)
 
 As pessoas adicionam lugares de onde costumam sair ("Casa", "Trabalho"), cada um com um
