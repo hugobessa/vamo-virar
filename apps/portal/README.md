@@ -130,11 +130,26 @@ por quê:
 
 ### Atualizar no Railway
 
-Depois de publicar uma versão nova (uma tag `v*`), abra cada serviço e mande
-fazer o deploy de novo (nos três pontinhos do último deploy, **Redeploy**). Os
-dados ficam nos volumes `/data` e não se perdem. Para fixar uma versão em vez
-de `latest`, use a tag na imagem (por exemplo,
-`ghcr.io/hugobessa/vamo-virar-portal:v0.2.0`).
+**Automático, a cada versão.** Com o segredo `RAILWAY_TOKEN` no GitHub, toda
+tag `v*` publica as imagens e, em seguida, o job `deploy-railway` do
+`release.yml` aponta os serviços `node` e `portal` para as imagens daquela
+versão (por exemplo, `community-node:v0.3.1`) e espera cada deploy ficar no ar.
+O job falha, e o GitHub avisa, se um deploy terminar em erro. Versões com
+hífen (`v0.4.0-rc1`) não vão para o Railway. Para configurar, uma vez:
+
+1. No Railway, abra o projeto, **Settings › Tokens**, e crie um token de
+   projeto para o ambiente `production`. Ele só dá acesso a esse projeto.
+2. No GitHub, em **Settings › Secrets and variables › Actions**, crie o
+   segredo `RAILWAY_TOKEN` com esse token.
+3. Se os serviços tiverem outros nomes, crie as variáveis (aba
+   **Variables**) `RAILWAY_NODE_SERVICE` e `RAILWAY_PORTAL_SERVICE`. Para não
+   mexer no portal, deixe `RAILWAY_PORTAL_SERVICE` vazia.
+
+**À mão.** Em cada serviço, **Settings › Source**, troque a imagem pela da
+versão nova (por exemplo, `ghcr.io/hugobessa/community-node:v0.3.1`). O
+**Redeploy** de um deploy antigo reaproveita a imagem que ele já tinha
+baixado, então não serve para atualizar. Os dados ficam nos volumes `/data` e
+não se perdem.
 
 Prefere compilar direto do repositório? Crie os serviços com **GitHub Repo**
 em vez de **Docker Image** e acrescente `RAILWAY_DOCKERFILE_PATH=deploy/Dockerfile`
