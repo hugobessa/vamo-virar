@@ -133,7 +133,9 @@ export default function Home() {
       <Actions>
         <Button testID="go-create" label={t("createCommunity")} onPress={() => router.push("/create")} />
         <Button testID="go-join" kind="secondary" label={t("joinCommunity")} onPress={() => router.push("/join")} />
-        {/* With the sidebar on screen these two are already there. */}
+        {communities.length === 0 ? <Button testID="go-link" kind="secondary" label={t("linkHaveOther")} onPress={() => router.push("/link")} /> : null}
+        {/* With the sidebar on screen these are already there. */}
+        {l.sidebar || communities.length === 0 ? null : <Button testID="go-devices" kind="secondary" label={t("devicesTitle")} onPress={() => router.push("/devices")} />}
         {l.sidebar ? null : <Button testID="go-settings" kind="secondary" label={t("calendarsTitle")} onPress={() => router.push("/settings")} />}
         {l.sidebar ? null : <Button testID="go-safety" kind="secondary" label={t("safetyTitle")} onPress={() => router.push("/safety")} />}
       </Actions>

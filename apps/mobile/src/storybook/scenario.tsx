@@ -387,7 +387,19 @@ export interface Scenario {
   /** The community section the screen is: draws the tab bar under it with this one open. */
   tab?: "index" | "tasks" | "people" | "me";
   calendar: MockCalendar;
+  /** This person's linked devices (store.devices()). */
+  devices?: { label: string; me: boolean; main: boolean; communities: string[] }[];
 }
+
+/** A link as the source device shows it. The secret is a fixed fake. */
+const FAKE_OFFER = {
+  qr: `https://web.vamovirar.app/link#n=https%3A%2F%2Fcomite.example.org&c=${"ab".repeat(32)}&s=${"cd".repeat(32)}&w=K7QM2XRA9P`,
+  copy: `https://web.vamovirar.app/link#n=https%3A%2F%2Fcomite.example.org&c=${"ab".repeat(32)}&s=${"cd".repeat(32)}`,
+  code: "K7QM-2XRA-9P",
+  communities: 1,
+  taken: async () => false,
+  cancel: async () => {},
+};
 
 export const ScenarioContext = createContext<Scenario | null>(null);
 
@@ -419,6 +431,22 @@ export function buildStore(s: Scenario) {
       action("store.join")(link, input);
       return s.entries[0]?.id ?? "novo";
     },
+    devices: () => s.devices ?? [],
+    linkable: () => s.entries,
+    syncAll: async () => {},
+    offerLink: async (label: string) => {
+      action("store.offerLink")(label);
+      return { ...FAKE_OFFER, expires: Date.now() + 10 * 60_000 };
+    },
+    receiveLink: async (link: string, code: string) => {
+      action("store.receiveLink")(link, code);
+      return { bundle: { v: 1, expires: 0, communities: [] }, conflicts: [] };
+    },
+    applyLink: async () => [],
+    makeThisMain: async () => action("store.makeThisMain")(),
+    unlinkDevice: async (label: string) => action("store.unlinkDevice")(label),
+    unlinkThisDevice: async () => action("store.unlinkThisDevice")(),
+    renameThisDevice: async (label: string) => action("store.renameThisDevice")(label),
   };
 }
 

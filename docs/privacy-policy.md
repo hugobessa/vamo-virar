@@ -1,6 +1,6 @@
 # Política de Privacidade — Vamo Virar
 
-**Última atualização:** 11 de outubro de 2026
+**Última atualização:** 13 de outubro de 2026
 
 Esta política explica quais dados o aplicativo **Vamo Virar** ("o app") trata,
 onde eles ficam e quais são os seus direitos. O Vamo Virar foi desenhado para
@@ -46,6 +46,14 @@ das comunidades** e não operamos nenhum servidor central de contas.
 | Chaves criptográficas e tokens de acesso ao Google/Microsoft | Gerados no app / pelos provedores | Identificar você e acessar seu calendário | Guardados no Keychain (iOS) ou Keystore (Android). |
 
 Esses dados **não são enviados** a nós, ao nó da comunidade nem a outros membros.
+
+Se você ligar outro aparelho seu (por exemplo, o celular e o computador), o app
+leva para ele as chaves das suas comunidades, cifradas com um segredo que só
+passa pelo código QR ou pelo link e pelo código que você digita. O pacote fica
+no nó da comunidade por no máximo 10 minutos e o nó não consegue abri-lo. A
+lista dos seus aparelhos e os nomes que você dá a eles também ficam cifrados e
+só os seus aparelhos leem. Agenda, lugares e preferências **não** passam de um
+aparelho para outro.
 
 ### 3.2 Dados compartilhados com a comunidade (cifrados de ponta a ponta)
 
@@ -124,9 +132,11 @@ dados pessoais além do que as lojas nos informam em relatórios agregados.
 |---|---|---|
 | Calendário (leitura) | Calcular a disponibilidade | O app funciona sem sugestão de agenda |
 | Localização aproximada, apenas durante o uso | Botão "usar onde estou agora" | Você pode cadastrar lugares manualmente |
+| Câmera, apenas durante o uso | Ler o código QR que liga este aparelho a outro seu | Você cola o link e digita o código |
 
 O app **não** solicita localização precisa, nem em segundo plano, e não pede
-acesso a contatos, câmera ou microfone. Para anexar um arquivo a uma tarefa,
+acesso a contatos ou microfone. A câmera só abre quando você toca em
+"Escanear o código"; nenhuma imagem é guardada ou enviada. Para anexar um arquivo a uma tarefa,
 o app abre o seletor de arquivos do sistema e recebe apenas o arquivo que você
 escolher; ele não tem acesso aos seus outros arquivos nem às suas fotos. Um
 arquivo que você abre a partir de uma tarefa é decifrado no seu celular e

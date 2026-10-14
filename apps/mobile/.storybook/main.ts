@@ -41,6 +41,7 @@ const config: StorybookConfig = {
           "expo-constants": `${mocks}/expo-constants.ts`,
           "expo-web-browser": `${mocks}/expo-web-browser.ts`,
           "expo-crypto": `${mocks}/expo-crypto.ts`,
+          "expo-camera": `${mocks}/expo-camera.tsx`,
         },
       },
     }),

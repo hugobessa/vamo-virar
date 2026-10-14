@@ -121,6 +121,8 @@ futura `VV2` possa ser introduzida por comunidade.
 | **Chave de acesso da época** `EAK_e` | Ed25519, derivada de `K_e` | todos os membros da época `e` | por época da comunidade | metade pública |
 | **Chave de entrada** `IK` | X25519 | admins | por comunidade | metade pública (na entrada do diretório) |
 | **Chave raiz da pessoa** `PRK` | Ed25519 | dispositivo | global, opcional | nunca |
+| **Chave de caixa do dispositivo** `DIK` | Ed25519 | um dispositivo ligado (§10.5) | por *(dispositivo, comunidade)* | metade pública, só ao ler a própria caixa |
+| **Chave de encontro** `RK` | Ed25519, derivada do segredo de um link de dispositivo | origem e novo dispositivo, por ≤ 10 min | por ligação | metade pública |
 
 > **Nota de projeto — chaves de membro por comunidade.** A arquitetura
 > descreve uma identidade por instalação. Esta especificação, em vez disso,
@@ -912,8 +914,11 @@ MailboxItem {
 | `ik_env` | admin | HPKE para a MEK de um novo admin: `{ik_sk}` (a metade privada da chave de entrada) | nenhum |
 | `report` | membro | `{report_id: bytes(16), reporter, member_id, reason, details?, sig}`, uma cópia selada para a MEK de cada admin e moderador ativo (exceto o denunciado); `reason` ∈ `harassment`, `spam`, `impersonation`, `unsafe`, `other`; `details` ≤ 1000 caracteres; `sig = Sign(MSK, "vv/report/v1", {cid, report_id, reporter, member_id, reason, details?})`. O admin aceita só se a assinatura for verificada sob a MSK de `reporter`. Nada vai para o log: o nó e o denunciado não sabem da denúncia | máximo do nó (30 d) |
 | `removed` | admin | HPKE para a MEK de um membro removido: `{reason?}`; ele não consegue mais ler o log depois da rotação, então é assim que ele fica sabendo o motivo | nenhum (até ser confirmado) |
+| `devices` | o próprio membro | `DeviceSet` assinado pela MSK (§10.5.2) | máximo do nó; o principal repõe |
+| `probe_done` | o próprio membro | `{probe_id, sig}`: a consulta foi respondida em outro dispositivo (§10.5.4) | máximo do nó |
+| `link` | o próprio membro | `LinkBundle` cifrado com `link_key`, na caixa de encontro (§10.5.5) | 10 min |
 
-Os tipos de correspondência selada, exceto `key_env`, usam `HPKE.Seal(MEK, info = "vv/mail/<kind>/v1" || cid, aad = "", cbor(body))`,
+Os tipos de correspondência selada, exceto `key_env` e `link`, usam `HPKE.Seal(MEK, info = "vv/mail/<kind>/v1" || cid, aad = "", cbor(body))`,
 transportado como `cbor({enc, ct})`.
 
 Postar exige o escopo `community` (qualquer membro atual). Ler/confirmar exige
@@ -1013,6 +1018,252 @@ entrada. O link sozinho concede *o direito de pedir*, nunca a filiação.
 Os membros MAY escolher "não responder" (ou nunca ativar a resposta
 automática); os organizadores então não veem resposta, o que é
 indistinguível de estar offline.
+
+### 10.5 Dispositivos ligados [MVP]
+
+Uma pessoa pode usar a mesma filiação em mais de um dispositivo (por exemplo,
+o celular e o navegador do computador). Os dispositivos ligados compartilham
+as chaves do membro (`MSK`, `MEK`) e as chaves de época; o estado da
+comunidade vem do log, como em qualquer dispositivo. O que exige cuidado é a
+caixa postal do membro: um item confirmado é apagado (§6.5), então o primeiro
+dispositivo a confirmar tiraria o item dos outros, inclusive o `key_env` de
+uma rotação, e o outro ficaria sem a chave da época nova.
+
+Por isso, um dos dispositivos é o **principal**: só ele confirma itens da
+caixa postal do membro, e antes de confirmar ele **encaminha** uma cópia para
+a caixa de cada um dos outros dispositivos (os **secundários**). Os
+secundários leem a caixa do membro sem confirmar e recebem o resto pelas suas
+próprias caixas.
+
+> **Nota de projeto — principal + encaminhamento, não chaves por
+> dispositivo.** Chaves por dispositivo (cada aparelho com sua `MSK`/`MEK`, o
+> registro `Member` listando aparelhos) permitiriam revogar um aparelho só,
+> mas mudam o reducer, o plano de controle e os vetores das duas
+> implementações. Esta seção não muda o nó nem o reducer: tudo é
+> correspondência selada entre os dispositivos do próprio membro, usando os
+> endpoints de caixa postal que já existem. O custo é que desligar um
+> dispositivo não o revoga (§10.5.6).
+
+#### 10.5.1 Chave de caixa do dispositivo
+
+Cada dispositivo ligado gera, para cada comunidade, uma **chave de caixa do
+dispositivo** `DIK` (Ed25519) e a guarda como a `MSK` (§2.4). Ela só serve
+para ler e confirmar a caixa do dispositivo:
+
+```
+device_mbx = mailbox_id(cid, DIK.public)       # mesma derivação da §2.2
+```
+
+Uma `DIK` por comunidade, pelo mesmo motivo das chaves de membro por
+comunidade (§2.1): um nó que hospeda várias comunidades não liga as caixas
+de um mesmo aparelho. Postar em `device_mbx` exige o escopo `community`,
+como em qualquer caixa (§10); só os dispositivos do próprio membro conhecem
+`DIK.public`.
+
+#### 10.5.2 Conjunto de dispositivos
+
+Quem são os dispositivos e qual é o principal fica num item selado na
+**caixa postal do membro**, onde todos os dispositivos dele leem:
+
+```
+DeviceSet {
+  ver:     u32,                 # cresce a cada mudança
+  main:    bytes(32),           # DIK.public do principal
+  devices: [{dik: bytes(32), label: text(1..60), added: u64}],   # 1..8, sem dik repetida
+  sig:     bytes(64)            # Sign(MSK, "vv/devices/v1", {cid, ver, main, devices})
+}
+```
+
+Postado com `kind = "devices"`, selado como correspondência (§10) para a
+própria `MEK`. `label` é o nome que o dispositivo dá a si mesmo ("iPhone",
+"Chrome no macOS"); a pessoa pode mudá-lo.
+
+- Um dispositivo só aceita um `DeviceSet` cuja assinatura seja verificada
+  sob a sua `MSK` e em que `main` esteja em `devices`. Os outros membros
+  conhecem a `MEK` e o `mailbox_id`, então podem postar ali, mas não assinar.
+- Entre conjuntos válidos, vale o de maior `ver`; com `ver` igual e conteúdo
+  diferente, o de maior `SHA-256(cbor(DeviceSet))` (bytes comparados em
+  ordem). Todo dispositivo guarda o último conjunto que adotou.
+- Qualquer dispositivo do membro muda o conjunto postando um novo com
+  `ver` = adotado + 1.
+- Sem nenhum `DeviceSet`, o dispositivo é o único e é o principal: é o
+  comportamento de antes desta seção, e é por onde começa toda filiação.
+- O principal confirma os itens `devices` superados e nunca o mais recente.
+  Como esses itens expiram (TTL máximo do nó, 30 d), o principal posta de
+  novo o mesmo conjunto, com o mesmo `ver`, quando a cópia mais recente tem
+  mais de 7 dias, e confirma a anterior.
+
+#### 10.5.3 Leitura da caixa postal
+
+Ordem de cada sincronização, antes do pull do log (§6.2):
+
+1. **A caixa do dispositivo** (`device_mbx`): processar e confirmar tudo.
+2. **A caixa do membro**: primeiro todos os itens `devices` (adotar o
+   conjunto mais recente; um dispositivo que deixou de ser o principal para
+   de confirmar já neste passo), depois o resto:
+   - **Principal:** processa cada item como hoje e, se o processou, posta uma
+     cópia na `device_mbx` de cada um dos outros dispositivos do conjunto e
+     só então confirma. Se alguma cópia for recusada, não confirma: o item
+     fica para a próxima sincronização. Itens que ele não processa (tipo
+     desconhecido, `report` adiado) não são encaminhados nem confirmados,
+     como hoje.
+   - **Secundário:** processa sem confirmar e guarda o maior `id` lido, para
+     pedir só o que é novo (`?after=`).
+
+A cópia encaminhada tem o mesmo `kind` do original e é **selada de novo**,
+para que o nó não reconheça o mesmo texto cifrado em duas caixas: um
+`key_env` vira um `KeyEnvelope` novo da mesma época e chave; os demais tipos
+levam o mesmo corpo decifrado, selado outra vez para a `MEK`. Um `probe`
+encaminhado tem `ttl_s` até `expires`; os demais usam o padrão do nó
+(`key_env` e `removed` não expiram). O principal não encaminha `join_result`
+nem itens `devices`.
+
+**Push (§14).** O nó guarda um token por caixa postal. O principal registra o
+seu na caixa do membro; cada secundário, na sua `device_mbx` (sessão mailbox
+pela `DIK`), onde chegam as cópias encaminhadas, inclusive de `ping` e
+`probe`, que acordam o aparelho. Quem deixa de ser o principal registra o
+token na própria `device_mbx` e não apaga o da caixa do membro, que a essa
+altura pode ser o do novo principal. Um secundário só é acordado depois que o
+principal encaminha: um aparelho que recebe push SHOULD virar o principal ao
+ser ligado, já que a origem pode ser um que não recebe (o app web, por
+exemplo).
+
+O mesmo item pode chegar a um secundário duas vezes (lido na caixa do membro
+e encaminhado). O processamento de toda correspondência MUST ser idempotente:
+`key_env`, `ik_env` e `removed` já são; `probe` por `probe_id`;
+`probe_reply` por `(probe_id, member_id)`; `report` por `report_id`; `ping`
+só acorda.
+
+> **Nota de projeto — dois principais não perdem nada.** Como todo
+> dispositivo que confirma já encaminhou o item a todos os outros, um período
+> com dois dispositivos que se acham principais (uma troca que um deles ainda
+> não viu) só produz duplicatas. Ter um único principal evita trabalho
+> repetido e ações automáticas conflitantes (§10.5.4); a corretude não
+> depende disso. Pela mesma razão, trocar de principal não perde
+> correspondência: o que o antigo não confirmou continua na caixa do membro
+> para o novo, e o que ele confirmou já foi encaminhado.
+
+#### 10.5.4 Ações automáticas
+
+Só o principal faz o que acontece sem a pessoa pedir: a resposta automática
+a consultas (§10.4, item 4) e as faxinas de admin e moderador (anexos órfãos,
+§9.7; conjunto de moderadores). Num secundário, uma consulta espera a pessoa.
+
+Quando a pessoa responde a uma consulta em qualquer dispositivo, ele posta na
+caixa do membro um item `probe_done`, selado para a própria `MEK`:
+`{probe_id, sig}` com `sig = Sign(MSK, "vv/probe-done/v1", {cid, probe_id})`.
+Os outros dispositivos tiram a consulta das pendentes. O principal o
+encaminha e confirma como qualquer item.
+
+Ficam só no dispositivo onde aconteceram, por ora: as consultas que um
+organizador enviou (as respostas chegam a todos os dispositivos, mas só o que
+enviou as mostra) e as denúncias que um admin dispensou **[LATER]**.
+
+#### 10.5.5 Ligar um dispositivo novo
+
+O **dispositivo de origem** (qualquer dispositivo ligado) entrega ao novo um
+pacote com as chaves de cada comunidade ativa, por uma caixa de encontro
+descartável no nó de uma dessas comunidades. Nenhuma parte do pacote passa
+em claro pelo nó.
+
+```
+Link (QR):   https://web.vamovirar.app/link#n=<node_url>&c=<community_id>&s=<secret>&w=<code>
+Link (cópia): o mesmo, sem &w=
+```
+
+- `secret`: 32 bytes aleatórios, em hex. `code`: 10 caracteres em base32 de
+  Crockford (50 bits), mostrado agrupado (`K7QM-2XRA-9P`). Ao digitar,
+  ignoram-se hífens e espaços, letras viram maiúsculas, `O` vira `0` e
+  `I`/`L` viram `1`.
+- O QR leva o código, porque vai direto da tela para a câmera. Para copiar o
+  link (dispositivo sem câmera), o link vai **sem** o código, que fica só na
+  tela da origem e a pessoa digita no novo. Um link vazado por área de
+  transferência, mensagem para si mesmo ou backup de conversa não abre o
+  pacote sem o código, e o nó, que nunca vê o link, não tem `secret` para
+  tentar códigos.
+- Como nos convites (§10.3), os parâmetros ficam no fragmento; o app também
+  aceita `vamovirar://link?…`.
+
+Derivações (`community_id` = `c`):
+
+```
+RK        = Ed25519.from_seed(HKDF(secret, salt=cid, info="vv/link-mailbox/v1"))
+link_mbx  = mailbox_id(cid, RK.public)
+salt      = HKDF(secret, salt=cid, info="vv/link-salt/v1")[0..16]
+stretched = Argon2id(code_normalizado, salt, m=19 MiB, t=2, p=1, len=32)
+link_key  = HKDF(secret || stretched, salt=cid, info="vv/link-key/v1")
+```
+
+O Argon2id deixa cada tentativa de código cara para quem tem só o link. Os
+parâmetros são o mínimo da OWASP e MAY subir se celulares lentos aguentarem.
+
+```
+LinkBundle {
+  v: 1,
+  expires: u64,
+  communities: [{
+    cid: bytes(32), node: text,
+    msk: bytes(32), mek: bytes(32),          # sementes privadas
+    epochs: [{epoch: u32, key: bytes(32)}],  # todas as K_e que a origem tem
+    ik?: bytes(32),                          # admins: metade privada da IK
+    devices?: DeviceSet                      # o conjunto adotado, assinado
+  }]
+}
+Item: kind "link", ttl_s 600, ct = nonce(24) || XChaCha20-Poly1305(link_key, nonce, cbor(LinkBundle), aad = "vv/link/v1" || cid)
+```
+
+O pacote **não** leva: a `CRK` (fica só no aparelho do fundador), a fila de
+saída, o log local (o novo baixa do nó), nem nada pessoal que fica no
+dispositivo (agendas, lugares, disponibilidade, marcas de leitura).
+
+Na origem:
+
+1. Para cada comunidade, garantir que ela mesma tem `DIK` e que há um
+   `DeviceSet` (se não houver, postar `ver = 1`, `main` = ela própria).
+2. Gerar `secret` e `code`, selar o pacote e postá-lo em `link_mbx`.
+3. Mostrar o QR, o link para copiar e o código. Consultar `link_mbx` (a
+   origem também tem `RK`): item sumiu → "recebido"; um `DeviceSet` novo com
+   um dispositivo a mais → "ligado: <label>".
+4. Ao cancelar, ou depois de 10 minutos, apagar o item se ele ainda existir.
+
+No novo dispositivo:
+
+1. Ler o link (pedir o código se não vier), derivar `RK`, abrir a sessão
+   mailbox (que não exige filiação, §10.1) e buscar o item `link`.
+2. Derivar `link_key` e abrir. Se o AEAD falhar, o código está errado: **não**
+   confirmar o item, para a pessoa poder digitar de novo. Se não houver item:
+   "este link expirou ou já foi usado".
+3. Abrindo, confirmar (apagar) o item e, para cada comunidade:
+   - nova neste aparelho: criar a réplica com as chaves, as épocas e a `IK`,
+     status `active`, e sincronizar do zero (snapshot + cauda, §12);
+   - já presente com a mesma `MSK`: já está ligada; só acrescentar épocas que
+     faltem;
+   - já presente com **outra** `MSK` (a pessoa entrou separadamente neste
+     aparelho): perguntar. Substituir MUST enviar antes `member.leave` pela
+     filiação local; senão, pular essa comunidade.
+4. Para cada comunidade adicionada: gerar a própria `DIK` e postar na caixa
+   do membro o `DeviceSet` recebido com ela acrescentada (`ver` + 1). Até ver
+   esse conjunto, o principal não encaminha para o novo, que nesse meio-tempo
+   lê a caixa do membro como qualquer secundário. Se o conjunto adotado
+   ainda não o inclui (o dele perdeu o desempate para outra mudança), ele se
+   acrescenta de novo, sobre o conjunto adotado, na sincronização seguinte.
+
+#### 10.5.6 Trocar o principal, desligar
+
+- **Tornar este o principal:** qualquer dispositivo posta o conjunto com
+  `main` = ele mesmo. Funciona sem o principal antigo (perdido, quebrado,
+  sem internet).
+- **Desligar um dispositivo:** qualquer dispositivo posta o conjunto sem ele;
+  se era o principal, outro passa a ser. Um dispositivo que já esteve num
+  conjunto adotado e adota um mais novo em que não está SHOULD esquecer a
+  comunidade e os dados locais dela. Assim
+  "sair deste computador" funciona de longe, para um aparelho que ainda
+  obedece.
+- **Desligar não é revogar.** Um dispositivo desligado que guardou as chaves
+  (roubado, adulterado, ou só um app que nunca mais sincronizou) continua
+  lendo a caixa do membro, inclusive os `key_env` das próximas rotações. A
+  revogação real é a da §7.2: um admin remove o membro, a época roda, e a
+  pessoa entra de novo pelos dispositivos que ainda tem.
 
 ---
 
@@ -1116,6 +1367,7 @@ suspenso.
 |---|---|
 | Nó | §11.3 a partir de qualquer dispositivo de admin. Os dispositivos dos membros podem fornecer entradas finais que estejam faltando. |
 | Um dispositivo de admin | Outro admin emite `admin.set` sem ele + `rotate`. |
+| Um dispositivo ligado (§10.5) | De outro dispositivo da pessoa: desligá-lo e, se era o principal, tornar outro o principal. Se ele pode estar nas mãos de alguém, um admin remove o membro e a pessoa entra de novo (§10.5.6). |
 | Todos os dispositivos de admin, CRK a salvo | Quem detém a CRK emite `admin.set` a partir de um novo dispositivo. |
 | CRK, admins a salvo | A comunidade continua; ações exclusivas da CRK (recuperação) ficam indisponíveis. **[LATER]**: `crk.replace` assinado por k-de-n admins. |
 | Tudo | A comunidade precisa ser recriada. Os dados locais dos membros continuam legíveis nos seus dispositivos. |
@@ -1399,7 +1651,9 @@ vv/ctrl-sig/v1       vv/log-entry/v1   vv/key-env/v1
 vv/join/v1           vv/join-req/v1    vv/invite/v1
 vv/state/v1          vv/directory/v1   vv/snapshot-sig/v1
 vv/snapshot-access/v1  vv/probe-reply/v1  vv/mail/<kind>/v1
-vv/blob/v1
+vv/blob/v1           vv/devices/v1     vv/probe-done/v1
+vv/link-mailbox/v1   vv/link-salt/v1   vv/link-key/v1
+vv/link/v1
 ```
 
 ---
@@ -1419,10 +1673,10 @@ vv/blob/v1
 Estas precisam de decisões antes ou durante as Fases 1–2. Cada uma indica o
 padrão atual.
 
-1. **Vários dispositivos por pessoa.** Padrão: um dispositivo por filiação;
-   trocar de celular usa uma transferência cifrada de dispositivo para
-   dispositivo (QR). Dispositivos vinculados compartilhando uma filiação são
-   **[LATER]**.
+1. **Vários dispositivos por pessoa.** Dispositivos ligados compartilham a
+   filiação, com um principal que encaminha a caixa postal (§10.5); trocar
+   de celular é ligar o novo e desligar o antigo. Em aberto: chaves por
+   dispositivo, para revogar um aparelho sem remover o membro **[LATER]**.
 2. **Celular perdido, sem backup.** Padrão: a pessoa entra de novo como um
    novo membro; um admin pode marcar o `member_id` antigo como `removed` e o
    novo com o mesmo perfil. Um backup cifrado opcional (chave derivada de
@@ -1468,3 +1722,9 @@ gerado por `packages/crypto/test/vectors.test.ts`):
 - Compactação: caminho `410`; `state_hash` do snapshot idêntico entre
   produtores.
 - Restauração: o nó reconstruído serve um `(seq, head)` idêntico ao original.
+- Dispositivos ligados (§10.5; só TypeScript, porque o nó nunca vê essas
+  estruturas): derivações do link a partir de `secret`, `code` e
+  `community_id` fixos; normalização do código; escolha entre dois
+  `DeviceSet` de mesmo `ver`; uma rotação com o principal offline chega ao
+  secundário; trocar de principal no meio do encaminhamento não perde nenhum
+  item.

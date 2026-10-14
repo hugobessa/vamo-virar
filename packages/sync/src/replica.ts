@@ -33,6 +33,7 @@ import {
   generateEncryptionKeyPair,
   generateEpochKeys,
   generateMemberKeys,
+  generateSigningKeyPair,
   Keyring,
   LogVerifier,
   mailboxId,
@@ -59,8 +60,20 @@ import {
   type SigningKeyPair,
   type SnapshotEnvelope,
 } from "@vamo-virar/crypto";
-import { decode, encode, fromHex, toHex, type CborValue } from "@vamo-virar/protocol";
-import { movedTo, NodeClient, NodeError, type RestoreInput, type StaffScope } from "./client.js";
+import { decode, encode, equalBytes, fromHex, toHex, type CborValue } from "@vamo-virar/protocol";
+import { movedTo, NodeClient, NodeError, type MailboxItem, type RestoreInput, type StaffScope } from "./client.js";
+import {
+  deviceLabel,
+  deviceSetValid,
+  listsDevice,
+  MAX_DEVICES,
+  preferDeviceSet,
+  sameDeviceSet,
+  signDeviceSet,
+  type DeviceSet,
+  type UnsignedDeviceSet,
+} from "./devices.js";
+import { LINK_TTL_MS, type LinkEntry } from "./link.js";
 import {
   inviteHash,
   inviteLink,
@@ -129,6 +142,20 @@ export interface ReplicaData {
    * marks started, so an update does not flag every old task as new.
    */
   taskMarks?: TaskMarks;
+  /** This device's own mailbox key, once the membership is shared with another device (§10.5.1). */
+  device?: { dik: SigningKeyPair; label: string };
+  /** The newest device set this device adopted (§10.5.2). Absent: this is the only device. */
+  devices?: DeviceSet;
+  /** Highest `ver` among adopted sets that listed this device. */
+  listedVer?: number;
+  /** Secondary devices: the last member-mailbox item read, so each is processed once. */
+  peekAfter?: number;
+  /** Probes answered or dropped here that the other devices have not been told about yet (§10.5.4). */
+  probesDone?: string[];
+  /** Probes already answered on some device, so a late copy does not bring them back. */
+  answeredProbes?: string[];
+  /** Another device unlinked this one: the app should forget the community (§10.5.6). */
+  unlinked?: boolean;
   /**
    * Wake-ups (§14) this device still owes: one sealed `ping` per person a
    * submitted op addressed, sent right after the op on the next sync so the
@@ -143,7 +170,26 @@ export interface ReplicaData {
   notices?: NoticeMarks;
   /** The push token last registered on the node, so a changed token is re-sent. */
   pushToken?: string;
+  /**
+   * Which mailbox that token was registered for: the member's (main device)
+   * or this device's own (secondary, §10.5.3). Absent means the member's.
+   */
+  pushFor?: "member" | "device";
 }
+
+/** One of the devices sharing this membership, for display. */
+export interface LinkedDevice {
+  /** DIK.public, hex. */
+  id: string;
+  label: string;
+  added: number;
+  main: boolean;
+  /** This device. */
+  me: boolean;
+}
+
+/** What the main device forwards to the others: the item's content, to seal again. */
+type Forward = { kind: "key_env"; epoch: number; key: Uint8Array } | MailMessage;
 
 export interface TaskMarks {
   since: number;
@@ -217,6 +263,9 @@ export interface PendingJoin {
 }
 
 const OWN_OUTCOMES_MAX = 200;
+const ANSWERED_PROBES_MAX = 200;
+/** The main device posts the device set again before the node's 30-day TTL drops it (§10.5.2). */
+const DEVICE_SET_REFRESH_MS = 7 * 86_400_000;
 
 export class Replica {
   private keyring: Keyring;
@@ -354,6 +403,32 @@ export class Replica {
   /** The node address recorded in a saved replica, to build its client before loading. */
   static savedNode(bytes: Uint8Array): string {
     return (decode(bytes) as unknown as ReplicaData).node;
+  }
+
+  /**
+   * New device (§10.5.5): the membership another of this person's devices
+   * sent. It downloads the community from the node on its first sync and
+   * adds itself to the device set there.
+   */
+  static fromLink(client: NodeClient, entry: LinkEntry, label: string, rng: Rng = defaultRng): Replica {
+    const keys: MemberKeys = { signing: signingKeyPair(entry.msk), encryption: encryptionKeyPair(entry.mek) };
+    const r = new Replica(client, Replica.blank(entry.cid, client.baseUrl, keys, "active"), rng);
+    r.absorbLink(entry, label);
+    return r;
+  }
+
+  /**
+   * Takes what a link carries for a membership this device already has with
+   * the same keys: epoch keys it missed, the intake key, and the device set.
+   */
+  absorbLink(entry: LinkEntry, label: string): void {
+    if (!equalBytes(entry.cid, this.data.cid) || !equalBytes(entry.msk, this.data.keys.signing.sk)) throw new Error("not this membership");
+    for (const e of entry.epochs) this.addEpochKey(e.epoch, e.key);
+    if (entry.ik && !this.data.ik) this.data.ik = encryptionKeyPair(entry.ik);
+    if (!this.data.device) this.data.device = { dik: generateSigningKeyPair(this.rng), label: deviceLabel(label) };
+    const set = entry.devices;
+    if (set && deviceSetValid(this.data.cid, this.data.keys.signing.pk, set) && preferDeviceSet(set, this.data.devices)) this.adoptDeviceSet(set);
+    this.changed();
   }
 
   // -------------------------------------------------------------------------
@@ -544,17 +619,30 @@ export class Replica {
    * is woken for.
    */
   async registerPush(token: string): Promise<void> {
-    if (this.data.pushToken === token) return;
-    await this.client.putPush(this.data.cid, this.data.keys.signing, token);
+    // With linked devices the node holds one token per mailbox: the main
+    // device's goes on the member's mailbox, each secondary's on its own,
+    // where the main forwards wake-ups (§10.5.3). Stepping down never deletes
+    // the member's token: by then it may be the new main's.
+    const target = this.pushTarget();
+    if (this.data.pushToken === token && (this.data.pushFor ?? "member") === target.for) return;
+    await this.client.putPush(this.data.cid, target.key, token);
     this.data.pushToken = token;
+    this.data.pushFor = target.for;
     this.changed();
   }
 
   async unregisterPush(): Promise<void> {
     if (this.data.pushToken === undefined) return;
-    await this.client.deletePush(this.data.cid, this.data.keys.signing);
+    const dik = this.data.device?.dik;
+    await this.client.deletePush(this.data.cid, this.data.pushFor === "device" && dik ? dik : this.data.keys.signing);
     delete this.data.pushToken;
+    delete this.data.pushFor;
     this.changed();
+  }
+
+  private pushTarget(): { key: SigningKeyPair; for: "member" | "device" } {
+    const dik = this.data.device?.dik;
+    return this.isMainDevice || !dik ? { key: this.data.keys.signing, for: "member" } : { key: dik, for: "device" };
   }
 
   /** Runs one full sync. Concurrent calls share the same run. */
@@ -611,68 +699,350 @@ export class Replica {
     if (this.data.status === "joining") this.data.status = "active";
   }
 
+  /**
+   * Mail, in the order of §10.5.3: this device's own mailbox (forwarded
+   * copies), then the member's mailbox. Only the main device confirms items
+   * there, after copying each to the other devices; the others read
+   * without confirming. With no device set this is the only device, and the
+   * main one.
+   */
   private async checkMail(): Promise<void> {
+    if (this.data.device) await this.checkDeviceMail();
     const me = this.data.keys;
     const mbx = mailboxId(this.data.cid, me.signing.pk);
+    const read = async (after: number): Promise<MailboxItem[] | null> => {
+      try {
+        const items = await this.client.mailbox(this.data.cid, me.signing, mbx, after);
+        this.adoptDeviceSets(items);
+        return items;
+      } catch (e) {
+        if (e instanceof NodeError && e.status === 404) return null;
+        throw e;
+      }
+    };
+    const after = this.isMainDevice ? 0 : (this.data.peekAfter ?? 0);
+    let items = await read(after);
+    if (!items) return;
+    // Just became the main device: take over everything still waiting there.
+    if (after > 0 && this.isMainDevice) items = (await read(0)) ?? [];
+    const main = this.isMainDevice;
+    if (main) await this.tidyDeviceSets(items, mbx);
+    for (const item of items) {
+      if (item.kind === "devices") continue;
+      const { handled, forward } = this.handleMail(item);
+      if (!handled || !main) continue;
+      if (forward && !(await this.forward(forward))) continue; // keep it: no device may miss it
+      await this.client.ackMailbox(this.data.cid, me.signing, mbx, item.id);
+    }
+    if (!main && items.length) this.data.peekAfter = Math.max(this.data.peekAfter ?? 0, ...items.map((i) => i.id));
+    if (this.data.device) {
+      await this.announceDevice().catch(() => undefined); // retried on the next sync
+      await this.flushProbesDone().catch(() => undefined);
+    }
+  }
+
+  /** Copies the main device forwarded here. Confirmed as soon as they are handled. */
+  private async checkDeviceMail(): Promise<void> {
+    const dik = this.data.device!.dik;
+    const mbx = mailboxId(this.data.cid, dik.pk);
     let items;
     try {
-      items = await this.client.mailbox(this.data.cid, me.signing, mbx);
+      items = await this.client.mailbox(this.data.cid, dik, mbx);
     } catch (e) {
       if (e instanceof NodeError && e.status === 404) return;
       throw e;
     }
     for (const item of items) {
-      let handled = false;
-      if (item.kind === "key_env") {
-        try {
-          const env = decodeKeyEnvelope(item.ct);
-          const key = openKeyEnvelope(env, me.encryption);
-          if (key) {
-            this.addEpochKey(env.epoch, key);
-            handled = true;
-          }
-        } catch {
-          handled = true; // malformed: drop it
+      const { handled } = item.kind === "devices" ? { handled: true } : this.handleMail(item);
+      if (handled) await this.client.ackMailbox(this.data.cid, dik, mbx, item.id);
+    }
+  }
+
+  /**
+   * Applies one mailbox item. `handled` says it may be confirmed; `forward`
+   * is what the other devices need from it, if anything.
+   */
+  private handleMail(item: MailboxItem): { handled: boolean; forward?: Forward } {
+    const me = this.data.keys;
+    if (item.kind === "key_env") {
+      try {
+        const env = decodeKeyEnvelope(item.ct);
+        const key = openKeyEnvelope(env, me.encryption);
+        if (!key) return { handled: false };
+        this.addEpochKey(env.epoch, key);
+        return { handled: true, forward: { kind: "key_env", epoch: env.epoch, key } };
+      } catch {
+        return { handled: true }; // malformed: drop it
+      }
+    }
+    const kinds = ["ik_env", "removed", "probe", "probe_reply", "report", "join_result", "probe_done", "ping"];
+    if (!kinds.includes(item.kind)) return { handled: false };
+    const m = openMail(this.data.cid, item.kind, me.encryption, item.ct);
+    if (!m) return { handled: true }; // unreadable: drop it
+    switch (m.kind) {
+      case "ik_env":
+        this.data.ik = encryptionKeyPair(m.ik_sk);
+        return { handled: true, forward: m };
+      case "removed":
+        this.data.status = "removed";
+        this.data.outbox = [];
+        return { handled: true, forward: m };
+      case "probe": {
+        const probeId = toHex(m.probe_id);
+        if (m.expires <= Date.now()) return { handled: true };
+        const probes = (this.data.incomingProbes ??= []);
+        if (!probes.some((p) => p.probeId === probeId) && !this.data.answeredProbes?.includes(probeId)) {
+          probes.push({ probeId, eventId: m.event_id, replyTo: m.reply_to, replyMbx: m.reply_mbx, expires: m.expires });
         }
-      } else if (item.kind === "ik_env") {
-        const m = openMail(this.data.cid, "ik_env", me.encryption, item.ct);
-        if (m?.kind === "ik_env") this.data.ik = encryptionKeyPair(m.ik_sk);
-        handled = true;
-      } else if (item.kind === "removed") {
-        const m = openMail(this.data.cid, "removed", me.encryption, item.ct);
-        if (m?.kind === "removed") {
-          this.data.status = "removed";
-          this.data.outbox = [];
-        }
-        handled = true;
-      } else if (item.kind === "probe") {
-        const m = openMail(this.data.cid, "probe", me.encryption, item.ct);
-        if (m?.kind === "probe" && m.expires > Date.now()) {
-          const probes = (this.data.incomingProbes ??= []);
-          const probeId = toHex(m.probe_id);
-          if (!probes.some((p) => p.probeId === probeId)) {
-            probes.push({ probeId, eventId: m.event_id, replyTo: m.reply_to, replyMbx: m.reply_mbx, expires: m.expires });
-          }
-        }
-        handled = true;
-      } else if (item.kind === "probe_reply") {
-        const m = openMail(this.data.cid, "probe_reply", me.encryption, item.ct);
-        if (m?.kind === "probe_reply") this.acceptProbeReply(m.probe_id, m.member_id, m.answer, m.sig);
-        handled = true;
-      } else if (item.kind === "report") {
-        const m = openMail(this.data.cid, "report", me.encryption, item.ct);
+        return { handled: true, forward: m };
+      }
+      case "probe_reply":
+        this.acceptProbeReply(m.probe_id, m.member_id, m.answer, m.sig);
+        return { handled: true, forward: m };
+      case "report":
         // Keep it for a later sync if we have not seen the people in it yet
         // (another admin may have just added the reporter).
-        handled = m?.kind !== "report" || this.acceptReport(m);
-      } else if (item.kind === "join_result") {
-        const m = openMail(this.data.cid, "join_result", me.encryption, item.ct);
-        if (m?.kind === "join_result" && !m.accepted && this.data.status === "joining") this.data.status = "rejected";
-        handled = true;
-      } else if (item.kind === "ping") {
+        return this.acceptReport(m) ? { handled: true, forward: m } : { handled: false };
+      case "join_result":
+        if (!m.accepted && this.data.status === "joining") this.data.status = "rejected";
+        return { handled: true };
+      case "ping":
         // The wake-up did its job by arriving; what it is about is in the log.
-        handled = true;
+        // Copies go on so the node wakes the other devices too (§10.5.3).
+        return { handled: true, forward: m };
+      case "probe_done":
+        if (!verify(me.signing.pk, "vv/probe-done/v1", { cid: this.data.cid, probe_id: m.probe_id }, m.sig)) return { handled: true };
+        this.forgetProbe(toHex(m.probe_id));
+        return { handled: true, forward: m };
+      default:
+        return { handled: true };
+    }
+  }
+
+  /**
+   * Main device: a fresh copy of an item for every other device (§10.5.3),
+   * sealed again so the node cannot match it to the original. False if any
+   * copy did not land; the item then stays for the next sync.
+   */
+  private async forward(f: Forward): Promise<boolean> {
+    const set = this.data.devices;
+    const mine = this.data.device?.dik.pk;
+    const others = set?.devices.filter((d) => !mine || !equalBytes(d.dik, mine)) ?? [];
+    if (others.length === 0) return true;
+    const mek = this.data.keys.encryption.pk;
+    const ttl = f.kind === "probe" ? Math.max(60, Math.ceil((f.expires - Date.now()) / 1000)) : f.kind === "ping" ? PING_TTL_S : undefined;
+    try {
+      const access = this.currentAccess();
+      for (const d of others) {
+        const ct =
+          f.kind === "key_env"
+            ? encodeKeyEnvelope(sealKeyEnvelope(this.data.cid, f.epoch, f.key, mek, { rng: this.rng }))
+            : sealMail(this.data.cid, mek, f, this.rng);
+        await this.client.postMailbox(this.data.cid, access, mailboxId(this.data.cid, d.dik), f.kind, ct, ttl);
       }
-      if (handled) await this.client.ackMailbox(this.data.cid, me.signing, mbx, item.id);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Linked devices (§10.5): the device set, and the main device's duties
+  // -------------------------------------------------------------------------
+
+  /** Whether this device confirms the member's mail and does the automatic work (§10.5.4). */
+  get isMainDevice(): boolean {
+    const set = this.data.devices;
+    if (!set) return true;
+    const d = this.data.device;
+    return !!d && equalBytes(set.main, d.dik.pk);
+  }
+
+  /** The devices sharing this membership, or an empty list when this is the only one. */
+  get linkedDevices(): LinkedDevice[] {
+    const set = this.data.devices;
+    const mine = this.data.device?.dik.pk;
+    if (!set) return [];
+    return set.devices.map((d) => ({
+      id: toHex(d.dik),
+      label: d.label,
+      added: d.added,
+      main: equalBytes(d.dik, set.main),
+      me: !!mine && equalBytes(d.dik, mine),
+    }));
+  }
+
+  /** Another device unlinked this one; the app should forget this community here. */
+  get unlinked(): boolean {
+    return !!this.data.unlinked;
+  }
+
+  private adoptDeviceSets(items: MailboxItem[]): void {
+    for (const item of items) {
+      if (item.kind !== "devices") continue;
+      const m = openMail(this.data.cid, "devices", this.data.keys.encryption, item.ct);
+      if (m?.kind !== "devices" || !deviceSetValid(this.data.cid, this.data.keys.signing.pk, m.set)) continue;
+      if (preferDeviceSet(m.set, this.data.devices)) this.adoptDeviceSet(m.set);
+    }
+  }
+
+  private adoptDeviceSet(set: DeviceSet): void {
+    this.data.devices = set;
+    const d = this.data.device;
+    if (d) {
+      if (listsDevice(set, d.dik.pk)) this.data.listedVer = Math.max(this.data.listedVer ?? 0, set.ver);
+      // Dropped by a newer set, not by a tie lost while joining it (§10.5.6).
+      else if (this.data.listedVer !== undefined && set.ver > this.data.listedVer) this.data.unlinked = true;
+    }
+    this.changed();
+  }
+
+  /**
+   * Main device: confirms superseded and invalid sets, keeps the newest copy
+   * of the adopted one, and posts it again before the node's TTL drops it.
+   */
+  private async tidyDeviceSets(items: MailboxItem[], mbx: Uint8Array): Promise<void> {
+    const adopted = this.data.devices;
+    if (!adopted) return;
+    const me = this.data.keys;
+    let newest: MailboxItem | undefined;
+    for (const item of items) {
+      if (item.kind !== "devices") continue;
+      const m = openMail(this.data.cid, "devices", me.encryption, item.ct);
+      const current = m?.kind === "devices" && deviceSetValid(this.data.cid, me.signing.pk, m.set) && sameDeviceSet(m.set, adopted);
+      if (current && (!newest || item.id > newest.id)) {
+        if (newest) await this.client.ackMailbox(this.data.cid, me.signing, mbx, newest.id);
+        newest = item;
+      } else {
+        await this.client.ackMailbox(this.data.cid, me.signing, mbx, item.id);
+      }
+    }
+    if (!newest || Date.now() - newest.posted_at > DEVICE_SET_REFRESH_MS) {
+      await this.publishDevices(adopted);
+      if (newest) await this.client.ackMailbox(this.data.cid, me.signing, mbx, newest.id);
+    }
+  }
+
+  /** Posts a device set to the member's mailbox, where all their devices read, and adopts it. */
+  private async publishDevices(s: UnsignedDeviceSet | DeviceSet): Promise<void> {
+    const me = this.data.keys;
+    const set = "sig" in s ? s : signDeviceSet(this.data.cid, me.signing, s);
+    const mail = sealMail(this.data.cid, me.encryption.pk, { kind: "devices", set }, this.rng);
+    await this.client.postMailbox(this.data.cid, this.currentAccess(), mailboxId(this.data.cid, me.signing.pk), "devices", mail);
+    if (preferDeviceSet(set, this.data.devices)) this.adoptDeviceSet(set);
+  }
+
+  /** The adopted set, on a device that is in it. */
+  private requireListed(): { set: DeviceSet; dik: Uint8Array } {
+    const set = this.data.devices;
+    const d = this.data.device;
+    if (!set || !d || !listsDevice(set, d.dik.pk)) throw new Error("this device is not linked");
+    return { set, dik: d.dik.pk };
+  }
+
+  /**
+   * New device: adds itself to the set it received (§10.5.5, step 4), and
+   * again if its first try lost a tie to another change.
+   */
+  private async announceDevice(): Promise<void> {
+    const set = this.data.devices;
+    const d = this.data.device;
+    if (!set || !d || this.data.unlinked || listsDevice(set, d.dik.pk)) return;
+    if (this.data.listedVer !== undefined && set.ver > this.data.listedVer) return;
+    if (set.devices.length >= MAX_DEVICES || this.data.status !== "active") return;
+    await this.publishDevices({
+      ver: set.ver + 1,
+      main: set.main,
+      devices: [...set.devices, { dik: d.dik.pk, label: d.label, added: Date.now() }],
+    });
+  }
+
+  /** Makes this device part of a device set, creating the set (as its main device) if there is none. */
+  private async ensureDevice(label: string): Promise<void> {
+    if (!this.data.device) this.data.device = { dik: generateSigningKeyPair(this.rng), label: deviceLabel(label) };
+    if (this.data.devices) return;
+    const d = this.data.device;
+    await this.publishDevices({ ver: 1, main: d.dik.pk, devices: [{ dik: d.dik.pk, label: d.label, added: Date.now() }] });
+  }
+
+  /** "Make this the main device." Works without the old one (§10.5.6). */
+  async makeMainDevice(): Promise<void> {
+    const { set, dik } = this.requireListed();
+    if (equalBytes(set.main, dik)) return;
+    await this.publishDevices({ ver: set.ver + 1, main: dik, devices: set.devices });
+  }
+
+  async renameDevice(label: string): Promise<void> {
+    const { set, dik } = this.requireListed();
+    const name = deviceLabel(label);
+    this.data.device!.label = name;
+    await this.publishDevices({ ver: set.ver + 1, main: set.main, devices: set.devices.map((d) => (equalBytes(d.dik, dik) ? { ...d, label: name } : d)) });
+  }
+
+  /**
+   * Unlinks a device: stops forwarding to it, and an app that still obeys
+   * forgets the community there. Not a revocation (§10.5.6). Unlinking this
+   * device itself marks it `unlinked`; the app then forgets it here.
+   */
+  async unlinkDevice(id: string): Promise<void> {
+    const { set, dik } = this.requireListed();
+    const target = fromHex(id);
+    if (!listsDevice(set, target)) return;
+    const rest = set.devices.filter((d) => !equalBytes(d.dik, target));
+    if (rest.length === 0) throw new Error("cannot unlink the only device");
+    const self = equalBytes(target, dik);
+    const main = equalBytes(set.main, target) ? (self ? rest[0]!.dik : dik) : set.main;
+    await this.publishDevices({ ver: set.ver + 1, main, devices: rest });
+    if (self) {
+      this.data.unlinked = true;
+      this.changed();
+    }
+  }
+
+  /**
+   * What a new device needs to share this membership (§10.5.5). Makes this
+   * device part of a device set first. Never the community root key.
+   */
+  async linkEntry(label: string): Promise<LinkEntry> {
+    if (this.data.status !== "active") throw new Error("only active memberships can be linked");
+    await this.ensureDevice(label);
+    if (this.data.devices!.devices.length >= MAX_DEVICES) throw new Error("too many devices");
+    const entry: LinkEntry = {
+      cid: this.data.cid,
+      node: this.data.node,
+      msk: this.data.keys.signing.sk,
+      mek: this.data.keys.encryption.sk,
+      epochs: this.data.epochKeys.map((e) => ({ epoch: e.epoch, key: e.key })),
+      devices: this.data.devices!,
+    };
+    if (this.data.ik) entry.ik = this.data.ik.sk;
+    return entry;
+  }
+
+  /** Puts a sealed link bundle in its throwaway mailbox on this community's node. */
+  async postLinkBundle(mailbox: Uint8Array, ct: Uint8Array): Promise<void> {
+    await this.client.postMailbox(this.data.cid, this.currentAccess(), mailbox, "link", ct, Math.ceil(LINK_TTL_MS / 1000));
+  }
+
+  /** Remembers a probe as answered (or dropped) on some device, and stops showing it. */
+  private forgetProbe(probeId: string): void {
+    this.data.incomingProbes = (this.data.incomingProbes ?? []).filter((x) => x.probeId !== probeId);
+    const done = (this.data.answeredProbes ??= []);
+    if (!done.includes(probeId)) done.push(probeId);
+    if (done.length > ANSWERED_PROBES_MAX) done.shift();
+    this.changed();
+  }
+
+  /** Tells the other devices which probes were answered here (§10.5.4). */
+  private async flushProbesDone(): Promise<void> {
+    const queue = this.data.probesDone ?? [];
+    const me = this.data.keys;
+    while (queue.length) {
+      const id = fromHex(queue[0]!);
+      const sig = sign(me.signing.sk, "vv/probe-done/v1", { cid: this.data.cid, probe_id: id });
+      const mail = sealMail(this.data.cid, me.encryption.pk, { kind: "probe_done", probe_id: id, sig }, this.rng);
+      await this.client.postMailbox(this.data.cid, this.currentAccess(), mailboxId(this.data.cid, me.signing.pk), "probe_done", mail);
+      queue.shift();
     }
   }
 
@@ -958,10 +1328,13 @@ export class Replica {
     this.dropProbe(probeId);
   }
 
-  /** Member: never answer this one. Indistinguishable from being offline. */
+  /**
+   * Member: never answer this one. Indistinguishable from being offline.
+   * Linked devices stop showing it too, after the next sync.
+   */
   dropProbe(probeId: string): void {
-    this.data.incomingProbes = (this.data.incomingProbes ?? []).filter((x) => x.probeId !== probeId);
-    this.changed();
+    this.forgetProbe(probeId);
+    if (this.data.devices) (this.data.probesDone ??= []).push(probeId);
   }
 
   private acceptProbeReply(probeId: Uint8Array, memberId: string, answer: ProbeAnswer, sig: Uint8Array): void {

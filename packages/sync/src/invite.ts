@@ -9,6 +9,7 @@ import {
 } from "@vamo-virar/crypto";
 import type { NoticeKind } from "@vamo-virar/domain";
 import { concatBytes, decode, encode, fromHex, toHex, utf8, type CborValue } from "@vamo-virar/protocol";
+import { deviceSetFromCbor, deviceSetToCbor, type DeviceSet } from "./devices.js";
 
 export interface Invite {
   cid: Uint8Array;
@@ -110,7 +111,11 @@ export type MailMessage =
       reason: ReportReason;
       details?: string;
       sig: Uint8Array;
-    };
+    }
+  /** Who this member's devices are and which is the main one (§10.5.2). Signed by the MSK. */
+  | { kind: "devices"; set: DeviceSet }
+  /** A probe this member answered (or chose not to) on one of their devices (§10.5.4). */
+  | { kind: "probe_done"; probe_id: Uint8Array; sig: Uint8Array };
 
 export type ProbeAnswer = "eligible" | "maybe" | "not_eligible";
 const ANSWERS: ProbeAnswer[] = ["eligible", "maybe", "not_eligible"];
@@ -126,7 +131,8 @@ const info = (cid: Uint8Array, kind: string) => concatBytes(utf8(`vv/mail/${kind
 
 export function sealMail(cid: Uint8Array, recipient: Uint8Array, msg: MailMessage, rng?: Rng): Uint8Array {
   const { kind, ...rest } = msg;
-  const sealed = hpkeSeal(recipient, info(cid, kind), new Uint8Array(), encode(rest as CborValue), rng ? { rng } : {});
+  const body = msg.kind === "devices" ? deviceSetToCbor(msg.set) : (rest as CborValue);
+  const sealed = hpkeSeal(recipient, info(cid, kind), new Uint8Array(), encode(body), rng ? { rng } : {});
   return encode({ enc: sealed.enc, ct: sealed.ct });
 }
 
@@ -161,6 +167,14 @@ export function openMail(cid: Uint8Array, kind: string, me: EncryptionKeyPair, c
       const m: MailMessage = { kind, report_id: body.report_id, reporter: body.reporter, member_id: body.member_id, reason: body.reason as ReportReason, sig: body.sig };
       if (typeof body.details === "string") m.details = body.details;
       return m;
+    }
+    if (kind === "devices") {
+      const set = deviceSetFromCbor(body);
+      return set ? { kind, set } : null;
+    }
+    if (kind === "probe_done") {
+      if (!isBytes(body.probe_id, 16) || !isBytes(body.sig, 64)) return null;
+      return { kind, probe_id: body.probe_id, sig: body.sig };
     }
     if (kind === "ping") {
       return NOTICE_KINDS.includes(body.what as NoticeKind) ? { kind, what: body.what as NoticeKind } : null;

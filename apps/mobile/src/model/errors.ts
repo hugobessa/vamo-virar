@@ -45,6 +45,14 @@ const BY_MESSAGE: [RegExp, string][] = [
   [/^attachment is too large/, "O arquivo passa de 10 MB."],
   [/^attachment needs a name/, "O arquivo precisa de um nome."],
   [/^attachment failed verification/, "Esse arquivo não confere com o que foi anexado."],
+  [/^(not a device link|device link has |the link bundle is malformed)/, "Esse link não parece certo. Gere outro no outro aparelho."],
+  [/^(the code does not match|not a link code)/, "Código errado. Confira e digite de novo."],
+  [/^the link expired/, "Este link venceu ou já foi usado. Se não foi você quem usou, gere outro e avise a coordenação."],
+  [/^too many devices/, "Você já tem 8 aparelhos ligados. Desligue um antes."],
+  [/^another device already has this name/, "Outro aparelho seu já tem esse nome."],
+  [/^could not leave the old membership/, "Não deu para sair da comunidade com a outra pessoa. Confira a internet e tente de novo."],
+  [/^(no community to link|only active memberships can be linked)/, "Você ainda não está em nenhuma comunidade ativa para levar a outro aparelho."],
+  [/^(this device is not linked|cannot unlink the only device)/, "Este aparelho não está ligado a outros."],
 ];
 
 // What fetch rejects with when the request never got an answer: React Native,

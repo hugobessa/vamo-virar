@@ -46,6 +46,12 @@ export const CTX = {
   snapshotSig: "vv/snapshot-sig/v1",
   snapshotAccess: "vv/snapshot-access/v1",
   directory: "vv/directory/v1",
+  devices: "vv/devices/v1",
+  probeDone: "vv/probe-done/v1",
+  linkMailbox: "vv/link-mailbox/v1",
+  linkSalt: "vv/link-salt/v1",
+  linkKey: "vv/link-key/v1",
+  link: "vv/link/v1",
 } as const;
 
 /** Signature framing: ctx_len (1 byte) || ctx || cbor(value). */
