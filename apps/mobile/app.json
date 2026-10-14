@@ -89,9 +89,9 @@
       "typedRoutes": true
     },
     "extra": {
-      "googleClientIdIos": "",
-      "googleClientIdAndroid": "",
-      "googleClientIdWeb": "",
+      "googleClientIdIos": "886439129076-ht3on0f2ap9ddp025cnh0j7t77ejs16s.apps.googleusercontent.com",
+      "googleClientIdAndroid": "886439129076-j37hc1inatv3vln0jv0hj8djpvl0d95u.apps.googleusercontent.com",
+      "googleClientIdWeb": "886439129076-l4a5vgh5jfmfschsr8nvfuth28gh6rg5.apps.googleusercontent.com",
       "microsoftClientId": "",
       "eas": {
         "projectId": "643e5bf0-8533-4789-a016-d5a3491ebfe7"
