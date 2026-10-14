@@ -78,3 +78,14 @@ export function errorText(e: unknown, fallback = "Algo deu errado."): string {
   const msg = e instanceof Error ? e.message : String(e);
   return BY_MESSAGE.find(([re]) => re.test(msg))?.[1] ?? fallback;
 }
+
+/**
+ * The raw error, for failures `errorText` has no sentence for: shown small
+ * under the message so someone can pass it on to whoever looks after the app.
+ */
+export function errorDetail(e: unknown): string | null {
+  if (isNetworkError(e) || isServerDown(e)) return null;
+  if (e instanceof NodeError) return BY_CODE[e.code] ? null : e.message;
+  const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  return BY_MESSAGE.some(([re]) => re.test(e instanceof Error ? e.message : msg)) ? null : msg;
+}

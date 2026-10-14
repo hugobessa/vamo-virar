@@ -20,6 +20,7 @@ const pt = {
   homeToAnswer: "para responder",
   // Create and join forms
   createIntro: "Leva um minuto. Você convida as pessoas depois.",
+  errorDetail: "Detalhe técnico, para quem cuida do app:",
   joinIntro: "Quem organiza vê o seu pedido e decide. Nada da sua agenda é enviado.",
   sectionCommunity: "A comunidade",
   sectionYou: "Você",

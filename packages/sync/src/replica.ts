@@ -293,11 +293,17 @@ export class Replica {
   // Creation, persistence
   // -------------------------------------------------------------------------
 
-  /** Founder flow: CRK, epoch 0, intake key, genesis (§2, §5). */
+  /**
+   * Founder flow: CRK, epoch 0, intake key, genesis (§2, §5). With
+   * `sync: false` it returns as soon as the node accepts the genesis, so the
+   * caller can save the keys before anything else can fail: a community the
+   * node holds but no device has the keys for can never be administered.
+   */
   static async found(
     client: NodeClient,
     input: { name: string; description?: string; region?: string; whatsapp?: string; displayName: string; policy?: Policy },
     rng: Rng = defaultRng,
+    opts: { sync?: boolean } = {},
   ): Promise<Replica> {
     const root = generateCommunityRoot(rng);
     const keys = generateMemberKeys(rng);
@@ -332,7 +338,7 @@ export class Replica {
     r.data.ik = ik;
     r.data.crk = root.crk;
     r.addEpochKey(0, k0.key);
-    await r.sync();
+    if (opts.sync !== false) await r.sync();
     return r;
   }
 

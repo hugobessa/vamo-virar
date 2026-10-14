@@ -198,6 +198,15 @@ describe.skipIf(!HAVE_NODE)("against a real node", () => {
     expect(canon(Replica.load(node.client(), again.save()).canonical)).toBe(canon(again.canonical));
   });
 
+  it("a founder saved before the first sync resumes as the admin", async () => {
+    const ana = await Replica.found(node.client(), { name: "C7b", displayName: "Ana" }, undefined, { sync: false });
+    const again = Replica.load(node.client(), ana.save());
+    await again.sync();
+    expect(again.status).toBe("active");
+    expect(again.isAdmin).toBe(true);
+    expect(again.canonical!.members[again.memberId]!.profile!.display_name).toBe("Ana");
+  });
+
   it("organizers can ask who could come; answers are verdicts, signed, and cannot be forged", async () => {
     const ana = await Replica.found(node.client(), { name: "C11", displayName: "Ana" });
     const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
