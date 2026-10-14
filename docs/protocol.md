@@ -1118,10 +1118,21 @@ encaminhado tem `ttl_s` até `expires`; os demais usam o padrão do nó
 (`key_env` e `removed` não expiram). O principal não encaminha `join_result`
 nem itens `devices`.
 
+**Push (§14).** O nó guarda um token por caixa postal. O principal registra o
+seu na caixa do membro; cada secundário, na sua `device_mbx` (sessão mailbox
+pela `DIK`), onde chegam as cópias encaminhadas, inclusive de `ping` e
+`probe`, que acordam o aparelho. Quem deixa de ser o principal registra o
+token na própria `device_mbx` e não apaga o da caixa do membro, que a essa
+altura pode ser o do novo principal. Um secundário só é acordado depois que o
+principal encaminha: um aparelho que recebe push SHOULD virar o principal ao
+ser ligado, já que a origem pode ser um que não recebe (o app web, por
+exemplo).
+
 O mesmo item pode chegar a um secundário duas vezes (lido na caixa do membro
 e encaminhado). O processamento de toda correspondência MUST ser idempotente:
 `key_env`, `ik_env` e `removed` já são; `probe` por `probe_id`;
-`probe_reply` por `(probe_id, member_id)`; `report` por `report_id`.
+`probe_reply` por `(probe_id, member_id)`; `report` por `report_id`; `ping`
+só acorda.
 
 > **Nota de projeto — dois principais não perdem nada.** Como todo
 > dispositivo que confirma já encaminhou o item a todos os outros, um período

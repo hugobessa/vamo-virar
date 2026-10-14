@@ -8,6 +8,7 @@ import { Platform } from "react-native";
 import { confirm } from "../lib/confirm";
 import { useApp } from "../lib/context";
 import { defaultDeviceLabel } from "../lib/devices";
+import { pushSupported } from "../lib/notifications";
 import { errorText } from "../model/errors";
 import { fill } from "../model/i18n";
 import { Banner, Body, Button, Field, FormSection, Screen } from "../ui/kit";
@@ -52,6 +53,9 @@ export default function Link() {
         if (await confirm(fill(t("linkConflict"), { name: c.name }), t("linkReplace"), t("linkKeep"))) replace.add(c.id);
       }
       const added = await store.applyLink(incoming, label.trim() || defaultDeviceLabel(), replace);
+      // A secondary is only woken after the main forwards, and the device this came
+      // from may get no push at all (the web app): one that does takes over (§10.5.3).
+      if (pushSupported) await store.makeThisMain().catch(() => undefined);
       // The link is spent; keep it out of the browser's history anyway.
       if (Platform.OS === "web") globalThis.history?.replaceState(null, "", globalThis.location?.pathname ?? "/");
       if (added.length === 1) router.replace({ pathname: "/c/[id]", params: { id: added[0]! } });

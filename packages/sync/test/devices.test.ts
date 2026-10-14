@@ -7,7 +7,7 @@ import { canonicalJson, type CommunityState } from "@vamo-virar/domain";
 import { toHex } from "@vamo-virar/protocol";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { NodeClient } from "../src/client.js";
-import { parseInvite } from "../src/invite.js";
+import { parseInvite, sealMail } from "../src/invite.js";
 import { LinkError, parseDeviceLink, receiveDeviceLink, type LinkBundle } from "../src/link.js";
 import { offerDeviceLink } from "../src/offer.js";
 import { Replica } from "../src/replica.js";
@@ -215,6 +215,40 @@ describe.skipIf(!HAVE_NODE)("linked devices against a real node", () => {
     expect(bia.linkedDevices).toHaveLength(1);
     await web!.sync();
     expect(web!.unlinked).toBe(true);
+  }, 30_000);
+
+  it("wake-ups reach the secondary's own mailbox, where its push token is registered", async () => {
+    const { ana, bia } = await community("D10");
+    const [web] = await link([bia]);
+    await bia.sync();
+
+    // Push: the main registers on the member's mailbox, the secondary on its own.
+    const registered: string[] = [];
+    for (const r of [bia, web!]) {
+      r.client.putPush = async (_cid, key) => {
+        registered.push(toHex(mailboxId(r.cid, key.pk)));
+      };
+    }
+    const dik = (web as unknown as { data: { device: { dik: { pk: Uint8Array } } } }).data.device.dik;
+    const webMbx = mailboxId(web!.cid, dik.pk);
+    await bia.registerPush("tok-phone");
+    await web!.registerPush("tok-web");
+    expect(registered).toEqual([toHex(mailboxId(bia.cid, bia.keys.signing.pk)), toHex(webMbx)]);
+    await web!.registerPush("tok-web"); // same token, same role: nothing sent
+    expect(registered).toHaveLength(2);
+
+    // A ping for Bia: the main forwards a copy to the browser's mailbox, which wakes it.
+    const access = (ana as unknown as { currentAccess(): Parameters<typeof ana.client.postMailbox>[1] }).currentAccess();
+    await ana.client.postMailbox(ana.cid, access, mailboxId(ana.cid, bia.keys.signing.pk), "ping", sealMail(ana.cid, bia.keys.encryption.pk, { kind: "ping", what: "mention" }), 3600);
+    await bia.sync();
+    expect((await waiting(bia)).some((i) => i.kind === "ping")).toBe(false);
+    const forwarded = await web!.client.mailbox(web!.cid, dik as never, webMbx);
+    expect(forwarded.map((i) => i.kind)).toContain("ping");
+
+    // Becoming the main device moves the browser's token to the member's mailbox.
+    await web!.makeMainDevice();
+    await web!.registerPush("tok-web");
+    expect(registered.at(-1)).toBe(toHex(mailboxId(bia.cid, bia.keys.signing.pk)));
   }, 30_000);
 
   it("one link carries every active membership, even on different nodes", async () => {
