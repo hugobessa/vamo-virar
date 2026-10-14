@@ -9,6 +9,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "me.bessa.vamovirar",
+      "scheme": [
+        "com.googleusercontent.apps.886439129076-ht3on0f2ap9ddp025cnh0j7t77ejs16s"
+      ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -22,6 +25,9 @@
       "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false,
       "package": "me.bessa.vamovirar",
+      "scheme": [
+        "me.bessa.vamovirar"
+      ],
       "permissions": [
         "READ_CALENDAR",
         "ACCESS_COARSE_LOCATION"

@@ -11,6 +11,7 @@ import { Actions, Banner, Body, Button, Card, Field, Heading, Screen } from "../
 import { PlacesSettings } from "../ui/PlacesSettings";
 import { space } from "../ui/theme";
 import { errorText } from "../model/errors";
+import { APP_SCHEME, nativeRedirectUri } from "../model/oauth";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -18,13 +19,17 @@ const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, string | und
 const googleClientId =
   Platform.select({ ios: extra.googleClientIdIos, android: extra.googleClientIdAndroid, default: extra.googleClientIdWeb }) ?? "";
 const microsoftClientId = extra.microsoftClientId ?? "";
-const redirectUri = AuthSession.makeRedirectUri({ scheme: "vamovirar", path: "oauth" });
+/** Google's native clients only accept their own redirect forms (model/oauth.ts). */
+function redirectUriFor(source: "google" | "microsoft", clientId: string): string {
+  return nativeRedirectUri(source, Platform.OS, clientId) ?? AuthSession.makeRedirectUri({ scheme: APP_SCHEME, path: "oauth" });
+}
 
 /** One OAuth provider: PKCE authorization code flow, no client secret (§18). */
 function useProvider(source: "google" | "microsoft") {
   const calendar = useCalendarService();
   const cfg = source === "google" ? GOOGLE : MICROSOFT;
   const clientId = source === "google" ? googleClientId : microsoftClientId;
+  const redirectUri = redirectUriFor(source, clientId);
   const [request, response, prompt] = AuthSession.useAuthRequest(
     {
       clientId: clientId || "unconfigured",
@@ -52,7 +57,7 @@ function useProvider(source: "google" | "microsoft") {
         }),
       )
       .catch((e: unknown) => setError(errorText(e)));
-  }, [response, request, calendar, source, clientId, cfg.discovery]);
+  }, [response, request, calendar, source, clientId, redirectUri, cfg.discovery]);
 
   return { available: !!clientId && !!request, prompt: () => prompt(), error };
 }
