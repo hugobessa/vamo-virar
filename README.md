@@ -111,9 +111,15 @@ npx expo run:ios              # development build no simulador ou num iPhone (s�
 
 ### Design system e landing page (Storybook)
 
-As cores, a tipografia, os componentes e a landing page (em pt-BR) ficam em
-`apps/mobile/src/ui` e podem ser vistos no Storybook, que renderiza os
-componentes React Native no navegador:
+O design system (cores, tipografia, movimento, marcas e componentes) também
+é publicado como pacote npm, `@vamo-virar/design-system`, a partir do
+repositório [vamo-virar-design-system](https://github.com/hugobessa/vamo-virar-design-system),
+para ser usado em outros projetos. Lá ficam o Storybook dos componentes e as
+instruções de instalação e publicação.
+
+No app, as cores, a tipografia, os componentes e a landing page (em pt-BR)
+ficam em `apps/mobile/src/ui` e podem ser vistos no Storybook, que renderiza
+os componentes React Native no navegador:
 
 ```sh
 npm run storybook -w @vamo-virar/mobile        # http://localhost:6006
