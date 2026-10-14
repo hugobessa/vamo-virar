@@ -167,17 +167,23 @@ export function adminList(waiting: AccessRequest[], decided: AccessRequest[], un
 
 export function adminDetail(r: AccessRequest, defaults: Limits, flash?: { kind: "good" | "bad"; text: string }): string {
   const mb = (b: number) => Math.round(b / (1024 * 1024));
+  const fields = (l: Limits) => html`<div class="grid">
+<div><label for="max_communities">Comunidades</label><input type="number" id="max_communities" name="max_communities" min="1" max="1000" placeholder="sem limite" value="${l.maxCommunities ?? ""}"></div>
+<div><label for="max_log_mb">Informações (MB)</label><input type="number" id="max_log_mb" name="max_log_mb" min="16" max="65536" value="${mb(l.maxLogBytes)}"></div>
+<div><label for="max_files_mb">Arquivos (MB)</label><input type="number" id="max_files_mb" name="max_files_mb" min="0" max="65536" value="${mb(l.maxBlobBytes)}"></div>
+</div>
+<p class="help">Comunidades: quantas este código pode criar; em branco, sem limite. Informações e arquivos: por comunidade.</p>`;
+  const current: Limits = {
+    maxCommunities: r.maxCommunities,
+    maxLogBytes: r.maxLogBytes ?? defaults.maxLogBytes,
+    maxBlobBytes: r.maxBlobBytes ?? defaults.maxBlobBytes,
+  };
   const decision =
     r.status === "pending"
       ? html`<form class="card" method="post" action="/admin/pedidos/${r.id}/aprovar">
 <h2>Aprovar</h2>
 <p class="muted">O nó gera um código de criação só para este pedido e o portal envia por email, com o passo a passo. O código não fica guardado aqui.</p>
-<div class="grid">
-<div><label for="max_communities">Comunidades</label><input type="number" id="max_communities" name="max_communities" min="1" max="50" value="${defaults.maxCommunities}"></div>
-<div><label for="max_log_mb">Informações (MB)</label><input type="number" id="max_log_mb" name="max_log_mb" min="16" max="65536" value="${mb(defaults.maxLogBytes)}"></div>
-<div><label for="max_files_mb">Arquivos (MB)</label><input type="number" id="max_files_mb" name="max_files_mb" min="0" max="65536" value="${mb(defaults.maxBlobBytes)}"></div>
-</div>
-<p class="help">Limites por comunidade, menos o número de comunidades.</p>
+${fields(defaults)}
 <div class="actions"><button type="submit">Aprovar e enviar o código</button></div>
 </form>
 <form class="card" method="post" action="/admin/pedidos/${r.id}/recusar">
@@ -188,14 +194,20 @@ export function adminDetail(r: AccessRequest, defaults: Limits, flash?: { kind: 
 </form>`
       : r.status === "approved" || r.status === "revoked"
         ? html`<section class="card"><h2>Acesso</h2>
-<p>Comunidades: <strong>${r.maxCommunities ?? "—"}</strong> · informações: <strong>${megabytes(r.maxLogBytes)}</strong> · arquivos: <strong>${megabytes(r.maxBlobBytes)}</strong> por comunidade.</p>
+<p>Comunidades: <strong>${r.maxCommunities ?? "sem limite"}</strong> · informações: <strong>${megabytes(r.maxLogBytes)}</strong> · arquivos: <strong>${megabytes(r.maxBlobBytes)}</strong> por comunidade.</p>
 <p class="muted">No nó, este acesso se chama <code>${r.tenant}</code> (veja o uso em <code>/operator/v1/tenants</code>).</p>
 <div class="actions">
 <form method="post" action="/admin/pedidos/${r.id}/novo-codigo"><button type="submit" class="secondary">${r.status === "revoked" ? "Reativar com um código novo" : "Enviar um código novo"}</button></form>
 ${r.status === "approved" ? html`<form method="post" action="/admin/pedidos/${r.id}/revogar"><button type="submit" class="danger">Revogar o código</button></form>` : ""}
 </div>
 <p class="help">Um código novo invalida o anterior. Revogar impede criar comunidades novas; as que já existem continuam funcionando e podem mudar de servidor.</p>
-</section>`
+</section>
+<form class="card" method="post" action="/admin/pedidos/${r.id}/limites">
+<h2>Mudar os limites</h2>
+<p class="muted">Vale na hora, sem precisar de um código novo. O que já passou de um limite menor continua funcionando; só não cresce mais.</p>
+${fields(current)}
+<div class="actions"><button type="submit" class="secondary">Salvar os limites</button></div>
+</form>`
         : "";
   return page(
     r.community,

@@ -521,6 +521,48 @@ async fn the_operator_api_adds_rotates_and_revokes_tenants_without_a_restart() {
         (StatusCode::INSUFFICIENT_STORAGE, "quota_exceeded")
     );
 
+    // Limits change in place; a limit left out is lifted.
+    let (s, v) = operator_json(
+        &app,
+        "PUT",
+        "/operator/v1/tenants/ana/limits",
+        Some(OPERATOR),
+        serde_json::json!({ "max_log_bytes": 2_000 }),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert!(v["max_communities"].is_null());
+    assert_eq!(create_as(&app, &mut h, fresh).await.0, StatusCode::OK);
+    let (s, v) = operator_json(
+        &app,
+        "PUT",
+        "/operator/v1/tenants/ana/limits",
+        Some(OPERATOR),
+        serde_json::json!({ "max_communities": 2, "max_log_bytes": 2_000 }),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    let mut k = Fixture::new(64);
+    let (s, v) = create_as(&app, &mut k, fresh).await;
+    assert_eq!(
+        (s, code(&v)),
+        (StatusCode::INSUFFICIENT_STORAGE, "quota_exceeded")
+    );
+    for (name, status) in [
+        ("acme", StatusCode::CONFLICT),
+        ("nobody", StatusCode::NOT_FOUND),
+    ] {
+        let (s, _) = operator_json(
+            &app,
+            "PUT",
+            &format!("/operator/v1/tenants/{name}/limits"),
+            Some(OPERATOR),
+            serde_json::json!({}),
+        )
+        .await;
+        assert_eq!(s, status);
+    }
+
     // Config tenants are changed in the config file, not here.
     let (s, _) = operator(&app, "DELETE", "/operator/v1/tenants/acme", Some(OPERATOR)).await;
     assert_eq!(s, StatusCode::CONFLICT);
@@ -539,7 +581,7 @@ async fn the_operator_api_adds_rotates_and_revokes_tenants_without_a_restart() {
     assert_eq!(v["tenants"][0]["source"], "config");
     assert_eq!(v["tenants"][1]["name"], "ana");
     assert_eq!(v["tenants"][1]["source"], "operator");
-    assert_eq!(v["tenants"][1]["communities"], 1);
+    assert_eq!(v["tenants"][1]["communities"], 2);
     assert!(v["tenants"][1]["revoked_at"].is_null());
 }
 

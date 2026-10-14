@@ -114,6 +114,7 @@ const FLASH: Record<string, { kind: "good" | "bad"; text: string }> = {
   aprovado: { kind: "good", text: "Aprovado. O código e o passo a passo foram enviados por email." },
   recusado: { kind: "good", text: "Recusado. A pessoa foi avisada por email." },
   "novo-codigo": { kind: "good", text: "Código novo enviado por email. O anterior não funciona mais." },
+  limites: { kind: "good", text: "Limites atualizados no servidor. Valem a partir de agora." },
   revogado: { kind: "good", text: "Código revogado. As comunidades que já existem continuam funcionando." },
 };
 
@@ -227,7 +228,8 @@ export function createHandler(deps: Deps) {
       return Number.isInteger(v) && v >= min && v <= max ? v : fallback;
     };
     return {
-      maxCommunities: n("max_communities", 1, 50, cfg.defaults.maxCommunities),
+      // Empty: no limit on how many communities the code creates.
+      maxCommunities: form.get("max_communities")?.trim() ? n("max_communities", 1, 1000, cfg.defaults.maxCommunities ?? 1) : null,
       maxLogBytes: n("max_log_mb", 16, 65536, cfg.defaults.maxLogBytes / MiB) * MiB,
       maxBlobBytes: n("max_files_mb", 0, 65536, cfg.defaults.maxBlobBytes / MiB) * MiB,
     };
@@ -279,7 +281,7 @@ export function createHandler(deps: Deps) {
       if ((from !== "approved" && from !== "revoked") || !db.transition(id, [from], "approving", t)) {
         return fail(409, "Só dá para enviar um código novo para pedidos aprovados.");
       }
-      const limits = { maxCommunities: r.maxCommunities ?? cfg.defaults.maxCommunities, maxLogBytes: r.maxLogBytes ?? cfg.defaults.maxLogBytes, maxBlobBytes: r.maxBlobBytes ?? cfg.defaults.maxBlobBytes };
+      const limits = { maxCommunities: r.maxCommunities, maxLogBytes: r.maxLogBytes ?? cfg.defaults.maxLogBytes, maxBlobBytes: r.maxBlobBytes ?? cfg.defaults.maxBlobBytes };
       const error = await issue(r, limits, true);
       if (error) {
         // The node already replaced (then revoked) the old code.
@@ -288,6 +290,18 @@ export function createHandler(deps: Deps) {
       }
       log(`pedido ${id}: código novo enviado`);
       return redirect(res, `/admin/pedidos/${id}?ok=novo-codigo`);
+    }
+    if (action === "limites") {
+      if ((r.status !== "approved" && r.status !== "revoked") || !r.tenant) return fail(409, "Só dá para mudar os limites de pedidos aprovados.");
+      const limits = limitsFrom(form);
+      try {
+        await node.setLimits(r.tenant, limits);
+      } catch (e) {
+        return fail(502, (e as Error).message);
+      }
+      db.setLimits(id, limits);
+      log(`pedido ${id}: limites mudados`);
+      return redirect(res, `/admin/pedidos/${id}?ok=limites`);
     }
     if (action === "revogar") {
       if (r.status !== "approved" || !r.tenant) return fail(409, "Só dá para revogar pedidos aprovados.");

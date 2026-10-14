@@ -602,6 +602,15 @@ pub fn set_tenant_token(c: &Connection, name: &str, token_sha256: &str) -> rusql
     )? == 1)
 }
 
+/// Replaces a stored tenant's limits; `None` means no limit (or, for blobs,
+/// the node's default).
+pub fn set_tenant_limits(c: &Connection, t: &crate::app::Tenant) -> rusqlite::Result<bool> {
+    Ok(c.execute(
+        "UPDATE tenants SET max_communities = ?2, max_log_bytes = ?3, max_blob_bytes_total = ?4 WHERE name = ?1",
+        params![t.name, t.max_communities, t.max_log_bytes, t.max_blob_bytes_total],
+    )? == 1)
+}
+
 pub fn revoke_tenant(c: &Connection, name: &str, now: u64) -> rusqlite::Result<bool> {
     Ok(c.execute(
         "UPDATE tenants SET revoked_at = COALESCE(revoked_at, ?2) WHERE name = ?1",

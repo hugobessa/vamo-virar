@@ -108,6 +108,7 @@ Servida apenas quando `operator_listen` está definido, somente nesse endereço,
 | `GET /operator/v1/tenants` | Por cliente: comunidades, bytes de log e de anexos, os limites configurados e de onde ele vem (`source`: `config` ou `operator`) |
 | `POST /operator/v1/tenants` | Cria um cliente sem reiniciar o nó. Corpo JSON: `name` (1 a 64 caracteres) e, opcionais, `max_communities`, `max_log_bytes`, `max_blob_bytes_total`. Responde `201` com o `token`, a única vez que ele aparece (o nó guarda só o SHA-256); `409 exists` se o nome já existe |
 | `POST /operator/v1/tenants/{name}/token` | Troca o token de um cliente criado pela API (perdido ou vazado) e desfaz uma revogação. O token antigo para de funcionar na hora |
+| `PUT /operator/v1/tenants/{name}/limits` | Troca os limites de um cliente criado pela API, na hora. Corpo JSON com `max_communities`, `max_log_bytes`, `max_blob_bytes_total`; o que faltar ou vier `null` fica sem limite (anexos: o padrão do nó). O que já passou de um limite menor continua funcionando, só não cresce. `409 config_tenant` para clientes do arquivo de configuração |
 | `DELETE /operator/v1/tenants/{name}` | Revoga o token de um cliente criado pela API: ele não cria nem restaura mais comunidades. As que já existem continuam funcionando, com os mesmos limites, e podem se mudar |
 | `POST /operator/v1/communities/{id}/suspend` | Escritas são recusadas com `403 suspended`; leituras, exportação e `migrate` continuam funcionando |
 | `POST /operator/v1/communities/{id}/resume` | Desfaz uma suspensão |

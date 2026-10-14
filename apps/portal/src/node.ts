@@ -6,6 +6,8 @@ import type { Limits } from "./config.js";
 export interface NodeOperator {
   /** Makes the tenant, or gives an existing one a fresh code. Returns the code. */
   issueToken(tenant: string, limits: Limits): Promise<string>;
+  /** Replaces the tenant's limits; a null community limit lifts it. */
+  setLimits(tenant: string, limits: Limits): Promise<void>;
   /** The tenant's code stops creating communities; its communities keep working. */
   revoke(tenant: string): Promise<void>;
 }
@@ -40,21 +42,30 @@ export function nodeOperator(baseUrl: string, token: string, fetchImpl: typeof f
   const fail = (what: string, r: { status: number; json: Record<string, unknown> }) =>
     new NodeError(`${what}: o nó respondeu ${r.status} ${String(r.json.code ?? "")} ${String(r.json.detail ?? "")}`.trim());
 
+  const body = (limits: Limits) => ({
+    max_communities: limits.maxCommunities,
+    max_log_bytes: limits.maxLogBytes,
+    max_blob_bytes_total: limits.maxBlobBytes,
+  });
+
+  async function setLimits(tenant: string, limits: Limits) {
+    const r = await call("PUT", `/operator/v1/tenants/${encodeURIComponent(tenant)}/limits`, body(limits));
+    if (r.status !== 200) throw fail("mudar os limites", r);
+  }
+
   return {
     async issueToken(tenant, limits) {
-      const made = await call("POST", "/operator/v1/tenants", {
-        name: tenant,
-        max_communities: limits.maxCommunities,
-        max_log_bytes: limits.maxLogBytes,
-        max_blob_bytes_total: limits.maxBlobBytes,
-      });
+      const made = await call("POST", "/operator/v1/tenants", { name: tenant, ...body(limits) });
       if (made.status === 201 && typeof made.json.token === "string") return made.json.token;
       if (made.status !== 409) throw fail("criar o acesso", made);
-      // Already there (an earlier attempt, or a revoked tenant): new code.
+      // Already there (an earlier attempt, or a revoked tenant): these
+      // limits, and a new code.
+      await setLimits(tenant, limits);
       const fresh = await call("POST", `/operator/v1/tenants/${encodeURIComponent(tenant)}/token`);
       if (fresh.status === 200 && typeof fresh.json.token === "string") return fresh.json.token;
       throw fail("gerar um código novo", fresh);
     },
+    setLimits,
     async revoke(tenant) {
       const r = await call("DELETE", `/operator/v1/tenants/${encodeURIComponent(tenant)}`);
       if (r.status !== 200 && r.status !== 404) throw fail("revogar o acesso", r);
