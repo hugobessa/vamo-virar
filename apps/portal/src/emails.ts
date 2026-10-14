@@ -68,8 +68,8 @@ Aprovar ou recusar: ${link}
 }
 
 export function approvedEmail(cfg: PortalConfig, r: AccessRequest, token: string, again = false): Mail {
-  const n = r.maxCommunities ?? 1;
-  const allowance = n === 1 ? "1 comunidade" : `até ${n} comunidades`;
+  const n = r.maxCommunities;
+  const allowance = n === null ? "quantas comunidades precisar" : n === 1 ? "1 comunidade" : `até ${n} comunidades`;
   const space = `${megabytes(r.maxLogBytes)} para as informações e ${megabytes(r.maxBlobBytes)} para arquivos anexados, em cada comunidade`;
   const intro = again
     ? "Aqui está um novo código de criação para o servidor do Vamo Virar. O código anterior não funciona mais."

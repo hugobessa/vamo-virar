@@ -77,10 +77,18 @@ describe.skipIf(!HAVE_NODE)("against a real node", () => {
     expect(t).toMatchObject({ name: "pedido-1", source: "operator", max_communities: 2, max_log_bytes_per_community: limits.maxLogBytes, max_blob_bytes_total_per_community: limits.maxBlobBytes });
 
     // Issuing again for the same tenant replaces the code.
-    const second = await node.issueToken("pedido-1", limits);
+    let second = await node.issueToken("pedido-1", limits);
     expect(second).not.toBe(first);
     expect(await provisionStatus(first)).toBe(403);
     expect(await provisionStatus(second)).not.toBe(403);
+
+    // Limits change in place; issuing again applies the given limits too.
+    await node.setLimits("pedido-1", { ...limits, maxCommunities: null });
+    expect((await tenants())[0]).toMatchObject({ max_communities: null });
+    await node.issueToken("pedido-1", { ...limits, maxCommunities: 5 });
+    expect((await tenants())[0]).toMatchObject({ max_communities: 5 });
+    await expect(node.setLimits("nobody", limits)).rejects.toThrow(NodeError);
+    second = await node.issueToken("pedido-1", limits);
 
     await node.revoke("pedido-1");
     expect(await provisionStatus(second)).toBe(403);

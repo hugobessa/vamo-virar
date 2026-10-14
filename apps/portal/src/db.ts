@@ -10,6 +10,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type { Limits } from "./config.js";
 
 export type Status = "unverified" | "pending" | "approving" | "approved" | "rejected" | "revoked";
 
@@ -186,6 +187,14 @@ export class Requests {
     const res = this.db
       .prepare(`UPDATE requests SET ${sets.join(", ")} WHERE id = ? AND status IN (${marks})`)
       .run(...values, id, ...from);
+    return Number(res.changes) === 1;
+  }
+
+  /** Records limits changed on the node for an approved (or revoked) request. */
+  setLimits(id: number, limits: Limits): boolean {
+    const res = this.db
+      .prepare("UPDATE requests SET max_communities = ?, max_log_bytes = ?, max_blob_bytes = ? WHERE id = ? AND status IN ('approved', 'revoked')")
+      .run(limits.maxCommunities, limits.maxLogBytes, limits.maxBlobBytes, id);
     return Number(res.changes) === 1;
   }
 

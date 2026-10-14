@@ -18,9 +18,14 @@ class FakeNode implements NodeOperator {
   async issueToken(tenant: string, limits: Limits) {
     this.calls.push(`issue ${tenant}`);
     const token = `token-${++this.n}`;
-    const existing = this.tenants.get(tenant);
-    this.tenants.set(tenant, { token, limits: existing?.limits ?? limits, revoked: false });
+    this.tenants.set(tenant, { token, limits, revoked: false });
     return token;
+  }
+  async setLimits(tenant: string, limits: Limits) {
+    this.calls.push(`limits ${tenant}`);
+    const t = this.tenants.get(tenant);
+    if (!t) throw new Error("no such tenant");
+    t.limits = limits;
   }
   async revoke(tenant: string) {
     this.calls.push(`revoke ${tenant}`);
@@ -282,6 +287,35 @@ describe("admin", () => {
     expect((await post(`/admin/pedidos/${id}/novo-codigo`, {}, { cookie })).status).toBe(303);
     expect(db.get(id)!.status).toBe("approved");
     expect(node.tenants.get(`pedido-${id}`)!.revoked).toBe(false);
+  });
+
+  it("approves with no community limit when the field is empty, and changes limits later", async () => {
+    const id = await confirmedRequest();
+    const cookie = await adminCookie();
+    const page = await (await fetch(`${base}/admin/pedidos/${id}`, { headers: { cookie } })).text();
+    expect(page).toContain('placeholder="sem limite" value=""');
+    await post(`/admin/pedidos/${id}/aprovar`, { max_communities: "", max_log_mb: "128", max_files_mb: "256" }, { cookie });
+    expect(node.tenants.get(`pedido-${id}`)!.limits.maxCommunities).toBeNull();
+    expect(db.get(id)!.maxCommunities).toBeNull();
+    expect(outbox.last("ana@example.org")!.text).toContain("quantas comunidades precisar");
+    expect(await (await fetch(`${base}/admin/pedidos/${id}`, { headers: { cookie } })).text()).toContain("Mudar os limites");
+
+    const res = await post(`/admin/pedidos/${id}/limites`, { max_communities: "3", max_log_mb: "128", max_files_mb: "256" }, { cookie });
+    expect(res.headers.get("location")).toBe(`/admin/pedidos/${id}?ok=limites`);
+    expect(node.tenants.get(`pedido-${id}`)!.limits).toEqual({ maxCommunities: 3, maxLogBytes: 128 * 1024 * 1024, maxBlobBytes: 256 * 1024 * 1024 });
+    expect(db.get(id)!.maxCommunities).toBe(3);
+
+    // A new code keeps the limits the request has now.
+    await post(`/admin/pedidos/${id}/novo-codigo`, {}, { cookie });
+    expect(node.tenants.get(`pedido-${id}`)!.limits.maxCommunities).toBe(3);
+    expect(outbox.last("ana@example.org")!.text).toContain("até 3 comunidades");
+  });
+
+  it("changes limits only for approved requests", async () => {
+    const id = await confirmedRequest();
+    const cookie = await adminCookie();
+    expect((await post(`/admin/pedidos/${id}/limites`, { max_communities: "3" }, { cookie })).status).toBe(409);
+    expect(node.calls).toEqual([]);
   });
 
   it("rejects with a message", async () => {

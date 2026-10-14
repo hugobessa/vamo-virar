@@ -278,7 +278,7 @@ crie no Cloudflare Zero Trust uma **Access application** para
 | `PORTAL_MAILGUN_API_KEY`, `PORTAL_MAILGUN_DOMAIN` | nenhum | envia pela API HTTP do Mailgun (porta 443), para quem bloqueia SMTP; tem prioridade sobre o SMTP |
 | `PORTAL_MAILGUN_API_URL` | `https://api.mailgun.net` | `https://api.eu.mailgun.net` para domínios na região EU |
 | `PORTAL_SMTP_URL` | nenhum | `smtps://usuário:senha@host:465` (caracteres especiais codificados, `@` vira `%40`); sem ele nem Mailgun, os emails vão para o log (só para desenvolvimento) |
-| `PORTAL_DEFAULT_MAX_COMMUNITIES` | `1` | valor inicial do formulário de aprovação |
+| `PORTAL_DEFAULT_MAX_COMMUNITIES` | sem limite | valor inicial do formulário de aprovação; vazio deixa o campo em branco (sem limite). Dá para mudar depois na página do pedido |
 | `PORTAL_DEFAULT_MAX_LOG_MB` | `256` | espaço para as informações de cada comunidade |
 | `PORTAL_DEFAULT_MAX_FILES_MB` | `512` | espaço para arquivos anexados de cada comunidade |
 | `PORTAL_TRUST_PROXY` | `false` | pega o endereço do cliente do último `X-Forwarded-For` (o Caddy incluído o define) |

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
@@ -35,6 +35,7 @@ pub fn router(app: Shared) -> Router {
         .route("/operator/v1/tenants", get(tenants).post(add_tenant))
         .route("/operator/v1/tenants/{name}", delete(revoke_tenant))
         .route("/operator/v1/tenants/{name}/token", post(new_tenant_token))
+        .route("/operator/v1/tenants/{name}/limits", put(set_tenant_limits))
         .route("/operator/v1/metrics", get(metrics))
         .with_state(app)
 }
@@ -318,6 +319,54 @@ async fn new_tenant_token(
     tx.commit()?;
     tracing::info!(tenant = %name, "operator replaced tenant token");
     Ok(Json(json!({ "name": name, "token": token })).into_response())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TenantLimits {
+    max_communities: Option<u64>,
+    max_log_bytes: Option<u64>,
+    max_blob_bytes_total: Option<u64>,
+}
+
+/// Replaces all of a tenant's limits; a limit left out or `null` is lifted.
+/// Communities already over a new limit keep working; only growth stops.
+async fn set_tenant_limits(
+    State(app): State<Shared>,
+    Path(name): Path<String>,
+    headers: HeaderMap,
+    body: Option<Json<TenantLimits>>,
+) -> Result<Response, OpError> {
+    authorize(&app, &headers)?;
+    stored_only(&app, &name)?;
+    let Some(Json(req)) = body else {
+        return Err(OpError(
+            StatusCode::BAD_REQUEST,
+            "malformed",
+            "expected a JSON body with the limits".into(),
+        ));
+    };
+    let tenant = Tenant {
+        name,
+        token_sha256: String::new(),
+        max_communities: req.max_communities,
+        max_log_bytes: req.max_log_bytes,
+        max_blob_bytes_total: req.max_blob_bytes_total,
+    };
+    let mut st = app.store.lock().unwrap();
+    let tx = st.tx()?;
+    if !store::set_tenant_limits(&tx, &tenant)? {
+        return Err(no_tenant());
+    }
+    tx.commit()?;
+    tracing::info!(tenant = %tenant.name, "operator changed tenant limits");
+    Ok(Json(json!({
+        "name": tenant.name,
+        "max_communities": tenant.max_communities,
+        "max_log_bytes": tenant.max_log_bytes,
+        "max_blob_bytes_total": tenant.max_blob_bytes_total,
+    }))
+    .into_response())
 }
 
 /// Stops a tenant's token from creating or restoring communities. Its

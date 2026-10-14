@@ -3,7 +3,8 @@
 import { randomBytes } from "node:crypto";
 
 export interface Limits {
-  maxCommunities: number;
+  /** Communities one code may create; null means no limit. */
+  maxCommunities: number | null;
   /** Log bytes per community (the node's `max_log_bytes`). */
   maxLogBytes: number;
   /** Attachment bytes per community (the node's `max_blob_bytes_total`). */
@@ -83,7 +84,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PortalConfig {
     port: int(env, "PORTAL_PORT", 3000),
     trustProxy: ["1", "true", "yes"].includes(env.PORTAL_TRUST_PROXY?.trim() ?? ""),
     defaults: {
-      maxCommunities: int(env, "PORTAL_DEFAULT_MAX_COMMUNITIES", 1),
+      maxCommunities: env.PORTAL_DEFAULT_MAX_COMMUNITIES?.trim() ? int(env, "PORTAL_DEFAULT_MAX_COMMUNITIES", 0) || null : null,
       maxLogBytes: int(env, "PORTAL_DEFAULT_MAX_LOG_MB", 256) * MiB,
       maxBlobBytes: int(env, "PORTAL_DEFAULT_MAX_FILES_MB", 512) * MiB,
     },
