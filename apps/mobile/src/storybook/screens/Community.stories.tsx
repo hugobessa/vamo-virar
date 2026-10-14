@@ -1,46 +1,48 @@
 import type { Meta, StoryObj } from "@storybook/react-native-web-vite";
-import Community from "../../app/c/[id]/index";
 import { userEvent, within } from "storybook/test";
+import EventsRoute from "../../app/c/[id]/(tabs)/index";
+import MeRoute from "../../app/c/[id]/(tabs)/me";
+import PeopleRoute from "../../app/c/[id]/(tabs)/people";
 import { COMMUNITY_NAME } from "../scenario";
-import { makeEntry, openTab, screen } from "./helpers";
+import { makeEntry, screen } from "./helpers";
 
 const meta: Meta = { title: "Telas/Comunidade", parameters: { layout: "fullscreen" } };
 export default meta;
 type Story = StoryObj;
 
-const params = { id: "c1" };
-const community = (o: Parameters<typeof makeEntry>[0] = {}, extra: Partial<Story> = {}): Story => ({
-  ...screen(Community, COMMUNITY_NAME, { entries: [makeEntry({ id: "c1", ...o })], params }),
+type Tab = "index" | "people" | "me";
+const ROUTES = { index: EventsRoute, people: PeopleRoute, me: MeRoute };
+/** One section of the community, with the tab bar under it. */
+const section = (tab: Tab, o: Parameters<typeof makeEntry>[0] = {}, extra: Partial<Story> = {}): Story => ({
+  ...screen(ROUTES[tab], COMMUNITY_NAME, { entries: [makeEntry({ id: "c1", ...o })], params: { id: "c1" }, tab }),
   ...extra,
 });
 
-export const EventosComoAdmin: Story = community();
-export const EventosComoMembro: Story = community({ me: "caio" });
-export const PessoasComoAdmin: Story = community({ joinRequests: true }, { play: openTab("Pessoas") });
-export const DenunciasComoAdmin: Story = community({ reports: true }, { play: openTab("Pessoas") });
-export const PessoasComoModeracao: Story = community({ me: "duda", moderator: true, reports: true, joinRequests: true }, { play: openTab("Pessoas") });
-export const PessoasComoMembro: Story = community({ me: "caio" }, { play: openTab("Pessoas") });
-export const DenunciarComoMembro: Story = community(
+/** Ana (coordination) has the administration in the header; the tab bar is the same for everyone. */
+export const EventosComoAdmin: Story = section("index", { joinRequests: true, reports: true });
+export const EventosComoMembro: Story = section("index", { me: "caio" });
+/** The people tab is the same for everyone: names, roles and "Denunciar". Roles and blocking are in the administration. */
+export const PessoasComoAdmin: Story = section("people");
+export const PessoasComoMembro: Story = section("people", { me: "caio" });
+export const DenunciarComoMembro: Story = section(
+  "people",
   { me: "caio" },
   {
-    play: async (ctx) => {
-      await openTab("Pessoas")(ctx);
-      const canvas = within(ctx.canvasElement);
+    play: async ({ canvasElement }) => {
+      const canvas = within(canvasElement);
       await userEvent.click(await canvas.findByTestId("report-duda"));
       await userEvent.click(await canvas.findByTestId("report-reason-harassment"));
     },
   },
 );
-export const EuComoAdmin: Story = community({}, { play: openTab("Eu") });
-export const EuComoMembro: Story = community({ me: "caio" }, { play: openTab("Eu") });
+export const EuComoAdmin: Story = section("me");
+/** A member keeps the way to take over a lost coordination under "Avançado". */
+export const EuComoMembro: Story = section("me", { me: "caio" });
 /** An admin marked the community for deletion: banner for everyone, nothing can change. */
-export const MarcadaParaExclusao: Story = community({ me: "caio", disabledBy: "ana" });
-export const MarcadaParaExclusaoPessoas: Story = community({ me: "caio", disabledBy: "ana" }, { play: openTab("Pessoas") });
-/** Ana (admin) can disable it from the "Eu" tab: see EuComoAdmin. Another admin sees "Reativar". */
-export const ReativarComoOutraAdmin: Story = community({ me: "ana", secondAdmin: true, disabledBy: "bia" }, { play: openTab("Eu") });
-/** The admin who disabled it cannot re-enable it. */
-export const DesativadaPorMim: Story = community({ me: "ana", secondAdmin: true, disabledBy: "ana" }, { play: openTab("Eu") });
-export const SemConexao: Story = community({ connectivity: "offline", pending: 3 });
-export const MudancaRecusada: Story = community({ rejections: [{ type: "participation.accept", reason: "capacity_full" }] });
-export const AguardandoAprovacao: Story = community({ status: "joining" });
-export const PedidoNaoAceito: Story = community({ status: "rejected" });
+export const MarcadaParaExclusao: Story = section("index", { me: "caio", disabledBy: "ana" });
+export const MarcadaParaExclusaoPessoas: Story = section("people", { me: "caio", disabledBy: "ana" });
+export const SemConexao: Story = section("index", { connectivity: "offline", pending: 3 });
+export const MudancaRecusada: Story = section("index", { rejections: [{ type: "participation.accept", reason: "capacity_full" }] });
+/** Before the community is in there are no sections: the screen stands alone. */
+export const AguardandoAprovacao: Story = screen(EventsRoute, "Pedido enviado", { entries: [makeEntry({ id: "c1", status: "joining" })], params: { id: "c1" } });
+export const PedidoNaoAceito: Story = screen(EventsRoute, "Pedido não aceito", { entries: [makeEntry({ id: "c1", status: "rejected" })], params: { id: "c1" } });

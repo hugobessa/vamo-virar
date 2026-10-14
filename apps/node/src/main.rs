@@ -20,7 +20,8 @@ USAGE:
 serve (default)  Run the node. Options override the config file; the
                  environment variables VV_LISTEN, VV_DATA_DIR,
                  VV_PROVISIONING_TOKEN, VV_TRUST_FORWARDED_FOR,
-                 VV_OPERATOR_LISTEN and VV_OPERATOR_TOKEN override both.
+                 VV_OPERATOR_LISTEN, VV_OPERATOR_TOKEN, VV_PUSH_GATEWAY
+                 and VV_PUSH_TOKEN override both.
 health           Exit 0 if the node at --url (default http://127.0.0.1:8787)
                  answers. For container health checks.
 backup           Write a consistent copy of the node's database to --out,
@@ -96,6 +97,16 @@ fn parse_args() -> Result<Args, String> {
     if let Ok(t) = std::env::var("VV_OPERATOR_TOKEN") {
         if !t.is_empty() {
             config.operator_token = Some(t);
+        }
+    }
+    if let Ok(v) = std::env::var("VV_PUSH_GATEWAY") {
+        if !v.is_empty() {
+            config.push_gateway = Some(v);
+        }
+    }
+    if let Ok(t) = std::env::var("VV_PUSH_TOKEN") {
+        if !t.is_empty() {
+            config.push_access_token = Some(t);
         }
     }
     config.validate()?;

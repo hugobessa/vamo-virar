@@ -9,4 +9,4 @@ export type { DeviceLink, LinkBundle, LinkEntry, LinkErrorCode } from "./link.js
 export { offerDeviceLink } from "./offer.js";
 export type { LinkOffer } from "./offer.js";
 export { Replica } from "./replica.js";
-export type { IncomingProbe, LinkedDevice, OutboxItem, MemberReport, PendingJoin, ReplicaData, SentProbe, Status, SyncReport, TaskMarks } from "./replica.js";
+export type { IncomingProbe, LinkedDevice, NoticeMarks, OutboxItem, MemberReport, PendingJoin, PendingPing, ReplicaData, SentProbe, Status, SyncReport, TaskMarks } from "./replica.js";

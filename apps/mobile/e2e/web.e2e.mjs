@@ -133,7 +133,8 @@ try {
   });
 
   await step("Ana creates an invite link", async () => {
-    await ana.getByRole("tab", { name: "Pessoas" }).click();
+    // Letting people in is on the administration screen, which only the coordination and the moderation see.
+    await byId(ana, "open-admin").click();
     await byId(ana, "create-invite").click();
     invite = await byId(ana, "invite-text").textContent({ timeout: 10000 });
     if (!invite?.startsWith("https://web.vamovirar.app/join#")) throw new Error(`bad invite: ${invite}`);
@@ -151,12 +152,15 @@ try {
   });
 
   await step("Ana accepts Bia", async () => {
-    await ana.getByRole("tab", { name: "Ações" }).click();
-    await ana.getByRole("tab", { name: "Pessoas" }).click(); // reloads requests
-    await ana.getByText("Bia").first().waitFor({ timeout: 10000 });
+    // The administration screen is still in front; reloading it asks the server for the requests again.
+    await ana.reload();
+    await ana.getByText("Bia").first().waitFor({ timeout: 15000 });
     await shot(ana, "06-request");
     await ana.getByRole("button", { name: "Aceitar" }).first().click();
     await ana.getByText("Nenhum pedido agora.").waitFor({ timeout: 15000 });
+    // Back to the community, where the next steps expect Ana to be.
+    await ana.goto(appUrl);
+    await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
   });
 
   await step("Bia is in", async () => {
@@ -170,9 +174,10 @@ try {
     await ana.getByRole("tab", { name: "Ações" }).click();
     await byId(ana, "new-event").click();
     await byId(ana, "event-title").fill("Plenária no Derby");
-    await byId(ana, "event-place").fill("Praça do Derby");
-    await byId(ana, "event-area").fill("recife");
+    // The built-in city list answers at once; the name stays editable after picking.
+    await byId(ana, "event-place").fill("recife");
     await byId(ana, "area-Recife, PE").click();
+    await byId(ana, "event-place").fill("Praça do Derby");
     await shot(ana, "08-new-event");
     await byId(ana, "event-save").click();
     await seen(ana, "Plenária no Derby").first().waitFor();
@@ -246,9 +251,12 @@ try {
     await bia.getByRole("checkbox").filter({ hasText: "cabo P10" }).last().click({ timeout: 15000 });
     await seen(bia, "1 de 2 itens feitos").first().waitFor({ timeout: 15000 });
     await seen(bia, "A fazer").first().waitFor({ timeout: 15000 });
-    await byId(bia, "comment-text").last().fill("Pego a caixa com o **Zé** na quinta.");
+    // Typing "@an" offers Ana; picking her puts "@Ana " in, and the sent comment carries her id.
+    await byId(bia, "comment-text").last().fill("Pego a caixa com o **Zé** na quinta, @an");
+    await byId(bia, "comment-text-suggestions").last().getByRole("button", { name: "@Ana" }).click({ timeout: 15000 });
     await byId(bia, "comment-send").last().click();
     await seen(bia, "Zé").first().waitFor({ timeout: 15000 });
+    await bia.getByText("@Ana", { exact: true }).filter({ visible: true }).first().waitFor({ timeout: 15000 });
     await byId(bia, "status-in_progress").last().click();
     await byId(bia, "status-confirm").last().click();
     await seen(bia, "Em andamento").first().waitFor({ timeout: 15000 });
@@ -258,13 +266,23 @@ try {
     await bia.getByText("Tudo em dia").last().waitFor({ timeout: 15000 });
   });
 
-  await step("Ana sees Bia on the task", async () => {
+  await step("Ana sees Bia on the task, and the mention in her notifications", async () => {
     await ana.reload();
-    await ana.getByRole("tab", { name: "Tarefas" }).last().click();
-    await seen(ana, "Em andamento · 1").first().waitFor({ timeout: 20000 });
+    // The bell counts the unread mention; the list says who and where.
+    await ana.getByRole("button", { name: "Notificações (1)" }).last().waitFor({ timeout: 20000 });
+    await byId(ana, "notifications-open").last().click();
+    await seen(ana, "Bia mencionou você").first().waitFor({ timeout: 15000 });
+    await seen(ana, "Levar a caixa de som").first().waitFor({ timeout: 15000 });
+    await shot(ana, "12e-notifications");
     await seen(ana, "Levar a caixa de som").first().click();
     await seen(ana, "Pego a caixa com o").first().waitFor({ timeout: 15000 });
     await shot(ana, "12e-task-as-admin");
+    // Seen: back on the community, the bell is quiet.
+    await ana.goto(appUrl);
+    await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
+    await ana.getByRole("button", { name: "Notificações", exact: true }).last().waitFor({ timeout: 15000 });
+    await ana.getByRole("tab", { name: "Tarefas" }).last().click();
+    await seen(ana, "Em andamento · 1").first().waitFor({ timeout: 20000 });
     // Back to the action page, where the next steps expect Ana to be.
     await ana.goto(appUrl);
     await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
@@ -326,8 +344,9 @@ try {
   await step("Ana moves the community to another server", async () => {
     await ana.goto(appUrl);
     await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
-    await ana.getByRole("tab", { name: "Eu" }).last().click();
-    await byId(ana, "advanced").last().click(); // the server card sits under "Avançado"
+    // The server card is in the administration, under "Ajustes".
+    await byId(ana, "open-admin").last().click();
+    await ana.getByRole("tab", { name: "Ajustes" }).last().click();
     await byId(ana, "move-address").last().fill(api2Url);
     await byId(ana, "move-setup-code").last().fill(TOKEN);
     await shot(ana, "18-move");
@@ -343,7 +362,8 @@ try {
     await byId(bia, "my-name").last().fill("Bia Mudou");
     await bia.getByText("Salvar", { exact: true }).last().click();
     await bia.getByText("Tudo em dia").last().waitFor({ timeout: 20000 });
-    await ana.reload();
+    // Ana is still in the administration; the people tab of the community lists everyone.
+    await ana.goto(appUrl);
     await ana.getByText("Coletivo Recife").first().click({ timeout: 15000 });
     await ana.getByRole("tab", { name: "Pessoas" }).last().click();
     await ana.getByText("Bia Mudou").last().waitFor({ timeout: 20000 });

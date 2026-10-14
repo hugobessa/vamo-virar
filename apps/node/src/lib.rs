@@ -5,6 +5,7 @@
 pub mod api;
 pub mod app;
 pub mod operator;
+pub mod push;
 pub mod sequencer;
 pub mod store;
 

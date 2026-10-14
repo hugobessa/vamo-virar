@@ -733,6 +733,11 @@ stateDiagram-v2
 Corpo de todo `participation.*`: `{event_id, member_id}` (`member_id`
 implícito = autor nas ações sobre si mesmo), mais `note` opcional.
 
+`Participation {status, updated_seq, by?}`: `by` é quem da organização fez a
+última mudança (`invite`, `revoke`, `approve`, `reject`) e fica **ausente**
+depois de uma ação da própria pessoa. Serve para dizer a quem foi convidado
+quem convidou (§14).
+
 Regras:
 
 - Todas as transições exigem `status == scheduled` no evento. Quando um evento
@@ -799,6 +804,7 @@ Task {
   priority: "low" | "normal" | "high" | "urgent" = "normal",
   due_at?: u64,
   assignee?: member_id,          # a pessoa responsável; ausente ⇔ status awaiting_volunteer (enquanto aberta)
+  assigned?: {by, seq},          # quem definiu assignee e em que seq; presente exatamente quando assignee está
   volunteers: [member_id],       # quem ajuda; ordenado, nunca inclui assignee; ≤ 20
   attachments: [Attachment],     # ≤ 10
   comments: [Comment],           # em ordem de seq; ≤ 200
@@ -807,8 +813,14 @@ Task {
   closed_at?: u64                # relógio de retenção quando ficou done ou cancelled
 }
 Attachment { blob_id: bytes(32), key: bytes(32), nonce: bytes(24), name: text(1..120), mime: text(1..100), size: u64 }
-Comment    { comment_id: bytes(16), author: member_id, body: text(1..2000), seq, edited_seq? }
+Comment    { comment_id: bytes(16), author: member_id, body: text(1..2000), seq, edited_seq?, mentions? }
 ```
+
+`mentions` são as pessoas chamadas com `@` no corpo, como ids (não nomes,
+para sobreviver a renomeações): membros ativos, ordenados, sem repetição,
+≤ 20; **ausente** quando não há nenhuma. O app extrai os ids do texto ao
+enviar; `task.comment_edit` substitui a lista inteira. A notificação para
+quem foi mencionado é tratada na §14.
 
 **Quem manda numa tarefa ("gestão")**: admins e moderadores, sempre; numa
 tarefa de evento, também os `organizers` desse evento (enquanto o evento
@@ -830,8 +842,8 @@ tarefa de evento, quem está `confirmed` ou `reconfirm` nele. Uma tarefa
 | `task.join` | `{task_id, member_id?}` | qualquer membro, a si próprio; gestão, qualquer membro ativo | aberta; não está na tarefa; `capacity_full` com 20 |
 | `task.leave` | `{task_id, member_id?}` | a própria pessoa, ou gestão | aberta; está em `volunteers` |
 | `task.status` | `{task_id, status, note?}` | ver abaixo | ver abaixo |
-| `task.comment` | `{task_id, comment_id, body}` | quem vê a tarefa | `comment_id` não usado; `capacity_full` com 200 |
-| `task.comment_edit` | `{task_id, comment_id, body}` | o autor do comentário | o comentário existe |
+| `task.comment` | `{task_id, comment_id, body, mentions?}` | quem vê a tarefa | `comment_id` não usado; `capacity_full` com 200; `mentions` ativos (`unknown_target`), ≤ 20 |
+| `task.comment_edit` | `{task_id, comment_id, body, mentions?}` | o autor do comentário | o comentário existe |
 | `task.comment_delete` | `{task_id, comment_id}` | o autor, ou a gestão | o comentário existe |
 | `task.remove` | `{task_id, reason?}` | gestão | a tarefa existe, em qualquer estado. Apaga tudo |
 
@@ -898,7 +910,7 @@ MailboxItem {
 | `join_result` | admin | HPKE para o solicitante: `{accepted, reason?, K_e envelope?, node addresses, snapshot hint}` | 30 d |
 | `probe` | organizador | §10.4, correspondência selada | ≤ 72 h |
 | `probe_reply` | membro | §10.4, correspondência selada, assinada | ≤ 72 h |
-| `ping` | qualquer um | despertar para push (§14) | 1 h |
+| `ping` | qualquer um | despertar para push (§14), correspondência selada: `{what: "mention" \| "assigned" \| "invited"}`; o destinatário só confirma, o conteúdo está no log | 1 h |
 | `ik_env` | admin | HPKE para a MEK de um novo admin: `{ik_sk}` (a metade privada da chave de entrada) | nenhum |
 | `report` | membro | `{report_id: bytes(16), reporter, member_id, reason, details?, sig}`, uma cópia selada para a MEK de cada admin e moderador ativo (exceto o denunciado); `reason` ∈ `harassment`, `spam`, `impersonation`, `unsafe`, `other`; `details` ≤ 1000 caracteres; `sig = Sign(MSK, "vv/report/v1", {cid, report_id, reporter, member_id, reason, details?})`. O admin aceita só se a assinatura for verificada sob a MSK de `reporter`. Nada vai para o log: o nó e o denunciado não sabem da denúncia | máximo do nó (30 d) |
 | `removed` | admin | HPKE para a MEK de um membro removido: `{reason?}`; ele não consegue mais ler o log depois da rotação, então é assim que ele fica sabendo o motivo | nenhum (até ser confirmado) |
@@ -1496,25 +1508,49 @@ Mitigações na v0:
 
 ---
 
-## 14. Notificações push [MVP, open issue]
+## 14. Notificações push [MVP]
 
 APNs e FCM exigem credenciais pertencentes ao **publicador do app**, então um
 nó auto-hospedado não consegue enviar push diretamente para o app oficial.
 
-Projeto da v0:
+Projeto da v0, como implementado:
 
-- O projeto mantém um **gateway de push** sem estado (código aberto,
-  auto-hospedável para forks do app). Ele guarda as credenciais de APNs/FCM e
-  nada mais.
-- Um dispositivo se registra no seu nó: `PUT /v1/c/{cid}/push {mailbox_id, gateway, token_ct}`
-  onde `token_ct` é o token da plataforma selado para a chave pública do
-  gateway, de modo que o nó nunca vê o token bruto.
-- Quando chega um item na caixa postal ou um novo head do log, o nó faz POST
-  de `{token_ct}` para o gateway; o gateway envia um push **sem conteúdo**
-  ("Você tem novas atividades" ou um despertar silencioso em segundo plano).
-- O gateway fica sabendo que *algum* dispositivo recebeu *uma* notificação,
-  mas não de qual comunidade.
-- Builds de Android sem Google Play Services MAY usar UnifiedPush no lugar.
+- **Quem avisa é o dispositivo de quem agiu, não o nó.** Ao enviar uma
+  operação que se dirige a alguém (`@` menção num `task.comment` ou num
+  `task.comment_edit` que acrescenta menções, `assignee` em `task.create`,
+  `task.assign` para outra pessoa, `participation.invite`), o dispositivo
+  posta um item `ping` na caixa postal de cada pessoa visada, depois das
+  operações, selado para a MEK dela como qualquer correspondência (§10):
+  `{what: "mention" | "assigned" | "invited"}`. O nó não sabe o motivo nem
+  quem agiu; vê só que uma caixa postal recebeu um `ping`. O destinatário
+  confirma o item ao sincronizar; o conteúdo vem do log.
+- **O que a pessoa vê vem do estado.** Comentários guardam `mentions`
+  (ids), tarefas guardam `assigned {by, seq}` e participações guardam `by`
+  (§9.4, §9.7), então a lista de notificações do app é derivada do estado
+  (igual em todo dispositivo, sobrevive a reinstalar) e o texto da
+  notificação ("Bia mencionou você · Levar o som") é montado **no
+  dispositivo**, nunca pelo nó.
+- Um dispositivo registra onde ser acordado: `PUT /v1/c/{cid}/push {token}`
+  com escopo `mailbox` (a caixa postal vem da sessão); `DELETE` desfaz.
+  `token` é o token de push da plataforma, opaco para o nó, que o guarda em
+  claro: a v0 usa o serviço de push da Expo como gateway, que não aceita
+  tokens selados. Quem tem o token consegue, no máximo, mandar ao aparelho
+  um aviso sem conteúdo; ele não liga o aparelho a uma pessoa nem a uma
+  comunidade além do que o nó já sabe.
+- Quando chega um `ping`, um `probe` ou um `join_result` numa caixa postal
+  com token registrado, o nó faz um POST ao **gateway de push** configurado
+  (`push_gateway`; para o app oficial, a API de push da Expo) com o token e
+  um texto fixo, **sem conteúdo** ("Você tem novidades. Abra o app para
+  ver."). No máximo um push por caixa postal a cada `push_min_interval_secs`
+  (padrão 60 s). Um token que o gateway diz não existir mais é esquecido.
+  Envelopes de chave e novos heads do log não geram push: chegam na próxima
+  sincronização.
+- O gateway fica sabendo que *algum* dispositivo recebeu *um* aviso, mas
+  não de qual comunidade nem por quê.
+- `GET /.well-known/vamo-virar` traz `push: true|false`, para o app saber se
+  vale registrar o token.
+- Builds de Android sem Google Play Services MAY usar UnifiedPush no lugar
+  **[LATER]**.
 
 Esta é a única peça de infraestrutura compartilhada de que o sistema precisa;
 ela MUST continuar opcional (o app funciona, com polling, sem ela) e não conter
@@ -1555,7 +1591,8 @@ autenticadas enviam `Authorization: Bearer <token>` da §3.1.
 | `GET /c/{cid}/blobs` | moderate | → `{blobs: [{blob_id, size, at}], total_bytes}`, para recolher órfãos (§9.7) |
 | `DELETE /c/{cid}/blobs/{blob_id}` | moderate | apaga; idempotente |
 | `PUT /c/{cid}/cursor` | community | §6.5 **[LATER]** |
-| `PUT /c/{cid}/push` | mailbox | §14 **[LATER]** |
+| `PUT /c/{cid}/push` | mailbox | `{token}` (≤ 512 caracteres) → `{push}`: registra onde acordar o dispositivo desta caixa postal (§14); `push` diz se este nó encaminha avisos |
+| `DELETE /c/{cid}/push` | mailbox | esquece o token |
 | `GET /c/{cid}/stream?token=&mailbox_token=` (WebSocket) | community (+ mailbox) | CBOR servidor → cliente: `{head_seq}`, `{mailbox}`, `{resync: true}` |
 
 O WebSocket transporta **apenas notificações**; os dados são sempre buscados

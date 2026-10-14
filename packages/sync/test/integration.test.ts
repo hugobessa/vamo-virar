@@ -431,6 +431,53 @@ describe.skipIf(!HAVE_NODE)("against a real node", () => {
     expect(canon(caio.canonical)).toBe(canon(ana.canonical));
   }, 30_000);
 
+  it("a mention, an assignment and an invitation wake the person concerned, and only them", async () => {
+    const ana = await Replica.found(node.client(), { name: "C9", displayName: "Ana" });
+    const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });
+    await admit(ana, bia, "organizer");
+    const caio = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Caio" });
+    await admit(ana, caio);
+    await syncAll(ana, bia, caio);
+
+    // Watching devices sync when the node announces something in their mailbox.
+    const stops = [await bia.watch(), await caio.watch()];
+    try {
+      const ev = toHex(new Uint8Array(16).fill(9));
+      const task = toHex(new Uint8Array(16).fill(8));
+      ana.submit("event.create", eventBody(ev, "Panfletagem"));
+      ana.submit("participation.invite", { event_id: ev, member_id: caio.memberId });
+      ana.submit("task.create", { task_id: task, title: "Levar o som", assignee: bia.memberId });
+      await ana.sync();
+      // Pings go out after the ops, so when the woken device syncs, the op is already there.
+      await eventually(() => caio.canonical?.events[ev]?.participations[caio.memberId]?.status === "invited");
+      await eventually(() => bia.canonical?.tasks?.[task]?.assignee === bia.memberId);
+      expect(bia.canonical!.tasks![task]!.assigned).toEqual({ by: ana.memberId, seq: bia.canonical!.tasks![task]!.created_seq });
+      expect(caio.canonical!.events[ev]!.participations[caio.memberId]!.by).toBe(ana.memberId);
+
+      const comment = toHex(new Uint8Array(16).fill(7));
+      bia.submit("task.comment", { task_id: task, comment_id: comment, body: "@Caio me ajuda?", mentions: [caio.memberId] });
+      await bia.sync();
+      await eventually(() => caio.canonical?.tasks?.[task]?.comments[0]?.mentions?.[0] === caio.memberId);
+    } finally {
+      for (const stop of stops) stop();
+    }
+    // Nothing owed, and a ping is acknowledged by the sync it causes.
+    const { mailboxId } = await import("@vamo-virar/crypto");
+    await caio.sync();
+    expect(await caio.client.mailbox(caio.cid, caio.keys.signing, mailboxId(caio.cid, caio.keys.signing.pk))).toEqual([]);
+    expect((bia as unknown as { data: { pings?: unknown[] } }).data.pings).toBeUndefined();
+  }, 30_000);
+
+  it("push tokens register per mailbox and are idempotent", async () => {
+    const ana = await Replica.found(node.client(), { name: "C9b", displayName: "Ana" });
+    expect((await ana.client.wellKnown()).push).toBe(false);
+    await ana.registerPush("ExponentPushToken[test]");
+    expect(ana.pushToken).toBe("ExponentPushToken[test]");
+    await ana.registerPush("ExponentPushToken[test]");
+    await ana.unregisterPush();
+    expect(ana.pushToken).toBeUndefined();
+  });
+
   it("watch() syncs when the node announces new entries", async () => {
     const ana = await Replica.found(node.client(), { name: "C8", displayName: "Ana" });
     const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });

@@ -49,6 +49,15 @@
         }
       ],
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#FD0000",
+          "defaultChannel": "default",
+          "enableBackgroundRemoteNotifications": false
+        }
+      ],
+      [
         "expo-calendar",
         {
           "calendarPermission": "O Vamo Virar lê só os horários em que você está ocupada(o), para mostrar se você pode ir a um evento. Nada da sua agenda sai do celular."

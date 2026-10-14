@@ -32,7 +32,9 @@ function Nav() {
       <Stack.Screen name="devices" options={{ title: t("devicesTitle") }} />
       <Stack.Screen name="link-offer" options={{ title: t("linkAnother") }} />
       <Stack.Screen name="link" options={{ title: t("linkHaveOther") }} />
-      <Stack.Screen name="c/[id]/index" options={{ title: "" }} />
+      <Stack.Screen name="c/[id]/(tabs)" options={{ title: "" }} />
+      <Stack.Screen name="c/[id]/admin" options={{ title: t("adminTitle") }} />
+      <Stack.Screen name="c/[id]/notifications" options={{ title: t("notifications") }} />
       <Stack.Screen name="c/[id]/new-event" options={{ title: t("newEvent"), presentation: "modal" }} />
       <Stack.Screen name="c/[id]/event/[eid]" options={{ title: "" }} />
       <Stack.Screen name="c/[id]/task-form" options={{ title: t("newTask"), presentation: "modal" }} />

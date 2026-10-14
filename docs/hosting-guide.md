@@ -354,7 +354,7 @@ Tailscale continua o mesmo.
 ## Mudar de servidor
 
 Quer sair do computador de casa e ir para o Railway (ou o contrário)? Monte o
-servidor novo seguindo este guia e, no app, vá na aba **Eu** › **Mudar de
+servidor novo seguindo este guia e, no app, vá em **Administração** › **Ajustes** › **Mudar de
 servidor**, com o novo endereço e o código de criação dele. Cada pessoa da comunidade passa para o servidor novo sozinha, na próxima
 vez que abrir o app.
 

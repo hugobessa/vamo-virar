@@ -56,6 +56,12 @@ await web.makeMainDevice();
 await ana.unlinkDevice(id);               // não é revogação: ver protocolo §10.5.6
 ```
 
+Avisos (protocolo §14): `submit` de uma menção, de uma atribuição ou de um
+convite enfileira um `ping` selado para cada pessoa visada, enviado logo
+depois das operações na próxima sincronização; `registerPush(token)` diz ao
+nó onde acordar este dispositivo. `noticeMarks` / `markNoticesSeen` guardam,
+só neste dispositivo, até onde a pessoa viu suas notificações.
+
 ## Testes
 
 `test/integration.test.ts` roda contra o binário real `community-node`

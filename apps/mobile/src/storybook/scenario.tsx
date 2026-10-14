@@ -24,7 +24,7 @@ function member(key: string, name: string, role: Role, status: MemberRecord["sta
   return { member_id: key, msk: `msk-${key}`, mek: `mek-${key}`, role, status, profile: { display_name: name }, joined_seq: 1, key_epoch: 1 };
 }
 
-const part = (status: ParticipationStatus): Participation => ({ status, updated_seq: 5 });
+const part = (status: ParticipationStatus, by?: Me): Participation => ({ status, updated_seq: 5, ...(by ? { by } : {}) });
 
 function event(o: Pick<Event, "event_id" | "title" | "starts_at"> & Partial<Event>): Event {
   return {
@@ -77,9 +77,10 @@ function tasks(): Task[] {
       attachments: [
         { blob_id: "a".repeat(64), key: "b".repeat(64), nonce: "c".repeat(48), name: "arte-panfleto.pdf", mime: "application/pdf", size: 843_210 },
       ],
+      assigned: { by: "ana", seq: 10 },
       comments: [
-        { comment_id: "c1", author: "caio", body: "Posso buscar na gráfica, passo lá de moto.", seq: 12 },
-        { comment_id: "c2", author: "bia", body: "Fechado! Sinal **pago**, retirada sexta às 14h.", seq: 15, edited_seq: 16 },
+        { comment_id: "c1", author: "caio", body: "Posso buscar na gráfica, passo lá de moto. @Bia Lima, confirma o horário?", seq: 12, mentions: ["bia"] },
+        { comment_id: "c2", author: "bia", body: "Fechado! Sinal **pago**, retirada sexta às 14h. @Caio Alves leva a mochila grande.", seq: 15, edited_seq: 16, mentions: ["caio"] },
       ],
       history: [
         { status: "todo", by: "ana", seq: 10 },
@@ -90,7 +91,7 @@ function tasks(): Task[] {
     task({ task_id: "t2", title: "Levar a caixa de som", event_id: "e1", tags: ["som"], priority: "urgent", due_at: NOW + D - 6 * H }),
     task({ task_id: "t3", title: "Combinar o ponto de encontro com a comissão de frente", event_id: "e2", assignee: "bia", status: "blocked", history: [{ status: "todo", by: "bia", seq: 10 }, { status: "blocked", by: "bia", seq: 11, note: "esperando resposta do sindicato" }] }),
     task({ task_id: "t4", title: "Conferir as faixas", event_id: "e2", tags: ["arte"] }),
-    task({ task_id: "t5", title: "Prestar contas da vaquinha", description: "Planilha no drive do comitê.", tags: ["financeiro"], assignee: "ana", due_at: NOW + 6 * D }),
+    task({ task_id: "t5", title: "Prestar contas da vaquinha", description: "Planilha no drive do comitê.", tags: ["financeiro"], assignee: "ana", assigned: { by: "bia", seq: 18 }, due_at: NOW + 6 * D }),
     task({ task_id: "t6", title: "Reservar o espaço da plenária", event_id: "e4", assignee: "ana", status: "done", closed_at: NOW - 2 * D, history: [{ status: "todo", by: "ana", seq: 4 }, { status: "done", by: "ana", seq: 9 }] }),
   ];
 }
@@ -112,7 +113,7 @@ export function communityState(): CommunityState {
       starts_at: NOW + D - 5 * H,
       capacity: 12,
       whatsapp: "https://chat.whatsapp.com/ComiteCasaAmarela",
-      participations: { ana: part("confirmed"), bia: part("confirmed"), caio: part("volunteered"), duda: part("invited"), edu: part("declined") },
+      participations: { ana: part("confirmed"), bia: part("confirmed"), caio: part("volunteered"), duda: part("invited", "ana"), edu: part("declined") },
     }),
     event({
       event_id: "e2",
@@ -121,7 +122,7 @@ export function communityState(): CommunityState {
       location: { label: "Ponte Duarte Coelho", area: RECIFE },
       capacity: 30,
       organizers: ["bia"],
-      participations: { bia: part("confirmed"), caio: part("invited") },
+      participations: { bia: part("confirmed"), caio: part("invited", "bia") },
     }),
     event({
       event_id: "e3",
@@ -186,6 +187,8 @@ export interface EntryOptions {
   status?: string;
   /** Log position marks start from: tasks touched after it show as news. Default: nothing is news. */
   taskNewsSince?: number;
+  /** Notifications past this log position are unread. Default: all read. */
+  noticesSince?: number;
   connectivity?: "ok" | "offline";
   /** Changes made on this phone that the server has not seen yet. */
   pending?: number;
@@ -249,6 +252,9 @@ export function makeEntry(o: EntryOptions = {}) {
     reportMember: async (...a: unknown[]) => action("replica.reportMember")(...a),
     // Everything up to the last task counts as seen, so stories show news only when they ask for it.
     taskMarks: { since: o.taskNewsSince ?? Number.MAX_SAFE_INTEGER, tasks: {} as Record<string, number> },
+    noticeMarks: { seen: o.noticesSince ?? Number.MAX_SAFE_INTEGER, notified: o.noticesSince ?? Number.MAX_SAFE_INTEGER },
+    pushToken: undefined as string | undefined,
+    registerPush: async (token: string) => action("replica.registerPush")(token),
     uploadAttachment: async (bytes: Uint8Array, name: string, mime: string) => {
       action("replica.uploadAttachment")(name, mime, bytes.length);
       return { blob_id: "d".repeat(64), key: "e".repeat(64), nonce: "f".repeat(48), name, mime, size: bytes.length };
@@ -376,8 +382,10 @@ export interface Scenario {
   entries: MockEntry[];
   /** Route params, as `useLocalSearchParams` returns them. */
   params: Record<string, string>;
-  /** The screen's path, for the sidebar's highlight; derived from `params.id` when absent. */
+  /** The screen's path, for the sidebar's highlight; derived from `params.id` and `tab` when absent. */
   pathname?: string;
+  /** The community section the screen is: draws the tab bar under it with this one open. */
+  tab?: "index" | "tasks" | "people" | "me";
   calendar: MockCalendar;
   /** This person's linked devices (store.devices()). */
   devices?: { label: string; me: boolean; main: boolean; communities: string[] }[];
@@ -412,6 +420,8 @@ export function buildStore(s: Scenario) {
     syncOne: async () => {},
     clearRejections: action("store.clearRejections"),
     markTaskSeen: action("store.markTaskSeen"),
+    markNoticesSeen: action("store.markNoticesSeen"),
+    refreshPush: async () => action("store.refreshPush")(),
     admin: async (id: string, f: (r: MockEntry["replica"]) => Promise<unknown>) => f((s.entries.find((e) => e.id === id) ?? s.entries[0]!).replica),
     create: async (input: unknown) => {
       action("store.create")(input);

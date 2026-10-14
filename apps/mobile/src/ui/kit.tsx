@@ -31,11 +31,14 @@ export function Screen({
   scroll = true,
   onRefresh,
   width = "reading",
+  bottomInset = true,
 }: {
   children: ReactNode;
   scroll?: boolean;
   onRefresh?: () => Promise<unknown> | void;
   width?: keyof typeof columns;
+  /** False under a tab bar, which takes the bottom safe area itself. */
+  bottomInset?: boolean;
 }) {
   const c = useTheme();
   const l = useLayout();
@@ -72,7 +75,7 @@ export function Screen({
     />
   ) : undefined;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["bottom", "left", "right"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={bottomInset ? ["bottom", "left", "right"] : ["left", "right"]}>
       <FlagStripe height={4} />
       {scroll ? (
         <ScrollView keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets keyboardDismissMode="interactive" refreshControl={refresh}>
@@ -344,7 +347,10 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
             onPress={() => onChange(o.value)}
             style={[l.compact ? { flex: 1 } : { width: tabWidth }, { minHeight: touch - 8, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", borderRadius: radius - 4 }]}
           >
-            <Text style={{ color: c.text, fontWeight: on ? "700" : "500", fontSize: 16 }}>{o.label}</Text>
+            {/* Four tabs across a phone leave little room for each: the labels shrink a size. */}
+            <Text numberOfLines={1} style={{ color: c.text, fontWeight: on ? "700" : "500", fontSize: l.compact && options.length >= 4 ? 15 : 16 }}>
+              {o.label}
+            </Text>
             {o.badge ? <CountBadge n={o.badge} /> : null}
           </Pressable>
         );
@@ -484,6 +490,54 @@ export function Collapsible({ title, children, testID }: { title: string; childr
   );
 }
 
+/**
+ * A strip of figures at the top of a board: each a number over its label,
+ * sharing the width. `tone` colours a number that asks for attention; a zero
+ * stays quiet whatever its tone.
+ */
+export function Stats({ items }: { items: { value: number; label: string; tone?: "warn" | "danger" | "ok"; testID?: string }[] }) {
+  const c = useTheme();
+  const l = useLayout();
+  return (
+    <View style={{ flexDirection: "row", gap: l.compact ? space.s : space.m }}>
+      {items.map((it) => {
+        const fg = it.value === 0 || !it.tone ? c.text : it.tone === "danger" ? c.danger : it.tone === "warn" ? c.warn : c.ok;
+        return (
+          <View
+            key={it.label}
+            testID={it.testID}
+            accessibilityLabel={`${it.label}: ${it.value}`}
+            style={{ flex: 1, minWidth: 0, borderRadius: radius, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, paddingVertical: space.s, paddingHorizontal: l.compact ? space.s : space.m, gap: 2 }}
+          >
+            <Text style={{ color: fg, fontFamily: fonts.condensed, fontSize: 28, lineHeight: 30, fontWeight: "900" }}>{it.value}</Text>
+            {/* On a phone the four tiles are narrow: the label keeps its case and loses its tracking to fit. */}
+            <Text
+              numberOfLines={1}
+              style={
+                l.compact
+                  ? { color: c.muted, fontFamily: fonts.text, fontSize: 11, fontWeight: "700" }
+                  : { color: c.muted, fontFamily: fonts.text, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1 }
+              }
+            >
+              {it.label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** The heading of a group on a board: small, spaced capitals, with the count after it. */
+export function GroupHeading({ text, n, tone }: { text: string; n?: number; tone?: "brand" }) {
+  const c = useTheme();
+  return (
+    <Text accessibilityRole="header" style={{ color: tone === "brand" ? c.brand : c.muted, fontFamily: fonts.display, fontSize: 12, fontWeight: "800", letterSpacing: 2, textTransform: "uppercase" }}>
+      {n === undefined ? text : `${text} · ${n}`}
+    </Text>
+  );
+}
+
 /** A small round count, in the brand colour. */
 export function CountBadge({ n }: { n: number }) {
   const c = useTheme();
@@ -491,6 +545,24 @@ export function CountBadge({ n }: { n: number }) {
     <View aria-hidden style={{ minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: c.brand, alignItems: "center", justifyContent: "center" }}>
       <Text style={{ color: "#fff", fontFamily: fonts.text, fontSize: 12, fontWeight: "800" }}>{n > 99 ? "99+" : n}</Text>
     </View>
+  );
+}
+
+/** A bell for the header, with how many notifications wait. */
+export function BellButton({ count, label, onPress, testID }: { count: number; label: string; onPress: () => void; testID?: string }) {
+  const c = useTheme();
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={count ? `${label} (${count})` : label}
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => ({ minWidth: 40, height: 40, borderRadius: 20, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 6, backgroundColor: pressed ? c.chip : "transparent" })}
+    >
+      <Text style={{ color: count ? c.brand : c.muted, fontSize: 20, lineHeight: 24 }}>{count ? "🔔" : "🔕"}</Text>
+      {count ? <CountBadge n={count} /> : null}
+    </Pressable>
   );
 }
 

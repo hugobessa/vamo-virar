@@ -19,6 +19,8 @@ export {
   SequenceError,
   TASK_LIMITS,
 } from "./reducer.js";
+export { recipientsOf } from "./notify.js";
+export type { NoticeKind, Recipient } from "./notify.js";
 export { createSnapshot, restoreSnapshot, stateHash } from "./snapshot.js";
 export type { Snapshot, SnapshotState } from "./snapshot.js";
 export { canonicalJson, clone, isWhatsAppLink, memberIdOf } from "./util.js";

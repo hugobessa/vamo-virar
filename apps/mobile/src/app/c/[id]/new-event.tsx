@@ -1,15 +1,16 @@
 import { toHex } from "@vamo-virar/protocol";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import * as ExpoCrypto from "expo-crypto";
 import { useApp, useCommunity } from "../../../lib/context";
 import type { StringKey } from "../../../model/i18n";
-import { searchPlaces, type Place } from "../../../model/places";
+import type { PickedPlace } from "../../../model/location";
 import { deviceTimeZone, formatDateInput, parseDurationHours, parseLocal } from "../../../model/time";
 import { DateTimeFields } from "../../../ui/DateTimeFields";
 import { DisabledScope } from "../../../ui/community/Disabled";
-import { Banner, Body, Button, Card, Field, Screen } from "../../../ui/kit";
+import { Banner, Button, Field, Screen } from "../../../ui/kit";
+import { LocationPicker } from "../../../ui/LocationPicker";
 import { fonts, radius, space, touch, useTheme } from "../../../ui/theme";
 import { parseWhatsApp, WhatsAppField } from "../../../ui/WhatsApp";
 
@@ -35,13 +36,10 @@ export default function NewEvent() {
   const [time, setTime] = useState("18:00");
   const [hours, setHours] = useState("3");
   const [placeName, setPlaceName] = useState("");
-  const [areaQuery, setAreaQuery] = useState("");
-  const [area, setArea] = useState<Place | null>(null);
+  const [area, setArea] = useState<PickedPlace | null>(null);
   const [capacity, setCapacity] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  const matches = useMemo(() => (area ? [] : searchPlaces(areaQuery)), [areaQuery, area]);
 
   function pickTemplate(tpl: (typeof TEMPLATES)[number]) {
     setTemplate(tpl.key);
@@ -56,7 +54,7 @@ export default function NewEvent() {
     const dur = parseDurationHours(hours);
     if (!title.trim()) return setError(t("invalidTitle"));
     if (start === null || dur === null) return setError(t("invalidDate"));
-    if (!area) return setError(t("placeArea"));
+    if (!area) return setError(t("placeRequired"));
     const cap = capacity.trim() ? Number(capacity) : undefined;
     if (cap !== undefined && (!Number.isInteger(cap) || cap < 1)) return setError(t("capacity"));
     const wa = parseWhatsApp(whatsapp);
@@ -127,21 +125,7 @@ export default function NewEvent() {
             }}
           />
           <Field label={t("durationHours")} value={hours} onChangeText={setHours} keyboardType="decimal-pad" />
-          <Field testID="event-place" label={t("placeName")} value={placeName} onChangeText={setPlaceName} />
-          <Field
-            testID="event-area"
-            label={t("placeArea")}
-            value={area ? area.name : areaQuery}
-            onChangeText={(s) => {
-              setArea(null);
-              setAreaQuery(s);
-            }}
-          />
-          {matches.map((p) => (
-            <Card key={p.name} testID={`area-${p.name}`} onPress={() => setArea(p)}>
-              <Body>{p.name}</Body>
-            </Card>
-          ))}
+          <LocationPicker name={placeName} onNameChange={setPlaceName} place={area} onPlaceChange={setArea} testID="event" />
           <Field label={t("capacity")} value={capacity} onChangeText={setCapacity} keyboardType="number-pad" />
           <WhatsAppField testID="event-whatsapp" value={whatsapp} onChangeText={setWhatsapp} />
           {error ? <Banner tone="danger" text={error} /> : null}

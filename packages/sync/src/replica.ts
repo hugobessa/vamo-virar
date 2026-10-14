@@ -12,6 +12,7 @@ import {
   isAdmin,
   isModerator,
   memberIdOf,
+  recipientsOf,
   restoreSnapshot,
   stateHash,
   TASK_LIMITS,
@@ -19,6 +20,7 @@ import {
   type CommunityState,
   type Entry,
   type MemberRecord,
+  type NoticeKind,
   type Outcome,
   type Policy,
 } from "@vamo-virar/domain";
@@ -154,6 +156,25 @@ export interface ReplicaData {
   answeredProbes?: string[];
   /** Another device unlinked this one: the app should forget the community (§10.5.6). */
   unlinked?: boolean;
+  /**
+   * Wake-ups (§14) this device still owes: one sealed `ping` per person a
+   * submitted op addressed, sent right after the op on the next sync so the
+   * recipient's device finds the op in the log when it wakes.
+   */
+  pings?: PendingPing[];
+  /**
+   * This device's bookkeeping for the notices screen: the log position up to
+   * which this person has looked at their notices, and up to which the device
+   * has already shown a system notification. Never synced.
+   */
+  notices?: NoticeMarks;
+  /** The push token last registered on the node, so a changed token is re-sent. */
+  pushToken?: string;
+  /**
+   * Which mailbox that token was registered for: the member's (main device)
+   * or this device's own (secondary, §10.5.3). Absent means the member's.
+   */
+  pushFor?: "member" | "device";
 }
 
 /** One of the devices sharing this membership, for display. */
@@ -174,6 +195,21 @@ export interface TaskMarks {
   since: number;
   tasks: Record<string, number>;
 }
+
+export interface PendingPing {
+  /** The recipient's mailbox and encryption key, fixed when the op was submitted. */
+  mbx: Uint8Array;
+  mek: Uint8Array;
+  what: NoticeKind;
+}
+
+export interface NoticeMarks {
+  seen: number;
+  notified: number;
+}
+
+/** Wake-ups are only useful for a while: the op itself stays in the log. */
+const PING_TTL_S = 3600;
 
 export interface IncomingProbe {
   probeId: string;
@@ -511,8 +547,96 @@ export class Replica {
     if (this.disabled) throw new Error("the community is disabled");
     const opId = toHex(this.rng(16));
     this.data.outbox.push({ opId, type, body, ts: Date.now() });
+    this.queuePings(type, body);
     this.changed();
     return opId;
+  }
+
+  /** One wake-up per person the op addresses (§14), judged against the view before the op. */
+  private queuePings(type: string, body: CborValue): void {
+    const state = this.data.state;
+    if (!state) return;
+    for (const r of recipientsOf(state, this.memberId, type, body)) {
+      const m = state.members[r.member_id];
+      if (!m) continue;
+      (this.data.pings ??= []).push({ mbx: mailboxId(this.data.cid, fromHex(m.msk)), mek: fromHex(m.mek), what: r.kind });
+    }
+  }
+
+  /** Posts the owed wake-ups; one that cannot be posted now is kept for the next sync. */
+  private async sendPings(): Promise<void> {
+    const pings = this.data.pings ?? [];
+    if (pings.length === 0 || !this.keyring.latest()) return;
+    const kept: PendingPing[] = [];
+    for (const p of pings) {
+      try {
+        const mail = sealMail(this.data.cid, p.mek, { kind: "ping", what: p.what }, this.rng);
+        await this.client.postMailbox(this.data.cid, this.currentAccess(), p.mbx, "ping", mail, PING_TTL_S);
+      } catch (e) {
+        // The node refused it (full mailbox, writes stopped): a wake-up is not worth more than one try.
+        if (!(e instanceof NodeError)) kept.push(p);
+      }
+    }
+    if (kept.length) this.data.pings = kept;
+    else delete this.data.pings;
+  }
+
+  /** Where this person's notices stand on this device (see `ReplicaData.notices`). */
+  get noticeMarks(): NoticeMarks {
+    return (this.data.notices ??= { seen: this.data.state?.clock.seq ?? 0, notified: this.data.state?.clock.seq ?? 0 });
+  }
+
+  /** This person looked at their notices up to `seq`. */
+  markNoticesSeen(seq: number): void {
+    const m = this.noticeMarks;
+    if (seq <= m.seen) return;
+    m.seen = seq;
+    if (m.notified < seq) m.notified = seq;
+    this.changed();
+  }
+
+  /** The device showed system notifications for everything up to `seq`. */
+  markNoticesNotified(seq: number): void {
+    const m = this.noticeMarks;
+    if (seq <= m.notified) return;
+    m.notified = seq;
+    this.changed();
+  }
+
+  get pushToken(): string | undefined {
+    return this.data.pushToken;
+  }
+
+  /**
+   * Tells the node where to send wake-ups for this device (§14). Idempotent:
+   * the same token is not sent twice. The node sees the token, never what it
+   * is woken for.
+   */
+  async registerPush(token: string): Promise<void> {
+    // With linked devices the node holds one token per mailbox: the main
+    // device's goes on the member's mailbox, each secondary's on its own,
+    // where the main forwards wake-ups (§10.5.3). Stepping down never deletes
+    // the member's token: by then it may be the new main's.
+    const target = this.pushTarget();
+    if (this.data.pushToken === token && (this.data.pushFor ?? "member") === target.for) return;
+    await this.client.putPush(this.data.cid, target.key, token);
+    this.data.pushToken = token;
+    this.data.pushFor = target.for;
+    this.changed();
+  }
+
+  async unregisterPush(): Promise<void> {
+    if (this.data.pushToken === undefined) return;
+    const dik = this.data.device?.dik;
+    await this.client.deletePush(this.data.cid, this.data.pushFor === "device" && dik ? dik : this.data.keys.signing);
+    delete this.data.pushToken;
+    delete this.data.pushFor;
+    this.changed();
+  }
+
+  private pushTarget(): { key: SigningKeyPair; for: "member" | "device" } {
+    const dik = this.data.device?.dik;
+    return this.isMainDevice || !dik ? { key: this.data.keys.signing, for: "member" } : { key: dik, for: "device" };
   }
 
   /** Runs one full sync. Concurrent calls share the same run. */
@@ -546,6 +670,8 @@ export class Replica {
       report.pushed += await this.push(report);
       report.pulled += await this.pull(report);
     }
+    // After the ops, so a woken device finds them in the log.
+    await this.sendPings();
     this.updateStatus();
     report.status = this.data.status;
     this.changed();
@@ -643,7 +769,7 @@ export class Replica {
         return { handled: true }; // malformed: drop it
       }
     }
-    const kinds = ["ik_env", "removed", "probe", "probe_reply", "report", "join_result", "probe_done"];
+    const kinds = ["ik_env", "removed", "probe", "probe_reply", "report", "join_result", "probe_done", "ping"];
     if (!kinds.includes(item.kind)) return { handled: false };
     const m = openMail(this.data.cid, item.kind, me.encryption, item.ct);
     if (!m) return { handled: true }; // unreadable: drop it
@@ -674,6 +800,10 @@ export class Replica {
       case "join_result":
         if (!m.accepted && this.data.status === "joining") this.data.status = "rejected";
         return { handled: true };
+      case "ping":
+        // The wake-up did its job by arriving; what it is about is in the log.
+        // Copies go on so the node wakes the other devices too (§10.5.3).
+        return { handled: true, forward: m };
       case "probe_done":
         if (!verify(me.signing.pk, "vv/probe-done/v1", { cid: this.data.cid, probe_id: m.probe_id }, m.sig)) return { handled: true };
         this.forgetProbe(toHex(m.probe_id));
@@ -694,7 +824,7 @@ export class Replica {
     const others = set?.devices.filter((d) => !mine || !equalBytes(d.dik, mine)) ?? [];
     if (others.length === 0) return true;
     const mek = this.data.keys.encryption.pk;
-    const ttl = f.kind === "probe" ? Math.max(60, Math.ceil((f.expires - Date.now()) / 1000)) : undefined;
+    const ttl = f.kind === "probe" ? Math.max(60, Math.ceil((f.expires - Date.now()) / 1000)) : f.kind === "ping" ? PING_TTL_S : undefined;
     try {
       const access = this.currentAccess();
       for (const d of others) {

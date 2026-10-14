@@ -11,6 +11,7 @@ const appModules: Record<string, string> = {
   "/lib/matching": "matching.ts",
   "/lib/confirm": "confirm.ts",
   "/lib/files": "files.ts",
+  "/lib/notifications": "notifications.ts",
 };
 
 // The design system is written in React Native; react-native-web renders it in the browser.
