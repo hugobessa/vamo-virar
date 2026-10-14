@@ -53,6 +53,15 @@ Os provedores só aparecem no app quando um client ID está configurado em
 - **Google Cloud Console**: crie client IDs OAuth do tipo iOS e Android
   para o bundle/pacote `me.bessa.vamovirar`; ative a Google Calendar API;
   adicione apenas o escopo `calendar.freebusy` à tela de consentimento.
+  Os clientes nativos do Google não aceitam `vamovirar://oauth`; o app usa
+  os redirects de cada tipo (`src/model/oauth.ts`):
+  - iOS: `com.googleusercontent.apps.<id>:/oauth2redirect` (o client ID
+    invertido, o `REVERSED_CLIENT_ID` do plist). Ao trocar o client ID do iOS,
+    troque também `expo.ios.scheme` no `app.json` (um teste confere);
+  - Android: `me.bessa.vamovirar:/oauth2redirect`. No cliente Android,
+    ative "Custom URI scheme" em Advanced settings e cadastre o SHA-1 de cada
+    chave que assina o app (a da Play App Signing e a do EAS, vista em
+    `npx eas-cli@latest credentials`).
 - **Microsoft Entra ID**: registre um app de cliente público (mobile), permita
   contas pessoais e corporativas (`common`), adicione o redirect URI
   `vamovirar://oauth` e as permissões delegadas
