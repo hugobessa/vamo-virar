@@ -5,6 +5,7 @@
 // follows the room there is (see layout.ts): one column on a phone, a centred
 // column with side-by-side pieces on anything wider.
 
+import { Bell, type LucideIcon } from "lucide-react-native";
 import { Children, createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Animated, LayoutAnimation, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -548,22 +549,50 @@ export function CountBadge({ n }: { n: number }) {
   );
 }
 
-/** A bell for the header, with how many notifications wait. */
-export function BellButton({ count, label, onPress, testID }: { count: number; label: string; onPress: () => void; testID?: string }) {
+/**
+ * A round icon button for the header, with how many things wait there as a
+ * badge on the icon's corner. The icon takes the text colour, so it reads on
+ * the header in both themes; the label is for screen readers.
+ */
+export function HeaderIconButton({
+  icon: Icon,
+  count,
+  label,
+  hint,
+  onPress,
+  testID,
+}: {
+  icon: LucideIcon;
+  count: number;
+  label: string;
+  hint?: string;
+  onPress: () => void;
+  testID?: string;
+}) {
   const c = useTheme();
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={count ? `${label} (${count})` : label}
+      accessibilityHint={hint}
       onPress={onPress}
-      hitSlop={8}
-      style={({ pressed }) => ({ minWidth: 40, height: 40, borderRadius: 20, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 6, backgroundColor: pressed ? c.chip : "transparent" })}
+      hitSlop={4}
+      style={({ pressed }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? c.chip : "transparent" })}
     >
-      <Text style={{ color: count ? c.brand : c.muted, fontSize: 20, lineHeight: 24 }}>{count ? "🔔" : "🔕"}</Text>
-      {count ? <CountBadge n={count} /> : null}
+      <Icon aria-hidden color={c.text} size={24} strokeWidth={2} />
+      {count ? (
+        <View pointerEvents="none" style={{ position: "absolute", top: 0, right: -2, borderRadius: 12, borderWidth: 2, borderColor: c.bg }}>
+          <CountBadge n={count} />
+        </View>
+      ) : null}
     </Pressable>
   );
+}
+
+/** A bell for the header, with how many notifications wait. */
+export function BellButton({ count, label, onPress, testID }: { count: number; label: string; onPress: () => void; testID?: string }) {
+  return <HeaderIconButton icon={Bell} count={count} label={label} onPress={onPress} testID={testID} />;
 }
 
 /** A round "⋯" button that opens more options. */

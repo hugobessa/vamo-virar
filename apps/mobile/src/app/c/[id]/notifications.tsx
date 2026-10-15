@@ -1,7 +1,7 @@
 // What was addressed to this person in a community: mentions, tasks handed
 // to them, invitations. Opening the screen marks everything seen; what was
 // unread on the way in keeps its "Nova" chip until the screen is left. The
-// phone's own notifications are switched on from here too.
+// phone's own notifications are switched on from here too, until they are on.
 
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -22,7 +22,7 @@ const plain = (md: string) =>
     .replace(/\s*\n\s*/g, " ")
     .trim();
 
-/** The card for turning the phone's notifications on. Nothing to do on the web. */
+/** The card for turning the phone's notifications on. Gone once they are on: from then on they are managed in the phone's settings. Nothing to do on the web. */
 function PushCard() {
   const { t, store } = useApp();
   const [perm, setPerm] = useState<notifications.Permission | null>(null);
@@ -30,11 +30,11 @@ function PushCard() {
     void notifications.permission().then(setPerm);
   }, []);
   if (!notifications.pushSupported) return <Body muted>{t("pushUnavailable")}</Body>;
+  if (perm === null || perm === "granted") return null;
   return (
     <Card testID="push-card">
       <Heading>{t("pushTitle")}</Heading>
       <Body muted>{t("pushHelp")}</Body>
-      {perm === "granted" ? <Chip label={t("pushOn")} tone="ok" /> : null}
       {perm === "denied" ? <Banner tone="warn" text={t("pushDenied")} /> : null}
       {perm === "undetermined" ? (
         <Actions>
