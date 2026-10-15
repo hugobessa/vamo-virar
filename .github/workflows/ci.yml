@@ -5,8 +5,114 @@ on:
   push:
     branches: [main]
 
+# Jobs run only when something they check changed (the `changes` job). A
+# change to this workflow, the lockfiles' shared roots or the release scripts
+# runs what depends on them; docs-only changes run nothing but `ci-ok`.
+# `ci-ok` is the one check to require in branch protection: it fails if any
+# job that ran failed, and passes when the rest were skipped.
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      ts: ${{ steps.filter.outputs.ts }}
+      integration: ${{ steps.filter.outputs.integration }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      offline: ${{ steps.filter.outputs.offline }}
+      portal: ${{ steps.filter.outputs.portal }}
+      node_image: ${{ steps.filter.outputs.node_image }}
+      vendors: ${{ steps.filter.outputs.vendors }}
+      scripts: ${{ steps.filter.outputs.scripts }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            ci: &ci
+              - .github/workflows/ci.yml
+            cargo: &cargo
+              - Cargo.toml
+              - Cargo.lock
+              - crates/**
+              - apps/node/**
+              - tests/vectors/**
+            npm: &npm
+              - package.json
+              - package-lock.json
+              - tsconfig.base.json
+            packages: &packages
+              - packages/**
+              - tests/vectors/**
+            rust:
+              - *ci
+              - *cargo
+            ts:
+              - *ci
+              - *npm
+              - *packages
+              - apps/mobile/**
+              - apps/portal/**
+              - tests/offline/**
+            integration:
+              - *ci
+              - *cargo
+              - *npm
+              - *packages
+              - apps/portal/**
+            mobile:
+              - *ci
+              - *cargo
+              - *npm
+              - *packages
+              - apps/mobile/**
+            offline:
+              - *ci
+              - *cargo
+              - *npm
+              - *packages
+              - tests/offline/**
+            portal:
+              - *ci
+              - apps/portal/**
+              - tsconfig.base.json
+            node_image:
+              - *ci
+              - *cargo
+              - deploy/**
+            vendors:
+              - *ci
+              - *cargo
+              - *npm
+              - *packages
+              - deploy/**
+              - scripts/check-vendor-independence.mjs
+            scripts:
+              - *ci
+              - scripts/**
+              - apps/node/Cargo.toml
+              - apps/portal/package.json
+              - apps/mobile/app.json
+
+  # Version files and release scripts (scripts/release-version.mjs).
+  scripts:
+    needs: changes
+    if: needs.changes.outputs.scripts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test scripts/*.test.mjs
+
   typescript:
+    needs: changes
+    if: needs.changes.outputs.ts == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +127,8 @@ jobs:
 
   # Phase 10: the node protocol must not depend on any cloud vendor.
   vendor-independence:
+    needs: changes
+    if: needs.changes.outputs.vendors == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +138,8 @@ jobs:
       - run: node scripts/check-vendor-independence.mjs
 
   rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +152,8 @@ jobs:
       - run: cargo test --locked
 
   integration:
+    needs: changes
+    if: needs.changes.outputs.integration == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +176,8 @@ jobs:
           VV_REQUIRE_NODE: "1"
 
   mobile-web-e2e:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,6 +205,8 @@ jobs:
           path: apps/mobile/e2e/screenshots
 
   offline-scenarios:
+    needs: changes
+    if: needs.changes.outputs.offline == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -111,6 +227,8 @@ jobs:
           VV_REQUIRE_NODE: "1"
 
   portal-image:
+    needs: changes
+    if: needs.changes.outputs.portal == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -138,6 +256,8 @@ jobs:
           test "$(docker inspect -f '{{.Config.User}}' portal)" = "node"
 
   node-image:
+    needs: changes
+    if: needs.changes.outputs.node_image == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -160,3 +280,17 @@ jobs:
           docker inspect -f '{{.State.Health.Status}}' node | grep -qx healthy
           curl -fsS http://127.0.0.1:8787/.well-known/vamo-virar | grep -q '"protocol":"vv/0"'
           test "$(docker inspect -f '{{.Config.User}}' node)" = "65532:65532"
+
+  ci-ok:
+    needs: [changes, scripts, typescript, vendor-independence, rust, integration, mobile-web-e2e, offline-scenarios, portal-image, node-image]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job that ran passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) echo "::error::a CI job ended $r"; exit 1 ;; esac
+          done
