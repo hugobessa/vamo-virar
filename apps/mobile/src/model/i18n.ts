@@ -230,7 +230,6 @@ const pt = {
   pushTitle: "Avisos no celular",
   pushHelp: "O celular avisa quando alguém menciona você, passa uma tarefa para você ou convida você para uma ação. O aviso que chega de fora não diz o quê: o conteúdo só aparece quando o app abre, no seu celular.",
   pushEnable: "Ativar avisos no celular",
-  pushOn: "Avisos no celular ativados",
   pushDenied: "Sem permissão para avisos. Você pode permitir nos Ajustes do celular.",
   pushUnavailable: "Avisos no celular só funcionam no app instalado, não no navegador.",
   // Events ("ações")

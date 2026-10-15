@@ -6,7 +6,7 @@
 
 import { router, Stack, Tabs, useLocalSearchParams } from "expo-router";
 import type { ComponentProps } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { useApp, useCommunity } from "../../../../lib/context";
 import { noticeCount, taskNewsCount, toAnswerCount } from "../../../../model/attention";
 import { AdminButton, useAdminPending } from "../../../../ui/community/AdminButton";
@@ -56,18 +56,25 @@ export default function CommunityLayout() {
   const title = state?.community.name ?? t(r?.status === "rejected" ? "rejectedTitle" : "waitingTitle");
   // The header's right side: the notifications bell, and, for moderation on a phone, the administration (the sidebar lists it on a wide window).
   const unread = r && state && active ? noticeCount(state, r.memberId, r.noticeMarks, true) : 0;
+  const bell = entry && active ? <BellButton testID="notifications-open" count={unread} label={t("notifications")} onPress={() => router.push({ pathname: "/c/[id]/notifications", params: { id: entry.id } })} /> : null;
+  const admin = entry && active && mod && !l.sidebar ? <AdminButton pending={pending} onPress={() => router.push({ pathname: "/c/[id]/admin", params: { id: entry.id } })} /> : null;
   const headerRight =
-    entry && active
+    bell || admin
       ? () => (
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-            <BellButton testID="notifications-open" count={unread} label={t("notifications")} onPress={() => router.push({ pathname: "/c/[id]/notifications", params: { id: entry.id } })} />
-            {mod && !l.sidebar ? <AdminButton pending={pending} onPress={() => router.push({ pathname: "/c/[id]/admin", params: { id: entry.id } })} /> : null}
+            {bell}
+            {admin}
           </View>
         )
       : undefined;
+  // On iOS 26 the bar draws its glass behind custom items, which washes out the icons; they draw their own pressed state instead.
+  const headerRightItems =
+    Platform.OS === "ios" && (bell || admin)
+      ? () => [bell, admin].filter((el) => el !== null).map((element) => ({ type: "custom" as const, element, hidesSharedBackground: true }))
+      : undefined;
   return (
     <View style={{ flex: 1 }}>
-      <Stack.Screen options={{ title, headerRight }} />
+      <Stack.Screen options={{ title, headerRight, unstable_headerRightItems: headerRightItems }} />
       <Tabs tabBar={bar} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: "transparent" } }} backBehavior="initialRoute">
         <Tabs.Screen name="index" options={{ title: labels.index }} />
         <Tabs.Screen name="tasks" options={{ title: labels.tasks }} />
