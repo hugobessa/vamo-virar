@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 
-import { loadConfig } from "./config.js";
+import { loadConfig, railwayVolumeProblem } from "./config.js";
 import { Requests } from "./db.js";
 import { logMailer, mailgunMailer, smtpMailer } from "./mailer.js";
 import { nodeOperator } from "./node.js";
@@ -11,6 +11,12 @@ try {
   config = loadConfig();
 } catch (e) {
   console.error(`configuração inválida: ${(e as Error).message}`);
+  process.exit(2);
+}
+
+const volume = railwayVolumeProblem(process.env, config.dataDir);
+if (volume) {
+  console.error(`não vou iniciar: ${volume}`);
   process.exit(2);
 }
 

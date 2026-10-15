@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { loadConfig, type Limits, type PortalConfig } from "../src/config.js";
+import { loadConfig, railwayVolumeProblem, type Limits, type PortalConfig } from "../src/config.js";
 import { Requests } from "../src/db.js";
 import type { Mail, Mailer } from "../src/mailer.js";
 import type { NodeOperator } from "../src/node.js";
@@ -233,7 +233,7 @@ describe("admin", () => {
     const res = await post(`/admin/pedidos/${id}/aprovar`, { max_communities: "2", max_log_mb: "128", max_files_mb: "256" }, { cookie, origin: "https://servidor.example" });
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe(`/admin/pedidos/${id}?ok=aprovado`);
-    const tenant = node.tenants.get(`pedido-${id}`)!;
+    const tenant = node.tenants.get(db.get(id)!.tenant!)!;
     expect(tenant.limits).toEqual({ maxCommunities: 2, maxLogBytes: 128 * 1024 * 1024, maxBlobBytes: 256 * 1024 * 1024 });
 
     const mail = outbox.last("ana@example.org")!;
@@ -246,12 +246,12 @@ describe("admin", () => {
     expect(mail.replyTo).toBe("admin@example.org");
     const r = db.get(id)!;
     expect(r.status).toBe("approved");
-    expect(r.tenant).toBe(`pedido-${id}`);
+    expect(r.tenant).toMatch(new RegExp(`^pedido-${id}-[0-9a-f]{8}$`));
 
     // A second click does not hand out a second code.
     const again = await post(`/admin/pedidos/${id}/aprovar`, {}, { cookie });
     expect(again.status).toBe(409);
-    expect(node.calls).toEqual([`issue pedido-${id}`]);
+    expect(node.calls).toEqual([`issue ${r.tenant}`]);
   });
 
   it("revokes the code when the email cannot be sent, and the request waits again", async () => {
@@ -261,12 +261,13 @@ describe("admin", () => {
     const res = await post(`/admin/pedidos/${id}/aprovar`, {}, { cookie });
     expect(res.status).toBe(502);
     expect(await res.text()).toContain("Revoguei o código");
-    expect(node.calls).toEqual([`issue pedido-${id}`, `revoke pedido-${id}`]);
+    const tenant = db.get(id)!.tenant!;
+    expect(node.calls).toEqual([`issue ${tenant}`, `revoke ${tenant}`]);
     expect(db.get(id)!.status).toBe("pending");
 
     // Trying again gives the same tenant a fresh code.
     expect((await post(`/admin/pedidos/${id}/aprovar`, {}, { cookie })).status).toBe(303);
-    expect(node.tenants.get(`pedido-${id}`)!.revoked).toBe(false);
+    expect(node.tenants.get(db.get(id)!.tenant!)!.revoked).toBe(false);
     expect(outbox.last("ana@example.org")!.text).toContain("token-2");
   });
 
@@ -280,13 +281,13 @@ describe("admin", () => {
     expect(mail.text).toContain("token-2");
 
     expect((await post(`/admin/pedidos/${id}/revogar`, {}, { cookie })).status).toBe(303);
-    expect(node.tenants.get(`pedido-${id}`)!.revoked).toBe(true);
+    expect(node.tenants.get(db.get(id)!.tenant!)!.revoked).toBe(true);
     expect(db.get(id)!.status).toBe("revoked");
     expect((await post(`/admin/pedidos/${id}/revogar`, {}, { cookie })).status).toBe(409);
 
     expect((await post(`/admin/pedidos/${id}/novo-codigo`, {}, { cookie })).status).toBe(303);
     expect(db.get(id)!.status).toBe("approved");
-    expect(node.tenants.get(`pedido-${id}`)!.revoked).toBe(false);
+    expect(node.tenants.get(db.get(id)!.tenant!)!.revoked).toBe(false);
   });
 
   it("approves with no community limit when the field is empty, and changes limits later", async () => {
@@ -295,19 +296,19 @@ describe("admin", () => {
     const page = await (await fetch(`${base}/admin/pedidos/${id}`, { headers: { cookie } })).text();
     expect(page).toContain('placeholder="sem limite" value=""');
     await post(`/admin/pedidos/${id}/aprovar`, { max_communities: "", max_log_mb: "128", max_files_mb: "256" }, { cookie });
-    expect(node.tenants.get(`pedido-${id}`)!.limits.maxCommunities).toBeNull();
+    expect(node.tenants.get(db.get(id)!.tenant!)!.limits.maxCommunities).toBeNull();
     expect(db.get(id)!.maxCommunities).toBeNull();
     expect(outbox.last("ana@example.org")!.text).toContain("quantas comunidades precisar");
     expect(await (await fetch(`${base}/admin/pedidos/${id}`, { headers: { cookie } })).text()).toContain("Mudar os limites");
 
     const res = await post(`/admin/pedidos/${id}/limites`, { max_communities: "3", max_log_mb: "128", max_files_mb: "256" }, { cookie });
     expect(res.headers.get("location")).toBe(`/admin/pedidos/${id}?ok=limites`);
-    expect(node.tenants.get(`pedido-${id}`)!.limits).toEqual({ maxCommunities: 3, maxLogBytes: 128 * 1024 * 1024, maxBlobBytes: 256 * 1024 * 1024 });
+    expect(node.tenants.get(db.get(id)!.tenant!)!.limits).toEqual({ maxCommunities: 3, maxLogBytes: 128 * 1024 * 1024, maxBlobBytes: 256 * 1024 * 1024 });
     expect(db.get(id)!.maxCommunities).toBe(3);
 
     // A new code keeps the limits the request has now.
     await post(`/admin/pedidos/${id}/novo-codigo`, {}, { cookie });
-    expect(node.tenants.get(`pedido-${id}`)!.limits.maxCommunities).toBe(3);
+    expect(node.tenants.get(db.get(id)!.tenant!)!.limits.maxCommunities).toBe(3);
     expect(outbox.last("ana@example.org")!.text).toContain("até 3 comunidades");
   });
 
@@ -316,6 +317,17 @@ describe("admin", () => {
     const cookie = await adminCookie();
     expect((await post(`/admin/pedidos/${id}/limites`, { max_communities: "3" }, { cookie })).status).toBe(409);
     expect(node.calls).toEqual([]);
+  });
+
+  it("never hands out a code for a tenant an earlier portal database made", async () => {
+    // The node outlived a lost portal database: ids start over, its tenants stay.
+    const old = await node.issueToken("pedido-1", { maxCommunities: 1, maxLogBytes: 1, maxBlobBytes: 1 });
+    const id = await confirmedRequest();
+    expect(id).toBe(1);
+    const cookie = await adminCookie();
+    await post(`/admin/pedidos/${id}/aprovar`, {}, { cookie });
+    expect(db.get(id)!.tenant).not.toBe("pedido-1");
+    expect(node.tenants.get("pedido-1")!.token).toBe(old);
   });
 
   it("rejects with a message", async () => {
@@ -350,5 +362,15 @@ describe("config", () => {
     expect(() => loadConfig(env)).toThrow(/at least 12/);
     expect(() => loadConfig({ ...env, PORTAL_ADMIN_PASSWORD: PASSWORD, PORTAL_MAIL_FROM: "" })).toThrow(/PORTAL_MAIL_FROM/);
     expect(loadConfig({ ...env, PORTAL_ADMIN_PASSWORD: PASSWORD }).nodeUrl).toBe("https://x.example");
+  });
+});
+
+describe("Railway volume check", () => {
+  it("refuses to run on Railway without a volume at the data directory", () => {
+    expect(railwayVolumeProblem({}, "/data")).toBeNull();
+    expect(railwayVolumeProblem({ RAILWAY_ENVIRONMENT_ID: "e" }, "/data")).toContain("no Railway volume");
+    expect(railwayVolumeProblem({ RAILWAY_ENVIRONMENT_ID: "e", RAILWAY_VOLUME_MOUNT_PATH: "/app/data" }, "/data")).toContain("mounted at /app/data");
+    expect(railwayVolumeProblem({ RAILWAY_ENVIRONMENT_ID: "e", RAILWAY_VOLUME_MOUNT_PATH: "/data" }, "/data")).toBeNull();
+    expect(railwayVolumeProblem({ RAILWAY_ENVIRONMENT_ID: "e", RAILWAY_VOLUME_MOUNT_PATH: "/data" }, "/data/portal")).toBeNull();
   });
 });
