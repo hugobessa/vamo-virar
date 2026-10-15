@@ -40,7 +40,8 @@ export function parsePolicy(v: unknown): PolicyParse {
     !isInt(r.removed_member_detail_days, 0, DAYS_MAX) ||
     !isInt(r.rejected_join_request_days, 0, DAYS_MAX) ||
     (r.closed_task_detail_days !== undefined && !isInt(r.closed_task_detail_days, 0, DAYS_MAX)) ||
-    (v.min_client_version !== undefined && !isText(v.min_client_version, 32, 1))
+    (v.min_client_version !== undefined && !isText(v.min_client_version, 32, 1)) ||
+    (v.join_approval !== undefined && v.join_approval !== "auto")
   ) {
     return { ok: false, reason: "malformed" };
   }
@@ -61,5 +62,6 @@ export function parsePolicy(v: unknown): PolicyParse {
   };
   if (r.closed_task_detail_days !== undefined) policy.retention.closed_task_detail_days = r.closed_task_detail_days;
   if (v.min_client_version !== undefined) policy.min_client_version = v.min_client_version;
+  if (v.join_approval === "auto") policy.join_approval = "auto";
   return { ok: true, policy };
 }

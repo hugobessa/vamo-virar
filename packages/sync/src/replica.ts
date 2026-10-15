@@ -1581,6 +1581,44 @@ export class Replica {
     return outcome;
   }
 
+  /** Whether this community lets moderator devices approve join requests on their own. */
+  get autoApproves(): boolean {
+    return this.data.state?.community.policy.join_approval === "auto";
+  }
+
+  /** Admin: turns automatic approval of join requests on or off (a `policy.update`). */
+  async setAutoApprove(on: boolean): Promise<Outcome> {
+    if (!this.isAdmin) throw new Error("only admins change the policy");
+    const { join_approval: _, ...rest } = this.data.state!.community.policy;
+    return this.submitNow("policy.update", { policy: (on ? { ...rest, join_approval: "auto" } : rest) as unknown as CborValue });
+  }
+
+  /**
+   * When the community auto-approves, lets in everyone waiting. Requests the
+   * log refuses (a blocked person, say) stay for a person to decide.
+   * Returns how many were let in.
+   */
+  async autoApprove(): Promise<number> {
+    if (!this.autoApproves || !this.canModerate || !this.data.ik) return 0;
+    let n = 0;
+    for (const p of await this.joinRequests()) {
+      if (this.autoSkipped.has(p.intakeId)) continue;
+      // Blocked people are never let back in: answer them instead of retrying.
+      if (this.data.state?.members[memberIdOf(toHex(p.request.msk))]?.blocked) {
+        await this.reject(p);
+        continue;
+      }
+      const o = await this.approve(p);
+      if (o.status === "applied") n++;
+      // Anything else the log refused is left for a person; trying again would only grow the log.
+      else if (!(o.status === "rejected" && o.reason === "already_exists")) this.autoSkipped.add(p.intakeId);
+    }
+    return n;
+  }
+
+  /** Join requests automatic approval tried and the log refused, this session. */
+  private readonly autoSkipped = new Set<number>();
+
   async reject(p: PendingJoin, reason?: string): Promise<void> {
     this.requireModerator();
     const mbx = mailboxId(this.data.cid, p.request.msk);

@@ -656,6 +656,18 @@ describe("policy", () => {
     b.op(ana, "policy.update", { policy: { ...DEFAULT_POLICY, participation_visible: "organizers" } });
     expect(last(b).out).toEqual(rejected("unsupported"));
   });
+
+  it("keeps automatic join approval only as \"auto\", and only from admins", () => {
+    const { b, ana, bia } = setup();
+    b.op(bia, "policy.update", { policy: { ...DEFAULT_POLICY, join_approval: "auto" } });
+    expect(last(b).out).toEqual(rejected("not_authorized"));
+    b.op(ana, "policy.update", { policy: { ...DEFAULT_POLICY, join_approval: "yes" } });
+    expect(last(b).out).toEqual(rejected("malformed"));
+    b.op(ana, "policy.update", { policy: { ...DEFAULT_POLICY, join_approval: "auto" } });
+    expect(last(b).state.community.policy.join_approval).toBe("auto");
+    b.op(ana, "policy.update", { policy: DEFAULT_POLICY });
+    expect("join_approval" in last(b).state.community.policy).toBe(false);
+  });
 });
 
 describe("retention", () => {

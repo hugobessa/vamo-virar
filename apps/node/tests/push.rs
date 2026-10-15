@@ -240,3 +240,44 @@ async fn one_push_per_window_and_none_without_a_gateway() {
     assert_eq!(s, StatusCode::OK);
     assert_eq!(v.get("push"), Some(&Value::Bool(false)));
 }
+
+#[tokio::test]
+async fn a_join_request_wakes_the_admins() {
+    let g = gateway().await;
+    let app = node_with(Config {
+        provisioning_token: Some(TOKEN.into()),
+        push_gateway: Some(g.url.clone()),
+        push_min_interval_secs: 0,
+        ..Config::default()
+    });
+    let mut f = Fixture::new(22);
+    create(&app, &mut f).await;
+    let cid = f.cid;
+    let at = login(&app, &cid, &f.admin, "mailbox").await.unwrap();
+    let token = Value::map([("token", Value::Text("ExponentPushToken[admin]".into()))]);
+    let (s, _) = call(
+        &app,
+        "PUT",
+        &format!("/v1/c/{}/push", hex(&cid)),
+        Some(&at),
+        Some(token),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+
+    let req = Value::map([("enc", b(&[3; 32])), ("ct", b(&[4; 40]))]);
+    let (s, _) = call(
+        &app,
+        "POST",
+        &format!("/v1/c/{}/intake", hex(&cid)),
+        None,
+        Some(req),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    settle(&g, 1).await;
+    let got = g.received.lock().unwrap().clone();
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert_eq!(got[0][0]["to"], "ExponentPushToken[admin]");
+    assert!(!got[0].to_string().contains("intake"));
+}

@@ -2,12 +2,12 @@
 
 import type { PendingJoin } from "@vamo-virar/sync";
 import { useState } from "react";
-import { Share, Text, View } from "react-native";
+import { Share, Switch, Text, View } from "react-native";
 import { useApp } from "../../lib/context";
 import type { CommunityEntry } from "../../lib/store";
 import { Actions, Body, Button, Card, Enter, Heading } from "../kit";
 import { useLayout } from "../layout";
-import { motion, useTheme } from "../theme";
+import { motion, space, useTheme } from "../theme";
 import type { AdminRunner } from "./hooks";
 
 const profileName = (p: unknown) => (p && typeof p === "object" && "display_name" in p ? String((p as { display_name: unknown }).display_name) : "?");
@@ -22,6 +22,25 @@ export function IntakeSection({ entry, requests, reload, runner }: { entry: Comm
   return (
     <>
       <Body muted>{t("adminIntakeHelp")}</Body>
+      {r.isAdmin ? (
+        <>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.m }}>
+            <Switch
+              testID="auto-approve"
+              accessibilityLabel={t("autoApproveLabel")}
+              value={r.autoApproves}
+              disabled={busy === "auto-approve"}
+              onValueChange={(on) => void run("auto-approve", (rep) => rep.setAutoApprove(on), async () => { if (on) await r.autoApprove().catch(() => undefined); await reload(); })}
+            />
+            <View style={{ flex: 1 }}>
+              <Body>{t("autoApproveLabel")}</Body>
+            </View>
+          </View>
+          <Body muted>{t("autoApproveHelp")}</Body>
+        </>
+      ) : r.autoApproves ? (
+        <Body muted>{t("autoApproveOn")}</Body>
+      ) : null}
       <Heading>{t("joinRequests")}</Heading>
       {requests === null || requests.length === 0 ? <Body muted>{t("noRequests")}</Body> : null}
       {requests?.map((p, i) => (

@@ -13,9 +13,10 @@ use crate::app::{hex, App};
 use crate::store::{self, Cid};
 
 /// Mailbox items that mean "someone did something for you": wake-ups from
-/// other devices, organizers asking who can come, and a join decision. Key
+/// other devices, organizers asking who can come, and a join decision; plus
+/// `intake`, a new join request, sent to admins and moderators. Key
 /// envelopes and the rest arrive on their own when the app next syncs.
-pub const PUSH_KINDS: &[&str] = &["ping", "probe", "join_result"];
+pub const PUSH_KINDS: &[&str] = &["ping", "probe", "join_result", "intake"];
 
 /// What the person sees. Deliberately the same for everything: the node
 /// does not know more, and the lock screen should not say more.
