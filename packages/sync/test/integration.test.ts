@@ -96,6 +96,27 @@ describe.skipIf(!HAVE_NODE)("against a real node", () => {
     expect(await ana.joinRequests()).toHaveLength(0);
   });
 
+  it("a community that auto-approves lets people in without anyone deciding", async () => {
+    const ana = await Replica.found(node.client(), { name: "C-auto", displayName: "Ana" });
+    expect(ana.autoApproves).toBe(false);
+    const gil = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Gil" });
+    expect(await ana.autoApprove()).toBe(0); // off: Gil waits
+
+    expect((await ana.setAutoApprove(true)).status).toBe("applied");
+    expect(ana.autoApproves).toBe(true);
+    const hana = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Hana" });
+    expect(await ana.autoApprove()).toBe(2);
+    await gil.sync();
+    await hana.sync();
+    expect(gil.status).toBe("active");
+    expect(hana.status).toBe("active");
+    expect(await ana.joinRequests()).toHaveLength(0);
+
+    expect((await ana.setAutoApprove(false)).status).toBe("applied");
+    expect(ana.autoApproves).toBe(false);
+    expect(ana.canonical!.community.policy.join_approval).toBeUndefined();
+  }, 30_000);
+
   it("a device offline for 700 operations catches up through pagination", async () => {
     const ana = await Replica.found(node.client(), { name: "C3", displayName: "Ana" });
     const bia = await Replica.join(node.client(), parseInvite(ana.openInviteLink()), { displayName: "Bia" });

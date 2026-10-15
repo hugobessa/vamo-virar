@@ -101,6 +101,12 @@ export interface Policy {
   participation_visible: "community" | "organizers";
   retention: RetentionPolicy;
   min_client_version?: string;
+  /**
+   * "auto": admin and moderator devices approve join requests as soon as
+   * they see them. Absent means each request waits for a person; it is only
+   * stored when set, so older policies hash as before.
+   */
+  join_approval?: "auto";
 }
 
 // ---------------------------------------------------------------------------

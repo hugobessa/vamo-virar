@@ -596,6 +596,7 @@ Policy {
     closed_task_detail_days:     u32?  = 30   # tarefas done/cancelled são apagadas depois (§9.7); só gravado se definido
   }
   min_client_version: text?
+  join_approval:      "auto"?   # dispositivos de admins e moderação aceitam pedidos sozinhos (§10.2); só gravado se definido
 }
 ```
 
@@ -962,6 +963,13 @@ O dispositivo do admin decifra o pedido, exibe-o e, ao aprovar:
 2. `join_result` na caixa postal do solicitante, incluindo um `KeyEnvelope`
    da época atual;
 3. o item de entrada é apagado.
+
+Com `policy.join_approval == "auto"`, o dispositivo principal de cada admin
+ou moderador que tem a `IK` faz esses mesmos passos sozinho a cada
+sincronização, para todo pedido pendente. Pedidos de pessoas bloqueadas
+recebem uma rejeição; um pedido que o log recusa por outro motivo fica para
+uma pessoa decidir. O nó continua sem poder aceitar ninguém: só quem tem a
+`IK` e a chave da época consegue.
 
 Rejeição: `join_result {accepted: false}`; o item de entrada é apagado.
 Nenhuma operação de log é escrita para rejeições — o estado da comunidade
@@ -1549,7 +1557,8 @@ Projeto da v0, como implementado:
   um aviso sem conteúdo; ele não liga o aparelho a uma pessoa nem a uma
   comunidade além do que o nó já sabe.
 - Quando chega um `ping`, um `probe` ou um `join_result` numa caixa postal
-  com token registrado, o nó faz um POST ao **gateway de push** configurado
+  com token registrado, ou um pedido de entrada novo (para as caixas postais
+  de quem está no conjunto de admins ou de moderação), o nó faz um POST ao **gateway de push** configurado
   (`push_gateway`; para o app oficial, a API de push da Expo) com o token e
   um texto fixo, **sem conteúdo** ("Você tem novidades. Abra o app para
   ver."). No máximo um push por caixa postal a cada `push_min_interval_secs`

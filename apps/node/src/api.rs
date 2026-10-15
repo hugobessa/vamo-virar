@@ -1098,6 +1098,16 @@ async fn post_intake(
     )?;
     let id = tx.last_insert_rowid() as u64;
     tx.commit()?;
+    drop(st);
+    // Whoever holds the intake key decides, or approves on its own when the
+    // community auto-approves: wake them all.
+    let mut staff = cm.admin_set.clone();
+    staff.extend(cm.mod_set.iter().copied());
+    staff.sort_unstable();
+    staff.dedup();
+    for msk in staff {
+        push::wake(&app, cid, mailbox_id(&cid, &msk), "intake");
+    }
     ok(Value::map([("id", int(id))]))
 }
 

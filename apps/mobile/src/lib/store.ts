@@ -191,6 +191,8 @@ export class AppStore {
       const main = e.replica.isMainDevice;
       // Moderators who left keep node access until an admin updates the set.
       if (main && e.replica.isAdmin) await e.replica.tidyModerators().catch(() => undefined);
+      // A community that auto-approves lets people in from any staff device that sees them.
+      if (main && e.replica.autoApproves) await e.replica.autoApprove().catch(() => undefined);
       // Files whose task is gone stay on the node until someone with moderation drops them.
       if (main && e.replica.canModerate && Date.now() - (this.lastTidy.get(id) ?? 0) > TIDY_BLOBS_EVERY_MS) {
         this.lastTidy.set(id, Date.now());
