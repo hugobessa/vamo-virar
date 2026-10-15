@@ -58,6 +58,9 @@ para o `/admin`.
    Para criar comunidades suas sem passar pelo formulário, acrescente
    `VV_PROVISIONING_TOKEN=` com mais um segredo.
 4. Clique com o botão direito no serviço, **Attach Volume**, mount path `/data`.
+   Sem volume, cada deploy começa com o disco vazio; por isso o nó e o portal
+   se recusam a iniciar no Railway sem um volume em `/data` (o log do deploy
+   diz o motivo).
 5. **Settings › Networking › Custom Domain**: `servidor.vamovirar.app`,
    porta `8787`. O Railway mostra os registros DNS para criar (passo 3).
 
@@ -93,7 +96,8 @@ para o `/admin`.
    ser do domínio verificado no Mailgun (aqui, `@mg.vamovirar.app`). Se o
    domínio estiver na região EU do Mailgun, acrescente
    `PORTAL_MAILGUN_API_URL=https://api.eu.mailgun.net`.
-3. **Attach Volume** com mount path `/data`.
+3. **Attach Volume** com mount path `/data`. É aqui que ficam os pedidos;
+   sem volume, o portal não inicia.
 4. **Settings › Networking › Custom Domain**: `acesso.vamovirar.app`, porta `3000`.
 
 ### 3. O DNS na Cloudflare

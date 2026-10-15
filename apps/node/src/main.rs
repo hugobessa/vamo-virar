@@ -218,6 +218,10 @@ async fn main() {
     #[cfg(feature = "test-clock")]
     eprintln!("WARNING: built with the test-clock feature; never deploy this binary");
     let config = args.config;
+    if let Some(why) = railway_volume_problem(|k| std::env::var(k).ok(), &config.data_dir) {
+        eprintln!("refusing to start: {why}");
+        std::process::exit(1);
+    }
     if let Err(e) = std::fs::create_dir_all(&config.data_dir) {
         eprintln!("cannot create {}: {e}", config.data_dir.display());
         std::process::exit(1);
@@ -309,4 +313,65 @@ async fn main() {
     .with_graceful_shutdown(shutdown)
     .await
     .expect("server error");
+}
+
+/// On Railway, a container without a volume at the data directory starts
+/// empty on every deploy (Railway ignores the Dockerfile's VOLUME). Returns
+/// why the node must not start, or None.
+fn railway_volume_problem(env: impl Fn(&str) -> Option<String>, data_dir: &Path) -> Option<String> {
+    env("RAILWAY_ENVIRONMENT_ID").or_else(|| env("RAILWAY_PROJECT_ID"))?;
+    let data = std::path::absolute(data_dir).unwrap_or_else(|_| data_dir.to_path_buf());
+    let Some(mount) = env("RAILWAY_VOLUME_MOUNT_PATH").filter(|m| !m.trim().is_empty()) else {
+        return Some(format!(
+            "no Railway volume is attached: attach one with mount path {}, or every deploy erases the data",
+            data.display()
+        ));
+    };
+    let mount = Path::new(mount.trim());
+    if !data.starts_with(mount) {
+        return Some(format!(
+            "the Railway volume is mounted at {}, but the data goes to {}: change the mount path to {}",
+            mount.display(),
+            data.display(),
+            data.display()
+        ));
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::railway_volume_problem;
+    use std::path::Path;
+
+    fn env<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |k| {
+            vars.iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| v.to_string())
+        }
+    }
+
+    #[test]
+    fn railway_needs_a_volume_at_the_data_dir() {
+        let data = Path::new("/data");
+        assert!(railway_volume_problem(env(&[]), data).is_none());
+        let on_railway = [("RAILWAY_ENVIRONMENT_ID", "e")];
+        assert!(railway_volume_problem(env(&on_railway), data)
+            .unwrap()
+            .contains("no Railway volume"));
+        let elsewhere = [
+            ("RAILWAY_ENVIRONMENT_ID", "e"),
+            ("RAILWAY_VOLUME_MOUNT_PATH", "/app/data"),
+        ];
+        assert!(railway_volume_problem(env(&elsewhere), data)
+            .unwrap()
+            .contains("mounted at /app/data"));
+        let ok = [
+            ("RAILWAY_ENVIRONMENT_ID", "e"),
+            ("RAILWAY_VOLUME_MOUNT_PATH", "/data"),
+        ];
+        assert!(railway_volume_problem(env(&ok), data).is_none());
+        assert!(railway_volume_problem(env(&ok), Path::new("/data/node")).is_none());
+    }
 }

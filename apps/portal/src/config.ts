@@ -1,6 +1,7 @@
 // Configuration from the environment (see apps/portal/README.md).
 
 import { randomBytes } from "node:crypto";
+import { isAbsolute, relative, resolve } from "node:path";
 
 export interface Limits {
   /** Communities one code may create; null means no limit. */
@@ -52,6 +53,18 @@ function int(env: NodeJS.ProcessEnv, key: string, fallback: number): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 0) throw new Error(`${key} must be a whole number`);
   return n;
+}
+
+/** On Railway, a container without a volume at the data directory starts
+ * empty on every deploy (Railway ignores the Dockerfile's VOLUME). Returns
+ * why the portal must not start, or null. */
+export function railwayVolumeProblem(env: NodeJS.ProcessEnv, dataDir: string): string | null {
+  if (!env.RAILWAY_ENVIRONMENT_ID && !env.RAILWAY_PROJECT_ID) return null;
+  const mount = env.RAILWAY_VOLUME_MOUNT_PATH?.trim();
+  if (!mount) return `no Railway volume is attached: attach one with mount path ${resolve(dataDir)}, or every deploy erases the data`;
+  const rel = relative(resolve(mount), resolve(dataDir));
+  if (rel.startsWith("..") || isAbsolute(rel)) return `the Railway volume is mounted at ${mount}, but the data goes to ${resolve(dataDir)}: change the mount path to ${resolve(dataDir)}`;
+  return null;
 }
 
 const trimSlash = (s: string) => s.replace(/\/+$/, "");

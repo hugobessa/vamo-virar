@@ -238,7 +238,12 @@ export function createHandler(deps: Deps) {
   /** Gets a code from the node and emails it. If the email fails, the code
    * is revoked again so no working code exists that nobody received. */
   async function issue(r: AccessRequest, limits: Limits, again: boolean): Promise<string | null> {
-    const tenant = r.tenant ?? `pedido-${r.id}`;
+    // Request ids start over if the portal's database is ever lost while the
+    // node keeps its tenants, so a bare `pedido-${id}` could land on someone
+    // else's tenant. The suffix keeps names unique; the name is saved before
+    // the node call so a retry reuses it.
+    const tenant = r.tenant ?? `pedido-${r.id}-${randomBytes(4).toString("hex")}`;
+    if (!r.tenant) db.transition(r.id, ["approving"], "approving", now(), { tenant });
     let token: string;
     try {
       token = await node.issueToken(tenant, limits);
