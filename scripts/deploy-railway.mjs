@@ -5,10 +5,13 @@
 //
 // Environment:
 //   RAILWAY_TOKEN           a Railway *project* token for the environment to deploy
-//   IMAGE_TAG               the release tag, e.g. v0.3.1
+//   IMAGE_TAG               the image tag to deploy, e.g. v0.3.1
 //   REGISTRY                e.g. ghcr.io/hugobessa
-//   RAILWAY_NODE_SERVICE    service running community-node (default: node)
+//   RAILWAY_NODE_SERVICE    service running community-node (default: node; "" to skip)
 //   RAILWAY_PORTAL_SERVICE  service running the portal (default: portal; "" to skip)
+//
+// The node and the portal release on their own tags (node-v*, portal-v*), so
+// release.yml skips the service a release is not for.
 //
 // Usage: node scripts/deploy-railway.mjs
 
@@ -48,7 +51,9 @@ export async function deploy({ env = process.env, fetchImpl = fetch, log = conso
   const { project } = await gql("query ($id: String!) { project(id: $id) { services { edges { node { id name } } } } }", { id: projectId });
   const services = new Map(project.services.edges.map((e) => [e.node.name, e.node.id]));
 
-  const targets = [[env.RAILWAY_NODE_SERVICE ?? "node", `${registry}/community-node:${tag}`]];
+  const targets = [];
+  const node = env.RAILWAY_NODE_SERVICE ?? "node";
+  if (node) targets.push([node, `${registry}/community-node:${tag}`]);
   const portal = env.RAILWAY_PORTAL_SERVICE ?? "portal";
   if (portal) targets.push([portal, `${registry}/vamo-virar-portal:${tag}`]);
 

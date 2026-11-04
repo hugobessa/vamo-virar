@@ -134,20 +134,20 @@ por quê:
 
 ### Atualizar no Railway
 
-**Automático, a cada versão.** Com o segredo `RAILWAY_TOKEN` no GitHub, toda
-tag `v*` publica as imagens e, em seguida, o job `deploy-railway` do
-`release.yml` aponta os serviços `node` e `portal` para as imagens daquela
-versão (por exemplo, `community-node:v0.3.1`) e espera cada deploy ficar no ar.
-O job falha, e o GitHub avisa, se um deploy terminar em erro. Versões com
-hífen (`v0.4.0-rc1`) não vão para o Railway. Para configurar, uma vez:
+**Automático, a cada versão.** Com o segredo `RAILWAY_TOKEN` no GitHub, uma
+tag `node-v*` publica a imagem do nó e uma tag `portal-v*` a do portal; em
+seguida, o job `deploy-railway` do `release.yml` aponta o serviço daquela tag
+(`node` ou `portal`) para a imagem da versão (por exemplo,
+`community-node:v0.6.0`) e espera o deploy ficar no ar. O job falha, e o
+GitHub avisa, se o deploy terminar em erro. Versões com hífen
+(`node-v0.6.0-rc.1`) não vão para o Railway. Para configurar, uma vez:
 
 1. No Railway, abra o projeto, **Settings › Tokens**, e crie um token de
    projeto para o ambiente `production`. Ele só dá acesso a esse projeto.
 2. No GitHub, em **Settings › Secrets and variables › Actions**, crie o
    segredo `RAILWAY_TOKEN` com esse token.
 3. Se os serviços tiverem outros nomes, crie as variáveis (aba
-   **Variables**) `RAILWAY_NODE_SERVICE` e `RAILWAY_PORTAL_SERVICE`. Para não
-   mexer no portal, deixe `RAILWAY_PORTAL_SERVICE` vazia.
+   **Variables**) `RAILWAY_NODE_SERVICE` e `RAILWAY_PORTAL_SERVICE`.
 
 **À mão.** Em cada serviço, **Settings › Source**, troque a imagem pela da
 versão nova (por exemplo, `ghcr.io/hugobessa/community-node:v0.3.1`). O

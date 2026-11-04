@@ -1,16 +1,43 @@
 name: Release
 
-# Runs only when a maintainer pushes a version tag (e.g. v0.1.0).
+# Each app releases on its own tag, pushed by a maintainer after the version
+# bump is merged (see .claude/skills/release/SKILL.md):
+#
+#   node-v0.6.0    community-node binaries (draft GitHub release), image, Railway
+#   portal-v0.6.0  portal image, Railway
+#   mobile-v1.1.0  EAS build and submit: iOS to TestFlight, Android to the
+#                  Play internal track
+#
+# The tag must match the version in the app's file (scripts/release-version.mjs).
+# Images are tagged v<version> and latest.
 on:
   push:
-    tags: ["v*"]
+    tags: ["node-v*", "portal-v*", "mobile-v*"]
 
 permissions:
   contents: write
   packages: write
 
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.tag.outputs.app }}
+      version: ${{ steps.tag.outputs.version }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: tag
+        run: node scripts/release-version.mjs check-tag "${{ github.ref_name }}"
+
+  # --- node ----------------------------------------------------------------
+
   binaries:
+    needs: resolve
+    if: needs.resolve.outputs.app == 'node'
     strategy:
       fail-fast: false
       matrix:
@@ -30,7 +57,7 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          name=community-node-${{ github.ref_name }}-${{ matrix.target }}
+          name=community-node-v${{ needs.resolve.outputs.version }}-${{ matrix.target }}
           mkdir "$name"
           cp README.md apps/node/README.md apps/node/config.example.toml deploy/community-node.service "$name"/ 2>/dev/null || true
           if [ "${{ runner.os }}" = Windows ]; then
@@ -48,7 +75,7 @@ jobs:
           path: community-node-*.*
 
   publish:
-    needs: binaries
+    needs: [resolve, binaries]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -58,9 +85,13 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           draft: true
+          prerelease: ${{ needs.resolve.outputs.prerelease == 'true' }}
+          name: community-node v${{ needs.resolve.outputs.version }}
           files: community-node-*
 
-  image:
+  node-image:
+    needs: resolve
+    if: needs.resolve.outputs.app == 'node'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,10 +109,14 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/community-node:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/community-node:latest
+            ghcr.io/${{ github.repository_owner }}/community-node:v${{ needs.resolve.outputs.version }}
+            ${{ needs.resolve.outputs.prerelease != 'true' && format('ghcr.io/{0}/community-node:latest', github.repository_owner) || '' }}
+
+  # --- portal --------------------------------------------------------------
 
   portal-image:
+    needs: resolve
+    if: needs.resolve.outputs.app == 'portal'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -99,14 +134,15 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/vamo-virar-portal:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/vamo-virar-portal:latest
+            ghcr.io/${{ github.repository_owner }}/vamo-virar-portal:v${{ needs.resolve.outputs.version }}
+            ${{ needs.resolve.outputs.prerelease != 'true' && format('ghcr.io/{0}/vamo-virar-portal:latest', github.repository_owner) || '' }}
 
-  # Points the Railway services at this release's images and waits for them
-  # to come up (scripts/deploy-railway.mjs). Skipped without the
-  # RAILWAY_TOKEN secret; see apps/portal/README.md, "Atualizar no Railway".
+  # Points the released service on Railway at the new image and waits for it
+  # to come up (scripts/deploy-railway.mjs). Skipped without the RAILWAY_TOKEN
+  # secret and for pre-releases; see apps/portal/README.md, "Atualizar no Railway".
   deploy-railway:
-    needs: [image, portal-image]
+    needs: [resolve, node-image, portal-image]
+    if: always() && (needs.node-image.result == 'success' || needs.portal-image.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -116,7 +152,43 @@ jobs:
       - run: node scripts/deploy-railway.mjs
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          IMAGE_TAG: ${{ github.ref_name }}
+          IMAGE_TAG: v${{ needs.resolve.outputs.version }}
           REGISTRY: ghcr.io/${{ github.repository_owner }}
-          RAILWAY_NODE_SERVICE: ${{ vars.RAILWAY_NODE_SERVICE || 'node' }}
-          RAILWAY_PORTAL_SERVICE: ${{ vars.RAILWAY_PORTAL_SERVICE || 'portal' }}
+          RAILWAY_NODE_SERVICE: ${{ needs.resolve.outputs.app == 'node' && (vars.RAILWAY_NODE_SERVICE || 'node') || '' }}
+          RAILWAY_PORTAL_SERVICE: ${{ needs.resolve.outputs.app == 'portal' && (vars.RAILWAY_PORTAL_SERVICE || 'portal') || '' }}
+
+  # --- mobile --------------------------------------------------------------
+
+  # Builds both stores' binaries on EAS from this tag and submits them: iOS to
+  # App Store Connect (TestFlight), Android to the Play internal track. Store
+  # review and production rollout stay manual in the consoles. Build numbers
+  # come from EAS (appVersionSource: remote); the store version is the tag's.
+  mobile-eas:
+    needs: resolve
+    if: needs.resolve.outputs.app == 'mobile'
+    runs-on: ubuntu-latest
+    steps:
+      - name: EXPO_TOKEN is set
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Add the EXPO_TOKEN repository secret (an Expo access token) to release the mobile app."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      # Expo config plugins resolve from node_modules when EAS reads app.json.
+      - run: npm ci
+      - name: Build and submit (iOS and Android)
+        working-directory: apps/mobile
+        run: |
+          eas build --platform all --profile production --auto-submit --non-interactive \
+            --message "mobile-v${{ needs.resolve.outputs.version }} (${GITHUB_SHA::7})"

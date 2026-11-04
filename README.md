@@ -231,17 +231,29 @@ Depois, sempre a partir de `apps/mobile`:
   guarda os certificados na primeira vez. Para `preview` e `development` no
   iOS, cadastre os aparelhos com `npx eas-cli@latest device:create`.
 - `npx eas-cli@latest submit --profile production` envia o build de produção
-  para as lojas.
+  para as lojas. Normalmente isso é feito pela tag `mobile-v*` (veja
+  "Versões publicadas").
 - Os IDs de cliente OAuth do Google e da Microsoft continuam em
   `apps/mobile/app.json` (`expo.extra`).
 
 ### Versões publicadas
 
-Uma tag `v*` dispara `.github/workflows/release.yml`, que publica binários do
-nó (Linux x86-64/ARM64, macOS, Windows) num release em rascunho e imagens
-multi-arquitetura no GHCR: `community-node` (o nó) e `vamo-virar-portal` (o
-[portal de pedidos](apps/portal/README.md)). Com o segredo `RAILWAY_TOKEN`, o
-mesmo workflow põe essas imagens no ar no Railway (`scripts/deploy-railway.mjs`).
+Cada app tem a sua versão e a sua tag, e a tag dispara
+`.github/workflows/release.yml`:
+
+| Tag | Versão em | O que publica |
+|---|---|---|
+| `node-v0.6.0` | `apps/node/Cargo.toml` | binários do nó (Linux x86-64/ARM64, macOS, Windows) num release em rascunho, imagem `community-node` no GHCR e, com o segredo `RAILWAY_TOKEN`, o deploy no Railway |
+| `portal-v0.6.0` | `apps/portal/package.json` | imagem `vamo-virar-portal` do [portal de pedidos](apps/portal/README.md) no GHCR e o deploy no Railway |
+| `mobile-v1.1.0` | `apps/mobile/app.json` (`expo.version`) | build no EAS e envio às lojas: iOS para o TestFlight, Android para a faixa interna do Play (precisa do segredo `EXPO_TOKEN`) |
+
+O workflow recusa uma tag que não bate com a versão no arquivo: primeiro se
+sobe a versão (`node scripts/release-version.mjs set <app> <versão>`, num PR),
+depois se cria a tag no commit do merge. O passo a passo está em
+[`.claude/skills/release/SKILL.md`](.claude/skills/release/SKILL.md). Versões
+com hífen (`node-v0.6.0-rc.1`) não vão para o Railway nem para `latest`. A
+revisão da App Store e a publicação em produção no Play continuam manuais. As
+tags `v*` antigas (até `v0.5.0`) lançavam o nó e o portal juntos.
 
 ## Estado
 
